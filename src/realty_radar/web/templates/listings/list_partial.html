@@ -1,0 +1,129 @@
+<!-- 검색 통계 서머리 뱃지 -->
+<div class="flex flex-wrap items-center justify-between gap-3 px-1 mb-4">
+    <div class="flex items-center space-x-3 text-sm">
+        <span class="text-slate-300">전체 <strong class="text-indigo-400 font-bold">{{ result.total_count }}</strong>건</span>
+        <span class="text-slate-600">•</span>
+        <span class="text-emerald-400">신규 <strong class="font-bold">{{ result.new_count if result.new_count is defined else result.items|length }}</strong>건</span>
+        <span class="text-slate-600">•</span>
+        <span class="text-amber-400">가격 변동 <strong class="font-bold">{{ result.price_reduced_count if result.price_reduced_count is defined else 0 }}</strong>건</span>
+    </div>
+    <div class="text-xs text-slate-400">
+        페이지 <strong>{{ result.page if result.page is defined else 1 }}</strong> / {{ result.total_pages if result.total_pages is defined else 1 }}
+    </div>
+</div>
+
+<!-- 매물 카드 목록 -->
+<div class="space-y-4">
+    {% if result.items %}
+        {% for item in result.items %}
+        <div class="bg-slate-800/40 border border-slate-700/50 hover:border-indigo-500/50 rounded-xl p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:shadow-indigo-500/5">
+            <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- 거래 유형 한글 표기 (매매/전세/월세) -->
+                    <span class="text-xs font-bold px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        {{ item.transaction_type | korean_tx_type }}
+                    </span>
+
+                    <!-- 아파트 단지명 -->
+                    <h2 class="text-lg font-bold text-white hover:text-indigo-300 transition-colors">
+                        {{ item.complex_name_raw or '아파트 단지 미매칭' }}
+                    </h2>
+
+                    <!-- 출처 사이트 한글 명칭 -->
+                    {% if item.source %}
+                    <span class="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-600 font-medium">
+                        {{ item.source.source_name or item.source.source_code | korean_source }}
+                    </span>
+                    {% endif %}
+
+                    <!-- 융자 상태 한글 표기 -->
+                    {% if item.mortgage_status == 'EXPLICIT_NONE' %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                        융자금 없음
+                    </span>
+                    {% elif item.mortgage_status == 'EXPLICIT_EXISTS' %}
+                    <span class="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+                        융자금 있음
+                    </span>
+                    {% endif %}
+                </div>
+
+                <div class="text-sm text-slate-300 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>전용 {{ item.exclusive_area or '-' }}㎡</span>
+                    <span class="text-slate-600">•</span>
+                    <span>{{ item.floor_info or item.floor_group or '-' }}</span>
+                    {% if item.address_raw %}
+                    <span class="text-slate-600">•</span>
+                    <span class="text-slate-400">{{ item.address_raw }}</span>
+                    {% endif %}
+                </div>
+
+                {% if item.description_raw or item.description %}
+                <p class="text-xs text-slate-400 line-clamp-1 italic max-w-2xl">
+                    "{{ item.description_raw or item.description }}"
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="flex items-center space-x-6 justify-between md:justify-end border-t md:border-t-0 border-slate-700/40 pt-3 md:pt-0">
+                <div class="text-right">
+                    <!-- 한글 금액 표현 (억/천만 단위 병기) -->
+                    <div class="text-xl font-extrabold text-indigo-400 tracking-tight">
+                        {% if item.price_deposit or item.sale_price or item.deposit %}
+                            {% set price_val = item.price_deposit or item.sale_price or item.deposit %}
+                            {{ price_val | korean_price }}
+                            {% if item.price_monthly and item.price_monthly > 0 %}
+                                / 월 {{ item.price_monthly | korean_price }}
+                            {% endif %}
+                        {% else %}
+                            가격 미정
+                        {% endif %}
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">
+                        최초 수집: {{ item.first_seen_at.strftime('%Y-%m-%d %H:%M') if item.first_seen_at else '-' }}
+                    </div>
+                </div>
+
+                <!-- 원본 사이트 이동 버튼 -->
+                <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors flex items-center space-x-1">
+                    <span>원본 보기</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- 페이징 버튼 -->
+        {% if result.total_pages is defined and result.total_pages > 1 %}
+        <div class="flex items-center justify-center space-x-2 pt-6">
+            {% if result.page > 1 %}
+            <button hx-get="/listings/search?page={{ result.page - 1 }}" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700">
+                이전
+            </button>
+            {% endif %}
+            
+            <span class="text-xs text-slate-400 px-3 py-1.5 font-medium bg-slate-900 rounded border border-slate-800">
+                {{ result.page }} / {{ result.total_pages }}
+            </span>
+
+            {% if result.page < result.total_pages %}
+            <button hx-get="/listings/search?page={{ result.page + 1 }}" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700">
+                다음
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    {% else %}
+        <!-- 매물 없음 빈 상태 UI -->
+        <div class="bg-slate-800/30 border border-slate-700/40 rounded-xl p-12 text-center space-y-3">
+            <svg class="w-12 h-12 text-slate-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <p class="text-slate-400 font-medium">검색 조건에 일치하는 매물이 없습니다.</p>
+            <p class="text-xs text-slate-500">필터 조건을 변경하거나 즉시 수동 크롤링을 실행해 보세요.</p>
+        </div>
+    {% endif %}
+</div>

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}개인 자격 조건 설정 - Realty Radar{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- 페이지 헤더 -->
+    <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">개인 자격 및 정책대출 조건 설정</h1>
+        <p class="text-sm text-slate-400 mt-1">부부합산 소득, 자산, 주택 소유 상태를 등록하여 디딤돌·버팀목 대출의 예상 적격 여부를 자동 평가합니다.</p>
+    </div>
+
+    {% if success_message %}
+    <div class="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium flex items-center space-x-2">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span>{{ success_message }}</span>
+    </div>
+    {% endif %}
+
+    <!-- 설정 폼 카드리스트 -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-6 shadow-xl backdrop-blur">
+        <form action="/settings" method="POST" class="space-y-6">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 무주택 여부 -->
+                <div class="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <div>
+                        <span class="block text-sm font-semibold text-white">무주택 세대주 여부</span>
+                        <span class="text-xs text-slate-400">현재 본인 및 세대원 전원 무주택</span>
+                    </div>
+                    <input type="checkbox" name="is_homeless" value="true" {% if profile.is_homeless %}checked{% endif %} class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                </div>
+
+                <!-- 신혼부부 여부 -->
+                <div class="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <div>
+                        <span class="block text-sm font-semibold text-white">신혼부부 여부</span>
+                        <span class="text-xs text-slate-400">혼인기간 7년 이내 세대</span>
+                    </div>
+                    <input type="checkbox" name="is_newlywed" value="true" {% if profile.is_newlywed %}checked{% endif %} class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                </div>
+
+                <!-- 생애최초 주택구입 -->
+                <div class="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <div>
+                        <span class="block text-sm font-semibold text-white">생애최초 주택구입</span>
+                        <span class="text-xs text-slate-400">세대원 전원이 주택을 소유한 적 없음</span>
+                    </div>
+                    <input type="checkbox" name="is_first_home_buyer" value="true" {% if profile.is_first_home_buyer %}checked{% endif %} class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                </div>
+
+                <!-- 미성년 자녀 수 -->
+                <div class="space-y-1.5 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <label for="setting-child-count" class="block text-sm font-semibold text-white">미성년 자녀 수</label>
+                    <input type="number" id="setting-child-count" name="child_count" value="{{ profile.child_count }}" min="0" max="10" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <!-- 부부합산 연소득 -->
+                <div class="space-y-1.5 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <label for="setting-income" class="block text-sm font-semibold text-white">부부합산 연소득 (원)</label>
+                    <input type="number" id="setting-income" name="annual_income" value="{{ profile.annual_income }}" step="1000000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <!-- 순자산 -->
+                <div class="space-y-1.5 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <label for="setting-assets" class="block text-sm font-semibold text-white">순자산 총액 (원)</label>
+                    <input type="number" id="setting-assets" name="net_assets" value="{{ profile.net_assets }}" step="1000000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <!-- 버튼 영역 -->
+            <div class="flex justify-end pt-4 border-t border-slate-700/50">
+                <button type="submit" class="px-6 py-2.5 text-sm font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all">
+                    자격 조건 저장
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

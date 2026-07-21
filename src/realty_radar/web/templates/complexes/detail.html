@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{{ complex.official_name }} - Realty Radar{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- 브레드크럼 -->
+    <nav class="flex text-xs text-slate-400 space-x-2">
+        <a href="/" class="hover:text-white transition-colors">홈</a>
+        <span>/</span>
+        <span class="text-indigo-400 font-medium">단지 상세</span>
+    </nav>
+
+    <!-- 단지 정보 헤더 카드리스트 -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-6 shadow-xl backdrop-blur">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/50 pb-5">
+            <div>
+                <h1 class="text-2xl font-bold text-white tracking-tight">{{ complex.official_name }}</h1>
+                <p class="text-sm text-slate-400 mt-1 flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <span>{{ complex.road_address or complex.lot_address or '주소 정보 없음' }}</span>
+                </p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold border border-emerald-500/20">
+                    최근 실거래 평균 {{ "{:,}".format(avg_trade_price) }} 원
+                </span>
+                <span class="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-300 text-xs font-semibold border border-indigo-500/20">
+                    등록 매물 {{ listing_count }}건
+                </span>
+            </div>
+        </div>
+
+        <!-- 단지 스펙 지표 grid -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-5">
+            <div class="bg-slate-900/50 border border-slate-800 p-3.5 rounded-lg">
+                <span class="text-xs text-slate-400 block">준공 연도</span>
+                <span class="text-base font-semibold text-white mt-1 block">
+                    {% if complex.construction_year %}
+                        {{ complex.construction_year }}년
+                    {% else %}
+                        -
+                    {% endif %}
+                </span>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 p-3.5 rounded-lg">
+                <span class="text-xs text-slate-400 block">총 세대수</span>
+                <span class="text-base font-semibold text-white mt-1 block">
+                    {% if complex.household_count %}
+                        {{ "{:,}".format(complex.household_count) }}세대
+                    {% else %}
+                        -
+                    {% endif %}
+                </span>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 p-3.5 rounded-lg">
+                <span class="text-xs text-slate-400 block">최고 층수</span>
+                <span class="text-base font-semibold text-white mt-1 block">
+                    {% if complex.highest_floor %}
+                        {{ complex.highest_floor }}층
+                    {% else %}
+                        -
+                    {% endif %}
+                </span>
+            </div>
+            <div class="bg-slate-900/50 border border-slate-800 p-3.5 rounded-lg">
+                <span class="text-xs text-slate-400 block">주차 대수</span>
+                <span class="text-base font-semibold text-white mt-1 block">
+                    {% if complex.parking_count %}
+                        {{ "{:,}".format(complex.parking_count) }}대
+                    {% else %}
+                        -
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 해당 단지 매물 목록 섹션 -->
+    <div class="space-y-4">
+        <h2 class="text-lg font-bold text-white tracking-tight">수집된 매물 및 실거래가 시세 비교</h2>
+
+        {% if analyzed_listings %}
+            <div class="space-y-3">
+                {% for data in analyzed_listings %}
+                {% set item = data.listing %}
+                {% set comp = data.comparison %}
+                <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div class="space-y-1.5">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                {{ item.transaction_type }}
+                            </span>
+                            <span class="text-sm font-bold text-white">
+                                전용 {{ item.exclusive_area or '-' }}㎡
+                            </span>
+                            <span class="text-xs text-slate-400">
+                                ({{ item.floor_group or '-' }}층/{{ item.total_floor or '-' }}층)
+                            </span>
+                            
+                            <!-- 시세 비교 배지 -->
+                            {% if comp %}
+                                {% if comp.is_bargain %}
+                                <span class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    실거래 대비 {{ comp.discount_percentage }}% 저렴 (급매)
+                                </span>
+                                {% elif comp.discount_percentage > 0 %}
+                                <span class="text-xs font-medium px-2 py-0.5 rounded bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                                    실거래 대비 {{ comp.discount_percentage }}% 낮은 시세
+                                </span>
+                                {% else %}
+                                <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                                    실거래가 수준
+                                </span>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <p class="text-xs text-slate-400 line-clamp-1">
+                            {{ item.description or '설명 없음' }}
+                        </p>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right">
+                            <div class="text-lg font-extrabold text-indigo-400">
+                                {% if item.sale_price %}
+                                    {{ "{:,}".format(item.sale_price) }} 원
+                                {% elif item.deposit %}
+                                    보증금 {{ "{:,}".format(item.deposit) }} {% if item.monthly_rent %}/ {{ "{:,}".format(item.monthly_rent) }}{% endif %}
+                                {% else %}
+                                    가격 미정
+                                {% endif %}
+                            </div>
+                        </div>
+                        <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors">
+                            원본 보기
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="bg-slate-800/30 border border-slate-700/40 rounded-xl p-8 text-center text-slate-400 text-sm">
+                해당 단지에 등록된 매물이 없습니다.
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

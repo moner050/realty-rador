@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="개인용 부동산 매물 크롤링 및 다중 필터링 플랫폼 Realty Radar">
+    <title>{% block title %}Realty Radar - 부동산 통합 검색{% endblock %}</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX CDN -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Alpine.js CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="flex flex-col min-h-full font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- 글로벌 네비게이션 바 -->
+    <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <a href="/" class="flex items-center space-x-2 text-indigo-400 font-bold text-xl tracking-tight">
+                    <svg class="w-7 h-7 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11m0 0h4m-4 0H9m4 0V7m0 0h4m-4 0H9"/>
+                    </svg>
+                    <span>Realty Radar</span>
+                </a>
+                <span class="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">Local v0.1</span>
+            </div>
+
+            <nav class="flex items-center space-x-6">
+                <a href="/" class="text-sm font-medium text-white hover:text-indigo-400 transition-colors">매물 검색</a>
+                <a href="#" class="text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors">단지 관리</a>
+                <a href="#" class="text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors">수집 현황</a>
+                <a href="#" class="text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors">설정</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 푸터 -->
+    <footer class="border-t border-slate-800 bg-slate-950/50 py-6 text-center text-xs text-slate-500">
+        <p>© 2026 Realty Radar. Personal Real Estate Search & Aggregator System.</p>
+    </footer>
+
+</body>
+</html>
