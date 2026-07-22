@@ -88,6 +88,21 @@ def korean_price(price_val: Any) -> str:
     return " ".join(parts) + " 원"
 
 
+# korean_money 별칭
+korean_money = korean_price
+
+
+def comma_number(val: Any) -> str:
+    """숫자 또는 금액 수치에 천 단위 콤마(,) 추가."""
+    if val is None or val == "":
+        return "0"
+    try:
+        num = int(Decimal(str(val)))
+        return f"{num:,}"
+    except (ValueError, TypeError):
+        return str(val)
+
+
 def register_jinja_filters(templates: Any) -> None:
     """Jinja2Templates 객체에 한글 변환 커스텀 필터 일괄 등록."""
     templates.env.filters["korean_tx_type"] = korean_tx_type
@@ -95,3 +110,5 @@ def register_jinja_filters(templates: Any) -> None:
     templates.env.filters["korean_status"] = korean_status
     templates.env.filters["korean_source"] = korean_source
     templates.env.filters["korean_price"] = korean_price
+    templates.env.filters["korean_money"] = korean_money
+    templates.env.filters["comma_number"] = comma_number

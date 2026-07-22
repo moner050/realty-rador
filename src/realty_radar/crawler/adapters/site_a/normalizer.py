@@ -15,20 +15,23 @@ class SiteANormalizer:
             return None
 
         clean_str = money_str.replace(",", "").replace("원", "").strip()
+
+        if clean_str.isdigit():
+            val = int(clean_str)
+            if val >= 1_000_000:
+                return val
+            return val * 10_000
+
         total_won = 0
 
-        # '억' 단위 추출
         eok_match = re.search(r"(\d+)\s*억", clean_str)
         if eok_match:
             total_won += int(eok_match.group(1)) * 100_000_000
 
-        # '억' 이후 4자리 '만' 단위 추출
         man_match = re.search(r"(?:억\s*)?(\d+)(?:\s*만)?$", clean_str)
         if man_match and not eok_match:
-            # 억이 없는 경우
             total_won += int(man_match.group(1)) * 10_000
         elif man_match and eok_match:
-            # 억 뒤에 남아있는 숫자 (예: 6억 5000 -> 5000만)
             rem_str = clean_str.split("억")[-1].strip()
             num_match = re.search(r"^(\d+)", rem_str)
             if num_match:
@@ -49,7 +52,6 @@ class SiteANormalizer:
 
         if "월세" in raw:
             trans_type = TransactionType.MONTHLY_RENT
-            # '월세 1억/50' 구문 분리
             parts = raw.replace("월세", "").strip().split("/")
             deposit = self.parse_korean_money(parts[0]) if len(parts) > 0 else None
             monthly_rent = self.parse_korean_money(parts[1]) if len(parts) > 1 else None
@@ -60,7 +62,6 @@ class SiteANormalizer:
             deposit = self.parse_korean_money(raw.replace("전세", "").strip())
             return trans_type, None, deposit, None
 
-        # 기본 매매
         trans_type = TransactionType.SALE
         sale_price = self.parse_korean_money(raw.replace("매매", "").strip())
         return trans_type, sale_price, None, None
@@ -102,17 +103,29 @@ class SiteANormalizer:
         if not area_raw:
             return None, None
 
-        numbers = re.findall(r"(\d+(?:\.\d+)?)", area_raw)
-        if not numbers:
-            return None, None
+        exclusive_area = None
+        supply_area = None
 
-        if len(numbers) >= 2:
-            supply_area = Decimal(numbers[0])
-            exclusive_area = Decimal(numbers[1])
-            return exclusive_area, supply_area
+        exclusive_match = re.search(r"전용\s*(\d+(?:\.\d+)?)", area_raw)
+        if exclusive_match:
+            exclusive_area = Decimal(exclusive_match.group(1))
 
-        exclusive_area = Decimal(numbers[0])
-        return exclusive_area, None
+        supply_match = re.search(r"공급\s*(\d+(?:\.\d+)?)", area_raw)
+        if supply_match:
+            supply_area = Decimal(supply_match.group(1))
+
+        if exclusive_area is None and supply_area is None:
+            numbers = re.findall(r"(\d+(?:\.\d+)?)", area_raw)
+            if not numbers:
+                return None, None
+
+            if len(numbers) >= 2:
+                supply_area = Decimal(numbers[0])
+                exclusive_area = Decimal(numbers[1])
+            else:
+                exclusive_area = Decimal(numbers[0])
+
+        return exclusive_area, supply_area
 
     def evaluate_mortgage_status(self, description: str | None, raw_payload: dict) -> tuple[MortgageStatus, str | None]:
         """매물 설명 및 태그 문구 기반 융자 상태 키워드 분석."""
@@ -135,10 +148,40 @@ class SiteANormalizer:
 
     def normalize(self, raw: RawListing) -> NormalizedListing:
         """RawListing 객체를 NormalizedListing으로 종합 변환."""
-        trans_type, sale_price, deposit, monthly_rent = self.normalize_price(raw.price_raw)
+        payload = raw.raw_payload or {}
+
+        if "dealPrice" in payload or "warrantyPrice" in payload or "rentPrice" in payload:
+            trade_code = payload.get("tradeType", "A1")
+            deal_p = payload.get("dealPrice") or 0
+            warr_p = payload.get("warrantyPrice") or 0
+            rent_p = payload.get("rentPrice") or 0
+
+            if trade_code == "B2" or (rent_p and rent_p > 0):
+                trans_type = TransactionType.MONTHLY_RENT
+                sale_price = None
+                deposit = warr_p
+                monthly_rent = rent_p
+            elif trade_code == "B1" or (warr_p and warr_p > 0 and not deal_p):
+                trans_type = TransactionType.JEONSE
+                sale_price = None
+                deposit = warr_p
+                monthly_rent = None
+            else:
+                trans_type = TransactionType.SALE
+                sale_price = deal_p
+                deposit = None
+                monthly_rent = None
+        else:
+            trans_type, sale_price, deposit, monthly_rent = self.normalize_price(raw.price_raw)
+
+        if "exclusiveSpace" in payload or "supplySpace" in payload:
+            exclusive_area = Decimal(str(payload.get("exclusiveSpace"))) if payload.get("exclusiveSpace") else None
+            supply_area = Decimal(str(payload.get("supplySpace"))) if payload.get("supplySpace") else None
+        else:
+            exclusive_area, supply_area = self.normalize_area(raw.area_raw)
+
         floor_num, floor_grp, total_fl = self.normalize_floor(raw.floor_raw)
-        exclusive_area, supply_area = self.normalize_area(raw.area_raw)
-        mortgage_status, mortgage_text = self.evaluate_mortgage_status(raw.description_raw, raw.raw_payload)
+        mortgage_status, mortgage_text = self.evaluate_mortgage_status(raw.description_raw, payload)
 
         return NormalizedListing(
             source_code=raw.source_code,
@@ -154,6 +197,8 @@ class SiteANormalizer:
             floor_number=floor_num,
             floor_group=floor_grp,
             total_floor=total_fl,
+            floor_raw=raw.floor_raw,
+            floor_info=raw.floor_raw,
             address_raw=raw.address_raw,
             description=raw.description_raw,
             mortgage_status=mortgage_status,
@@ -161,5 +206,5 @@ class SiteANormalizer:
             listing_status=ListingStatus.ACTIVE,
             first_seen_at=raw.collected_at,
             last_seen_at=raw.collected_at,
-            raw_payload=raw.raw_payload,
+            raw_payload=payload,
         )

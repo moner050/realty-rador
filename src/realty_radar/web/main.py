@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from realty_radar.config import settings
-from realty_radar.web.routes.complexes import router as complexes_router
 from realty_radar.web.routes.crawl_jobs import router as crawl_jobs_router
 from realty_radar.web.routes.home import router as home_router
 from realty_radar.web.routes.settings import router as settings_router
@@ -35,7 +34,6 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # 라우터 등록
 app.include_router(home_router)
-app.include_router(complexes_router)
 app.include_router(crawl_jobs_router)
 app.include_router(settings_router)
 

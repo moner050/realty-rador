@@ -37,6 +37,11 @@ class ComplexMatchService:
                     match_method=MatchMethod.FUZZY,
                 )
 
+            # payload에서 수집된 세대수 및 준공연도 정보 확인
+            payload = getattr(listing, "raw_payload", {}) or {}
+            payload_households = payload.get("total_households")
+            payload_const_year = payload.get("construction_year")
+
             norm_name = normalize_complex_name(listing.complex_name_raw)
 
             # 1. complex_alias 등록 테이블에서 일치 확인
@@ -45,6 +50,13 @@ class ComplexMatchService:
 
             if alias:
                 listing.complex_id = alias.complex_id
+                complex_obj = self.db.get(ApartmentComplex, alias.complex_id)
+                if complex_obj:
+                    if payload_households and not complex_obj.total_households:
+                        complex_obj.total_households = int(payload_households)
+                    if payload_const_year and not complex_obj.construction_year:
+                        complex_obj.construction_year = int(payload_const_year)
+
                 self.db.commit()
                 return ComplexMatchResult(
                     complex_id=alias.complex_id,
@@ -75,8 +87,13 @@ class ComplexMatchService:
 
             if result.complex_id:
                 listing.complex_id = result.complex_id
+                complex_obj = self.db.get(ApartmentComplex, result.complex_id)
+                if complex_obj:
+                    if payload_households and not complex_obj.total_households:
+                        complex_obj.total_households = int(payload_households)
+                    if payload_const_year and not complex_obj.construction_year:
+                        complex_obj.construction_year = int(payload_const_year)
 
-                # complex_alias 자동 생성 또는 업서트
                 new_alias = ComplexAlias(
                     complex_id=result.complex_id,
                     source_id=listing.source_id,
@@ -89,11 +106,13 @@ class ComplexMatchService:
                 )
                 self.db.add(new_alias)
             else:
-                # 매칭에 실패한 경우 신규 단지 생성
+                # 매칭에 실패한 경우 신규 단지 생성 (세대수 및 준공연도 포함)
                 new_complex = ApartmentComplex(
                     official_name=listing.complex_name_raw,
                     normalized_name=norm_name,
                     road_address=listing.address_raw,
+                    total_households=int(payload_households) if payload_households else None,
+                    construction_year=int(payload_const_year) if payload_const_year else None,
                 )
                 self.db.add(new_complex)
                 self.db.flush()
@@ -104,6 +123,23 @@ class ComplexMatchService:
                 result.match_method = MatchMethod.NAME_EXACT
 
             self.db.commit()
+
+            # 공공데이터 연동: 세대수/준공년도가 비어 있는 단지 자동 동기화
+            if listing.complex_id:
+                complex_obj = self.db.get(ApartmentComplex, listing.complex_id)
+                if complex_obj and (not complex_obj.total_households or not complex_obj.construction_year):
+                    try:
+                        import asyncio
+                        from realty_radar.enrichment.public_data.sync_service import PublicDataSyncService
+                        sync_svc = PublicDataSyncService(self.db)
+                        try:
+                            loop = asyncio.get_running_loop()
+                            loop.create_task(sync_svc.sync_complex_public_data(listing.complex_id))
+                        except RuntimeError:
+                            asyncio.run(sync_svc.sync_complex_public_data(listing.complex_id))
+                    except Exception:
+                        pass
+
             return result
         except Exception:
             self.db.rollback()

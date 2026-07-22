@@ -38,6 +38,34 @@ class ComplexMatchEngine:
         candidate_address: str | None = None,
     ) -> tuple[Decimal, MatchMethod]:
         """두 단지명 및 주소 정보의 매칭 점수 (0~99.99)와 매칭 방식 산출."""
+        
+        # 0. 지역 불일치 검증 (시/도 또는 시/군/구가 다르면 매칭 원천 차단)
+        if target_address and candidate_address:
+            def get_sido(addr: str) -> str:
+                addr_clean = addr.strip()
+                if "서울" in addr_clean:
+                    return "서울"
+                if "경기" in addr_clean:
+                    return "경기"
+                if "인천" in addr_clean:
+                    return "인천"
+                parts = addr_clean.split()
+                return parts[0] if parts else ""
+
+            def get_sigungu(addr: str) -> str:
+                parts = addr.strip().split()
+                return parts[1] if len(parts) > 1 else ""
+
+            target_sido = get_sido(target_address)
+            candidate_sido = get_sido(candidate_address)
+            if target_sido and candidate_sido and target_sido != candidate_sido:
+                return Decimal("0.00"), MatchMethod.FUZZY
+
+            target_sigungu = get_sigungu(target_address)
+            candidate_sigungu = get_sigungu(candidate_address)
+            if target_sigungu and candidate_sigungu and target_sigungu != candidate_sigungu:
+                return Decimal("0.00"), MatchMethod.FUZZY
+
         norm_target = normalize_complex_name(target_name)
 
         # 1. 주소 및 단지명 완전 일치 (+99.99점)

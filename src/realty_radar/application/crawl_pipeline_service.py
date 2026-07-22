@@ -40,8 +40,10 @@ class CrawlPipelineService:
         created_count = 0
         updated_count = 0
         dedup_found_count = 0
+        total_fetched = 0
 
-        for raw_item in raw_listings:
+        for idx, raw_item in enumerate(raw_listings, start=1):
+            total_fetched = idx
             # 2. Normalize
             normalized = normalizer.normalize(raw_item)
 
@@ -60,10 +62,14 @@ class CrawlPipelineService:
             if duplicates:
                 dedup_found_count += len(duplicates)
 
+            # 대량 수집 시 메모리 및 DB 트랜잭션 수명을 위해 5000건마다 배치 commit
+            if idx % 5000 == 0:
+                self.db.commit()
+
         return {
             "source_code": source_code,
             "region_name": region_name,
-            "total_fetched": len(raw_listings),
+            "total_fetched": total_fetched,
             "created_count": created_count,
             "updated_count": updated_count,
             "dedup_found_count": dedup_found_count,

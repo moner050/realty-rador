@@ -1,4 +1,5 @@
 from realty_radar.web.jinja_filters import (
+    korean_money,
     korean_mortgage,
     korean_price,
     korean_source,
@@ -42,3 +43,4 @@ def test_korean_price_filter():
     assert korean_price(1_200_000_000) == "12억 원"
     assert korean_price(50_000_000) == "5,000만 원"
     assert korean_price(None) == "가격 미정"
+    assert korean_money(650_000_000) == "6억 5,000만 원"

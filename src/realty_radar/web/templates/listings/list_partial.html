@@ -1,5 +1,5 @@
-<!-- 검색 통계 서머리 뱃지 -->
-<div class="flex flex-wrap items-center justify-between gap-3 px-1 mb-4">
+<!-- 상단 스티키 고정 검색 통계 서머리 바 & 미니 페이지네이션 -->
+<div class="sticky top-16 z-40 bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-xl border border-slate-700/70 shadow-xl flex flex-wrap items-center justify-between gap-3 mb-4 transition-all">
     <div class="flex items-center space-x-3 text-sm">
         <span class="text-slate-300">전체 <strong class="text-indigo-400 font-bold">{{ result.total_count }}</strong>건</span>
         <span class="text-slate-600">•</span>
@@ -7,8 +7,37 @@
         <span class="text-slate-600">•</span>
         <span class="text-amber-400">가격 변동 <strong class="font-bold">{{ result.price_reduced_count if result.price_reduced_count is defined else 0 }}</strong>건</span>
     </div>
-    <div class="text-xs text-slate-400">
-        페이지 <strong>{{ result.page if result.page is defined else 1 }}</strong> / {{ result.total_pages if result.total_pages is defined else 1 }}
+    
+    <div class="flex items-center space-x-3">
+        <span class="text-xs text-slate-300 font-medium">
+            페이지 <strong class="text-indigo-400 font-bold">{{ result.page if result.page is defined else 1 }}</strong> / {{ result.total_pages if result.total_pages is defined else 1 }}
+        </span>
+
+        {% if result.total_pages and result.total_pages > 1 %}
+        <div class="flex items-center space-x-1">
+            <!-- 미니 이전 버튼 -->
+            {% if result.has_prev %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.page - 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="p-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-md border border-slate-700 transition-colors flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            {% else %}
+            <button disabled class="p-1.5 text-xs bg-slate-900/50 text-slate-600 rounded-md border border-slate-800/80 cursor-not-allowed flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            {% endif %}
+
+            <!-- 미니 다음 버튼 -->
+            {% if result.has_next %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.page + 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="p-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-md border border-slate-700 transition-colors flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
+            {% else %}
+            <button disabled class="p-1.5 text-xs bg-slate-900/50 text-slate-600 rounded-md border border-slate-800/80 cursor-not-allowed flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -24,7 +53,7 @@
                         {{ item.transaction_type | korean_tx_type }}
                     </span>
 
-                    <!-- 아파트 단지명 -->
+                    <!-- 아파트 단지명 (동 정보 포함) -->
                     <h2 class="text-lg font-bold text-white hover:text-indigo-300 transition-colors">
                         {{ item.complex_name_raw or '아파트 단지 미매칭' }}
                     </h2>
@@ -32,7 +61,7 @@
                     <!-- 출처 사이트 한글 명칭 -->
                     {% if item.source %}
                     <span class="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-600 font-medium">
-                        {{ item.source.source_name or item.source.source_code | korean_source }}
+                        {{ item.source.source_code | korean_source }}
                     </span>
                     {% endif %}
 
@@ -46,70 +75,150 @@
                         융자금 있음
                     </span>
                     {% endif %}
+
+                    <!-- 개인 자격 기반 정책 대출 적격 상세 정보 -->
+                    {% if item.eligible_loans %}
+                        {% for loan in item.eligible_loans %}
+                        <span class="text-xs px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold flex items-center space-x-1 shadow-sm">
+                            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>{{ loan.product_name }}</span>
+                        </span>
+                        {% endfor %}
+                    {% endif %}
                 </div>
 
                 <div class="text-sm text-slate-300 flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span>전용 {{ item.exclusive_area or '-' }}㎡</span>
                     <span class="text-slate-600">•</span>
-                    <span>{{ item.floor_info or item.floor_group or '-' }}</span>
+                    <!-- 층수 표기 뱃지 -->
+                    <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 text-xs">
+                        {{ item.floor_info or item.floor_group or '-' }}
+                    </span>
+                    {% if item.complex and item.complex.total_households %}
+                    <span class="text-slate-600">•</span>
+                    <span class="text-emerald-400 font-semibold text-xs flex items-center space-x-1">
+                        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                        </svg>
+                        <span>{{ item.complex.total_households | comma_number }}세대</span>
+                    </span>
+                    {% endif %}
+                    {% if item.complex and item.complex.construction_year %}
+                    <span class="text-slate-600">•</span>
+                    <span class="text-amber-400 font-semibold text-xs flex items-center space-x-1">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        <span>{{ item.complex.construction_year }}년 준공</span>
+                    </span>
+                    {% endif %}
                     {% if item.address_raw %}
                     <span class="text-slate-600">•</span>
                     <span class="text-slate-400">{{ item.address_raw }}</span>
                     {% endif %}
                 </div>
 
-                {% if item.description_raw or item.description %}
-                <p class="text-xs text-slate-400 line-clamp-1 italic max-w-2xl">
-                    "{{ item.description_raw or item.description }}"
+                {% if item.description_raw %}
+                <p class="text-xs text-slate-400 line-clamp-2 italic">
+                    "{{ item.description_raw }}"
                 </p>
                 {% endif %}
             </div>
 
-            <div class="flex items-center space-x-6 justify-between md:justify-end border-t md:border-t-0 border-slate-700/40 pt-3 md:pt-0">
+            <!-- 우측 가격 표시 및 상세 원본 버튼 -->
+            <div class="flex md:flex-col items-end justify-between md:justify-center gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-700/50">
                 <div class="text-right">
-                    <!-- 한글 금액 표현 (억/천만 단위 병기) -->
-                    <div class="text-xl font-extrabold text-indigo-400 tracking-tight">
-                        {% if item.price_deposit or item.sale_price or item.deposit %}
-                            {% set price_val = item.price_deposit or item.sale_price or item.deposit %}
-                            {{ price_val | korean_price }}
-                            {% if item.price_monthly and item.price_monthly > 0 %}
-                                / 월 {{ item.price_monthly | korean_price }}
-                            {% endif %}
-                        {% else %}
-                            가격 미정
-                        {% endif %}
-                    </div>
-                    <div class="text-xs text-slate-500 mt-1">
+                    {% if item.transaction_type == 'SALE' %}
+                        <div class="text-xl font-extrabold text-indigo-400">
+                            {{ item.price_deposit | korean_money }}
+                        </div>
+                    {% elif item.transaction_type == 'JEONSE' %}
+                        <div class="text-xl font-extrabold text-blue-400">
+                            {{ item.price_deposit | korean_money }}
+                        </div>
+                    {% elif item.transaction_type == 'MONTHLY_RENT' %}
+                        <div class="text-xl font-extrabold text-amber-400">
+                            {{ item.price_deposit | korean_money }} / {{ item.price_monthly | korean_money }}
+                        </div>
+                    {% else %}
+                        <div class="text-xl font-extrabold text-slate-200">
+                            {{ item.price_deposit | korean_money }}
+                        </div>
+                    {% endif %}
+                    <div class="text-[11px] text-slate-400 mt-0.5">
                         최초 수집: {{ item.first_seen_at.strftime('%Y-%m-%d %H:%M') if item.first_seen_at else '-' }}
                     </div>
                 </div>
 
-                <!-- 원본 사이트 이동 버튼 -->
-                <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors flex items-center space-x-1">
+                {% if item.source_url %}
+                <a href="{{ item.source_url }}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-1.5 text-xs font-semibold bg-slate-700/70 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-lg border border-slate-600/80 transition-all flex items-center space-x-1 shadow-sm shrink-0">
                     <span>원본 보기</span>
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                     </svg>
                 </a>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
 
-        <!-- 페이징 버튼 -->
-        {% if result.total_pages is defined and result.total_pages > 1 %}
-        <div class="flex items-center justify-center space-x-2 pt-6">
-            {% if result.page > 1 %}
-            <button hx-get="/listings/search?page={{ result.page - 1 }}" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700">
+        <!-- 페이징 컨트롤 컴포넌트 -->
+        {% if result.total_pages and result.total_pages > 1 %}
+        <div class="flex flex-wrap items-center justify-center gap-1.5 pt-8 pb-4">
+            <!-- 이전 페이지 버튼 -->
+            {% if result.has_prev %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.page - 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-all shadow-sm">
+                이전
+            </button>
+            {% else %}
+            <button disabled class="px-3 py-1.5 text-xs font-semibold bg-slate-900/50 text-slate-600 rounded-lg border border-slate-800 cursor-not-allowed">
                 이전
             </button>
             {% endif %}
-            
-            <span class="text-xs text-slate-400 px-3 py-1.5 font-medium bg-slate-900 rounded border border-slate-800">
-                {{ result.page }} / {{ result.total_pages }}
-            </span>
 
-            {% if result.page < result.total_pages %}
-            <button hx-get="/listings/search?page={{ result.page + 1 }}" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700">
+            <!-- 페이지 번호 다이렉트 선택 버튼 (현재 페이지 전후 2개 범위) -->
+            {% set start_p = result.page - 2 if result.page - 2 > 1 else 1 %}
+            {% set end_p = result.page + 2 if result.page + 2 < result.total_pages else result.total_pages %}
+
+            {% if start_p > 1 %}
+            <button type="button" onclick="document.getElementById('filter-page').value='1';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
+                1
+            </button>
+            {% if start_p > 2 %}
+            <span class="text-slate-600 px-1">...</span>
+            {% endif %}
+            {% endif %}
+
+            {% for p in range(start_p, end_p + 1) %}
+                {% if p == result.page %}
+                <span class="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg border border-indigo-500 shadow-md">
+                    {{ p }}
+                </span>
+                {% else %}
+                <button type="button" onclick="document.getElementById('filter-page').value='{{ p }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">
+                    {{ p }}
+                </button>
+                {% endif %}
+            {% endfor %}
+
+            {% if end_p < result.total_pages %}
+            {% if end_p < result.total_pages - 1 %}
+            <span class="text-slate-600 px-1">...</span>
+            {% endif %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.total_pages }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
+                {{ result.total_pages }}
+            </button>
+            {% endif %}
+
+            <!-- 다음 페이지 버튼 -->
+            {% if result.has_next %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.page + 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-all shadow-sm">
+                다음
+            </button>
+            {% else %}
+            <button disabled class="px-3 py-1.5 text-xs font-semibold bg-slate-900/50 text-slate-600 rounded-lg border border-slate-800 cursor-not-allowed">
                 다음
             </button>
             {% endif %}

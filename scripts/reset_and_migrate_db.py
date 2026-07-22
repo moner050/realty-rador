@@ -44,14 +44,14 @@ def reset_and_recreate_database():
     with SessionFactory() as db:
         site_a = CrawlSource(
             source_code="SITE_A",
-            source_name="네이버부동산 (Site A)",
+            source_name="네이버부동산",
             base_url="https://land.naver.com",
             rate_limit_ms=2000,
             is_active=True,
         )
         site_b = CrawlSource(
             source_code="SITE_B",
-            source_name="아실/직방 (Site B)",
+            source_name="아실",
             base_url="https://site-b.com",
             rate_limit_ms=2000,
             is_active=True,

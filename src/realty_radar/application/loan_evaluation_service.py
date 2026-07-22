@@ -28,20 +28,37 @@ class LoanEvaluationService:
 
         trans_type = TransactionType(listing.transaction_type)
         results: list[LoanEvaluationResult] = []
+        address = listing.address_raw
 
         if trans_type == TransactionType.SALE:
             didimdol_res = self.evaluator.evaluate_didimdol(
                 transaction_type=trans_type,
                 price=listing.sale_price,
                 exclusive_area=listing.exclusive_area,
+                address=address,
                 applicant=applicant,
             )
-            results.append(didimdol_res)
+            bogumjari_res = self.evaluator.evaluate_bogumjari(
+                transaction_type=trans_type,
+                price=listing.sale_price,
+                exclusive_area=listing.exclusive_area,
+                address=address,
+                applicant=applicant,
+            )
+            neonatal_res = self.evaluator.evaluate_neonatal_purchase(
+                transaction_type=trans_type,
+                price=listing.sale_price,
+                exclusive_area=listing.exclusive_area,
+                address=address,
+                applicant=applicant,
+            )
+            results.extend([didimdol_res, bogumjari_res, neonatal_res])
         elif trans_type in [TransactionType.JEONSE, TransactionType.MONTHLY_RENT]:
             beotimmok_res = self.evaluator.evaluate_beotimmok(
                 transaction_type=trans_type,
                 deposit=listing.deposit,
                 exclusive_area=listing.exclusive_area,
+                address=address,
                 applicant=applicant,
             )
             results.append(beotimmok_res)

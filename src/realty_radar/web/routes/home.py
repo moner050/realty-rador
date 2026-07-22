@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -7,14 +7,30 @@ from sqlalchemy.orm import Session
 
 from realty_radar.application.crawl_job_service import CrawlJobService
 from realty_radar.application.listing_search_service import ListingSearchService
+from realty_radar.application.loan_evaluation_service import LoanEvaluationService
 from realty_radar.constants import MortgageStatus, TransactionType
 from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.domain.loan.entities import ApplicantProfile
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.jinja_filters import register_jinja_filters
+from realty_radar.web.routes.settings import session_user_profile
 
 router = APIRouter()
 templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
+
+
+def _enrich_listings_with_loans(result: Any, db: Session) -> None:
+    """검색된 매물 목록에 대해 사용자 자격 조건 기준 정책 대출 평가 결과를 바인딩."""
+    if not result or not getattr(result, "items", None):
+        return
+    loan_service = LoanEvaluationService(db)
+    for item in result.items:
+        try:
+            eval_res = loan_service.evaluate_listing_loans(item.id, applicant=session_user_profile)
+            item.eligible_loans = [res for res in eval_res if res.is_eligible]
+        except Exception:
+            item.eligible_loans = []
 
 
 def _to_int(val: str | int | None) -> int | None:
@@ -39,6 +55,7 @@ def _to_decimal(val: str | float | Decimal | None) -> Decimal | None:
 
 def parse_search_filter(
     complex_keyword: str | None = Query(None),
+    region_name: str | None = Query(None),
     region_keyword: str | None = Query(None),
     transaction_type: str | None = Query(None),
     min_price: str | None = Query(None),
@@ -57,14 +74,23 @@ def parse_search_filter(
     sort_by: str = Query("recent"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    only_eligible_loans: bool = Query(False),
 ) -> ListingSearchFilter:
     """쿼리 파라미터로부터 ListingSearchFilter DTO 객체 안전 파싱."""
     trans_enum = TransactionType(transaction_type) if transaction_type and transaction_type != "" else None
     mortgage_enum = MortgageStatus(mortgage_status) if mortgage_status and mortgage_status != "" else None
 
+    # region_name(hidden input)과 region_keyword 중 유효한 값 통합
+    effective_region = None
+    if region_name and region_name.strip():
+        effective_region = region_name.strip()
+    elif region_keyword and region_keyword.strip():
+        effective_region = region_keyword.strip()
+
     return ListingSearchFilter(
         complex_keyword=complex_keyword if complex_keyword != "" else None,
-        region_keyword=region_keyword if region_keyword != "" else None,
+        region_keyword=effective_region,
+        region_name=effective_region,
         transaction_type=trans_enum,
         min_price=_to_int(min_price),
         max_price=_to_int(max_price),
@@ -82,6 +108,7 @@ def parse_search_filter(
         sort_by=sort_by if sort_by != "" else "recent",
         page=page,
         page_size=page_size,
+        only_eligible_loans=only_eligible_loans,
     )
 
 
@@ -93,7 +120,8 @@ def index(
 ):
     """홈 메인 페이지 (진행도 위젯 서머리 및 검색 결과 렌더링)."""
     search_service = ListingSearchService(db)
-    result = search_service.search_listings(filters)
+    result = search_service.search_listings(filters, applicant=session_user_profile)
+    _enrich_listings_with_loans(result, db)
 
     job_service = CrawlJobService(db)
     crawl_summary = job_service.get_progress_summary()
@@ -117,7 +145,8 @@ def search_listings_partial(
 ):
     """HTMX 요청용 매물 리스트 부분(partial) HTML 렌더링."""
     search_service = ListingSearchService(db)
-    result = search_service.search_listings(filters)
+    result = search_service.search_listings(filters, applicant=session_user_profile)
+    _enrich_listings_with_loans(result, db)
 
     return templates.TemplateResponse(
         request=request,

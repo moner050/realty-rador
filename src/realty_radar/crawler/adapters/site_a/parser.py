@@ -1,3 +1,5 @@
+"""사이트 A HTML 및 API JSON 파싱 전문 클래스."""
+import re
 from datetime import datetime
 from selectolax.parser import HTMLParser
 
@@ -6,9 +8,227 @@ from realty_radar.crawler.base.models import RawListing
 
 
 class SiteAParser:
-    """사이트 A HTML 파싱 전문 클래스."""
+    """사이트 A HTML 및 API JSON 파싱 전문 클래스."""
 
     SOURCE_CODE = "SITE_A"
+
+    def parse_fin_article_json(
+        self,
+        item: dict,
+        source_code: str = "SITE_A",
+        default_complex_name: str = "",
+        default_address: str = "",
+        total_households: int | None = None,
+    ) -> RawListing | None:
+        """fin.land.naver.com front-api/v1/complex/article/list 응답 객체 → RawListing 정밀 변환."""
+        if not item or not isinstance(item, dict):
+            return None
+
+        info = item.get("representativeArticleInfo") or {}
+        if not info:
+            info = item
+
+        article_no = str(info.get("articleNumber", "") or info.get("articleNo", ""))
+        if not article_no:
+            return None
+
+        # 단지명 + 동 명칭 결합 (예: "가양2단지성지 205동")
+        base_cpx = info.get("complexName") or info.get("articleName") or default_complex_name
+        dong_name = str(info.get("dongName") or "").strip()
+        if dong_name and dong_name not in base_cpx:
+            dong_str = f"{dong_name}동" if not dong_name.endswith("동") else dong_name
+            complex_name_full = f"{base_cpx} {dong_str}"
+        else:
+            complex_name_full = base_cpx
+
+        # 거래유형 및 가격 정보
+        trade_type = info.get("tradeType", "A1")
+        price_info = item.get("priceInfo") or info.get("priceInfo") or {}
+
+        deal_price = price_info.get("dealPrice") or 0
+        warranty_price = price_info.get("warrantyPrice") or 0
+        rent_price = price_info.get("rentPrice") or 0
+
+        if trade_type == "B2" or (rent_price and rent_price > 0):
+            price_raw = f"월세 {warranty_price // 10000 if warranty_price >= 10000 else warranty_price}/{rent_price // 10000 if rent_price >= 10000 else rent_price}"
+        elif trade_type == "B1" or (warranty_price and warranty_price > 0 and not deal_price):
+            price_raw = f"전세 {warranty_price}"
+        else:
+            price_raw = f"매매 {deal_price}"
+
+        # 면적 정보
+        space_info = info.get("spaceInfo") or {}
+        supply_space = space_info.get("supplySpace")
+        exclusive_space = space_info.get("exclusiveSpace")
+        if supply_space and exclusive_space:
+            area_raw = f"공급 {supply_space}㎡ / 전용 {exclusive_space}㎡"
+        elif exclusive_space:
+            area_raw = f"전용 {exclusive_space}㎡"
+        else:
+            area_raw = None
+
+        # 층수 정보 (다양한 경로 및 targetFloor/totalFloor 조합)
+        article_detail = info.get("articleDetail") or {}
+        floor_detail = article_detail.get("floorDetailInfo") or info.get("floorDetailInfo") or {}
+
+        floor_info = (
+            article_detail.get("floorInfo")
+            or info.get("floorInfo")
+            or item.get("floorInfo")
+        )
+
+        if not floor_info and floor_detail:
+            target_fl = floor_detail.get("targetFloor")
+            total_fl = floor_detail.get("totalFloor")
+            if target_fl and total_fl:
+                floor_info = f"{target_fl}/{total_fl}"
+            elif target_fl:
+                floor_info = f"{target_fl}"
+
+        if floor_info:
+            floor_str = str(floor_info).strip()
+            floor_raw = f"{floor_str}층" if "층" not in floor_str else floor_str
+        else:
+            floor_raw = None
+
+        # 준공연도 정보 (buildingInfo: buildingConjunctionDate -> 예: "19921118")
+        building_info = info.get("buildingInfo") or item.get("buildingInfo") or {}
+        conj_date = str(building_info.get("buildingConjunctionDate") or "").strip()
+        construction_year = None
+        if conj_date and len(conj_date) >= 4 and conj_date[:4].isdigit():
+            construction_year = int(conj_date[:4])
+
+        # 특징 설명 및 방향
+        desc_text = article_detail.get("articleFeatureDescription") or ""
+        direction = article_detail.get("directionStandard") or article_detail.get("direction") or ""
+        desc_parts = [p for p in [desc_text, direction] if p]
+        description_raw = ", ".join(desc_parts) if desc_parts else None
+
+        # 확인 일자
+        verification_info = info.get("verificationInfo") or {}
+        confirm_date_str = verification_info.get("articleConfirmDate") or ""
+        try:
+            collected_at = datetime.strptime(confirm_date_str, "%Y-%m-%d") if confirm_date_str else datetime.now()
+        except ValueError:
+            collected_at = datetime.now()
+
+        # 주소 정보
+        addr_info = item.get("address") or {}
+        city = addr_info.get("city", "")
+        division = addr_info.get("division", "")
+        sector = addr_info.get("sector", "")
+        full_addr = f"{city} {division} {sector}".strip() or default_address
+
+        source_url = f"https://fin.land.naver.com/articles/{article_no}"
+
+        raw_payload = {
+            "fin_article_json": item,
+            "tradeType": trade_type,
+            "dealPrice": deal_price,
+            "warrantyPrice": warranty_price,
+            "rentPrice": rent_price,
+            "supplySpace": supply_space,
+            "exclusiveSpace": exclusive_space,
+            "brokerInfo": info.get("brokerInfo") or {},
+            "dongName": dong_name,
+            "floorInfo": floor_raw,
+            "total_households": total_households,
+            "construction_year": construction_year,
+        }
+
+        return RawListing(
+            source_code=source_code,
+            external_listing_id=article_no,
+            source_url=source_url,
+            complex_name_raw=complex_name_full,
+            address_raw=full_addr,
+            price_raw=price_raw,
+            area_raw=area_raw,
+            floor_raw=floor_raw,
+            description_raw=description_raw,
+            collected_at=collected_at,
+            raw_payload=raw_payload,
+        )
+
+    def parse_article_json(
+        self,
+        article: dict,
+        source_code: str = "SITE_A",
+        complex_name: str = "",
+        dong_address: str = "",
+        total_households: int | None = None,
+    ) -> RawListing | None:
+        """이전 API 응답 파싱 별칭 메서드."""
+        return self.parse_fin_article_json(article, source_code, complex_name, dong_address, total_households)
+
+    def parse_scraped_text(
+        self,
+        raw_text: str,
+        source_code: str = "SITE_A",
+        default_complex_name: str = "",
+        default_address: str = "",
+        external_listing_id: str = "",
+        source_url: str = "",
+    ) -> RawListing | None:
+        """DOM 스크래핑 텍스트(lines) 정밀 추출 (하위 호환용)."""
+        if not raw_text or not raw_text.strip():
+            return None
+
+        lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
+        if not lines:
+            return None
+
+        complex_name = default_complex_name
+        price_str = None
+        area_str = None
+        floor_str = None
+        desc_str = None
+
+        if lines:
+            complex_name = lines[0]
+
+        for line in lines[1:]:
+            if any(k in line for k in ["매매", "전세", "월세"]):
+                price_str = line
+                break
+
+        for line in lines:
+            if "m²" in line or "㎡" in line or "층" in line:
+                area_match = re.search(r"(\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?\s*(?:m²|㎡))", line)
+                if area_match:
+                    area_str = area_match.group(1)
+
+                floor_match = re.search(r"((?:저|중|고|\d+)(?:\/\d+)?\s*층)", line)
+                if floor_match:
+                    floor_str = floor_match.group(1)
+
+        desc_lines = []
+        for line in lines[1:]:
+            if price_str and line == price_str:
+                continue
+            if "m²" in line or "㎡" in line or "확인매물" in line or "네이버" in line:
+                continue
+            desc_lines.append(line)
+
+        if desc_lines:
+            desc_str = " ".join(desc_lines[:2])
+
+        if not price_str and not area_str:
+            return None
+
+        return RawListing(
+            source_code=source_code,
+            external_listing_id=external_listing_id or f"{source_code}-{hash(raw_text) & 0xFFFFFFFF}",
+            source_url=source_url or "https://new.land.naver.com",
+            complex_name_raw=complex_name or default_complex_name,
+            address_raw=default_address,
+            price_raw=price_str,
+            area_raw=area_str,
+            floor_raw=floor_str,
+            description_raw=desc_str,
+            collected_at=datetime.now(),
+            raw_payload={"scraped_text": raw_text},
+        )
 
     def parse_listing_cards(self, html_content: str, base_url: str = "https://site-a.com") -> list[RawListing]:
         """검색 결과 HTML 페이지에서 매물 카드 목록 추출."""

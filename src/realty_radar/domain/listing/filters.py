@@ -9,6 +9,7 @@ class ListingSearchFilter:
     """매물 검색 필터링 조건 DTO (고급 필터 속성 포함)."""
 
     region_keyword: str | None = None
+    region_name: str | None = None
     complex_keyword: str | None = None
 
     transaction_type: TransactionType | None = None
@@ -31,6 +32,8 @@ class ListingSearchFilter:
 
     recent_days: int | None = None
     source_code: str | None = None
+
+    only_eligible_loans: bool = False
 
     sort_by: str = "recent"  # recent (최신순), price_asc (가격낮은순), price_desc (가격높은순), area_desc (면적넓은순)
     page: int = 1

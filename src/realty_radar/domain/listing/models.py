@@ -45,6 +45,7 @@ class ListingFilterParams:
     page_size: int = 20
     region_keyword: Optional[str] = None
     source_code: Optional[str] = None
+    only_eligible_loans: bool = False
 
     def __post_init__(self):
         if self.region_keyword and not self.region_name:
@@ -56,11 +57,30 @@ ListingSearchFilter = ListingFilterParams
 
 
 class SearchResult:
-    """검색 결과 객체 (객체 속성 접근 .items, .total_count 및 (items, count) 언패킹 모두 지원)."""
+    """검색 결과 객체 (객체 속성 접근 .items, .total_count, .total_pages 및 (items, count) 언패킹 모두 지원)."""
 
-    def __init__(self, items: list[Any], total_count: int):
+    def __init__(self, items: list[Any], total_count: int, page: int = 1, page_size: int = 20):
         self.items = items
         self.total_count = total_count
+        self.page = max(1, page)
+        self.page_size = max(1, page_size)
+
+    @property
+    def total_pages(self) -> int:
+        """총 페이지 수 계산."""
+        if self.total_count <= 0 or self.page_size <= 0:
+            return 1
+        return max(1, (self.total_count + self.page_size - 1) // self.page_size)
+
+    @property
+    def has_prev(self) -> bool:
+        """이전 페이지 존재 여부."""
+        return self.page > 1
+
+    @property
+    def has_next(self) -> bool:
+        """다음 페이지 존재 여부."""
+        return self.page < self.total_pages
 
     def __iter__(self) -> Iterator[Any]:
         return iter((self.items, self.total_count))

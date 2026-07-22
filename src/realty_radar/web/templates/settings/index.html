@@ -43,6 +43,30 @@
                     <input type="checkbox" name="is_newlywed" value="true" {% if profile.is_newlywed %}checked{% endif %} class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
                 </div>
 
+                <!-- 2년 이내 출산 가구 (신생아 특례) -->
+                <div class="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <div>
+                        <span class="block text-sm font-semibold text-white">2년 이내 출산 가구</span>
+                        <span class="text-xs text-slate-400">신생아 특례 대출 신청 자격 대상 (소득 2.0억 한도)</span>
+                    </div>
+                    <input type="checkbox" name="has_newborn" value="true" {% if profile.has_newborn %}checked{% endif %} class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                </div>
+
+                <!-- 차용증 작성 활용 여부 -->
+                <div class="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                    <div>
+                        <span class="block text-sm font-semibold text-white">차용증 작성 활용 여부</span>
+                        <span class="text-xs text-slate-400">부모/친족 차용금 작성 후 합법 자금 활용</span>
+                    </div>
+                    <input type="checkbox" 
+                           id="use-promissory-cb"
+                           name="use_promissory_note" 
+                           value="true" 
+                           {% if profile.use_promissory_note %}checked{% endif %} 
+                           onchange="togglePromissorySection(this.checked)"
+                           class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                </div>
+
                 <!-- 생애최초 주택구입 -->
                 <div class="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
                     <div>
@@ -58,17 +82,68 @@
                     <input type="number" id="setting-child-count" name="child_count" value="{{ profile.child_count }}" min="0" max="10" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
 
-                <!-- 부부합산 연소득 -->
+                <!-- 개인 또는 부부합산 연소득 -->
                 <div class="space-y-1.5 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
-                    <label for="setting-income" class="block text-sm font-semibold text-white">부부합산 연소득 (원)</label>
-                    <input type="number" id="setting-income" name="annual_income" value="{{ profile.annual_income }}" step="1000000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <label for="setting-income" class="block text-sm font-semibold text-white">개인 또는 부부합산 연소득 (원)</label>
+                    <input type="text" id="setting-income" name="annual_income" value="{{ profile.annual_income | comma_number }}" placeholder="예: 60,000,000" class="money-input w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
 
                 <!-- 순자산 -->
-                <div class="space-y-1.5 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                <div class="space-y-1.5 p-4 rounded-lg bg-slate-900/50 border border-slate-700/50 md:col-span-2">
                     <label for="setting-assets" class="block text-sm font-semibold text-white">순자산 총액 (원)</label>
-                    <input type="number" id="setting-assets" name="net_assets" value="{{ profile.net_assets }}" step="1000000" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <input type="text" id="setting-assets" name="net_assets" value="{{ profile.net_assets | comma_number }}" placeholder="예: 300,000,000" class="money-input w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
+
+                <!-- 동적 차용증 작성인 추가 영역 -->
+                <div id="promissory-note-section" class="{% if not profile.use_promissory_note %}hidden{% endif %} space-y-3 p-4 rounded-lg bg-indigo-950/30 border border-indigo-500/20 md:col-span-2">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-indigo-300 font-semibold flex items-center space-x-1">
+                            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                            </svg>
+                            <span>차용증 작성 대상별 이름 및 가능 금액</span>
+                        </span>
+                        <span class="text-xs text-amber-400 font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">💡 1인당 2억 1,700만 원 (연 이자 1,000만 원 미만 무이자 가능)</span>
+                    </div>
+
+                    <!-- 동적 입력 행 컨테이너 -->
+                    <div id="promissory-rows-container" class="space-y-2">
+                        {% if profile.promissory_notes and profile.promissory_notes | length > 0 %}
+                            {% for note in profile.promissory_notes %}
+                            <div class="promissory-row flex items-center space-x-2">
+                                <button type="button" onclick="addPromissoryRowAfter(this)" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center justify-center shadow transition-all shrink-0" title="아래에 작성인 추가">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                                </button>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" name="promissory_note_names" value="{{ note.name }}" placeholder="이름 (예: 어머니)" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" name="promissory_note_amounts" value="{{ note.amount | comma_number }}" placeholder="가능 금액 (원)" class="money-input w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                </div>
+                                {% if not loop.first %}
+                                <button type="button" onclick="removePromissoryRow(this)" class="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg flex items-center justify-center shadow transition-all shrink-0" title="이 항목 삭제">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4"/></svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <!-- 기본 1번째 행 -->
+                            <div class="promissory-row flex items-center space-x-2">
+                                <button type="button" onclick="addPromissoryRowAfter(this)" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center justify-center shadow transition-all shrink-0" title="아래에 작성인 추가">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                                </button>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" name="promissory_note_names" placeholder="이름 (예: 아버지)" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" name="promissory_note_amounts" placeholder="가능 금액 (원)" class="money-input w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
             </div>
 
             <!-- 버튼 영역 -->
@@ -81,4 +156,77 @@
     </div>
 
 </div>
+
+<!-- 실시간 금액 콤마(,) 포맷팅 및 동적 행 추가/삭제 스크립트 -->
+<script>
+function togglePromissorySection(checked) {
+    const sec = document.getElementById("promissory-note-section");
+    if (checked) {
+        sec.classList.remove("hidden");
+    } else {
+        sec.classList.add("hidden");
+    }
+}
+
+function attachMoneyInputFormatter(input) {
+    if (!input) return;
+    input.addEventListener("input", function(e) {
+        let rawValue = this.value.replace(/[^0-9]/g, "");
+        if (rawValue) {
+            this.value = parseInt(rawValue, 10).toLocaleString("ko-KR");
+        } else {
+            this.value = "";
+        }
+    });
+}
+
+function addPromissoryRowAfter(btn) {
+    const currentRow = btn.closest(".promissory-row");
+    
+    const newRow = document.createElement("div");
+    newRow.className = "promissory-row flex items-center space-x-2";
+    newRow.innerHTML = `
+        <button type="button" onclick="addPromissoryRowAfter(this)" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center justify-center shadow transition-all shrink-0" title="아래에 작성인 추가">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+        </button>
+        <div class="flex-1 min-w-0">
+            <input type="text" name="promissory_note_names" placeholder="이름 (예: 친족)" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div class="flex-1 min-w-0">
+            <input type="text" name="promissory_note_amounts" placeholder="가능 금액 (원)" class="money-input w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <button type="button" onclick="removePromissoryRow(this)" class="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg flex items-center justify-center shadow transition-all shrink-0" title="이 항목 삭제">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4"/></svg>
+        </button>
+    `;
+
+    currentRow.after(newRow);
+    attachMoneyInputFormatter(newRow.querySelector(".money-input"));
+}
+
+function removePromissoryRow(btn) {
+    const row = btn.closest(".promissory-row");
+    if (row) {
+        row.remove();
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const moneyInputs = document.querySelectorAll(".money-input");
+    moneyInputs.forEach(input => {
+        attachMoneyInputFormatter(input);
+    });
+
+    // 폼 전송 시 콤마 정제
+    const form = document.querySelector("form");
+    if (form) {
+        form.addEventListener("submit", function() {
+            const allMoneyInputs = document.querySelectorAll(".money-input");
+            allMoneyInputs.forEach(input => {
+                input.value = input.value.replace(/[^0-9]/g, "");
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

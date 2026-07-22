@@ -57,3 +57,28 @@ def test_home_index(client: TestClient):
     assert response.status_code == 200
     assert "통합 매물 검색" in response.text
     assert "Realty Radar" in response.text
+
+
+def test_settings_page(client: TestClient):
+    """설정 페이지 HTML 렌더링 및 콤마 필터 에러가 없는지 검증."""
+    response = client.get("/settings")
+    assert response.status_code == 200
+    assert "개인 자격 및 정책대출 조건 설정" in response.text
+    assert "개인 또는 부부합산 연소득" in response.text
+
+
+def test_update_settings(client: TestClient):
+    """설정 페이지 값 수정 시 정상 변경 확인."""
+    data = {
+        "is_homeless": "true",
+        "annual_income": "75000000",
+        "net_assets": "350000000",
+        "is_newlywed": "true",
+        "is_first_home_buyer": "false",
+        "child_count": "1",
+    }
+    response = client.post("/settings", data=data)
+    assert response.status_code == 200
+    assert "성공적으로 저장되었습니다" in response.text
+    assert "75,000,000" in response.text
+

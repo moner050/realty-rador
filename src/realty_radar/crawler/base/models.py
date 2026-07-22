@@ -50,6 +50,8 @@ class NormalizedListing:
     floor_number: int | None = None
     floor_group: str | None = None
     total_floor: int | None = None
+    floor_raw: str | None = None
+    floor_info: str | None = None
     direction: str | None = None
     address_raw: str | None = None
     description: str | None = None

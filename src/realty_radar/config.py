@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     screenshot_directory: Path = Field(default=Path("./data/screenshots"), validation_alias="SCREENSHOT_DIRECTORY")
 
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+    public_data_api_key: str | None = Field(default=None, validation_alias="PUBLIC_DATA_API_KEY")
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -20,7 +20,7 @@ class TaskScheduler:
             schedule_regular_search_job,
             trigger=CronTrigger.from_crontab("0 */6 * * *"),
             id="job_regular_search_site_a",
-            name="SITE_A 정기 수집",
+            name="네이버부동산 정기 수집",
             replace_existing=True,
             kwargs={"source_code": "SITE_A", "region_name": "여의도동"},
         )

@@ -36,3 +36,18 @@ def test_model_instantiation():
     )
     assert listing.external_listing_id == "L12345"
     assert listing.sale_price == 650000000
+
+
+def test_search_result_pagination():
+    """SearchResult 페이징 프로퍼티(total_pages, has_prev, has_next) 계산 검증."""
+    from realty_radar.domain.listing.models import SearchResult
+
+    res = SearchResult(items=["item1", "item2"], total_count=45, page=2, page_size=20)
+    assert res.total_pages == 3
+    assert res.has_prev is True
+    assert res.has_next is True
+
+    res_last = SearchResult(items=["item3"], total_count=45, page=3, page_size=20)
+    assert res_last.total_pages == 3
+    assert res_last.has_prev is True
+    assert res_last.has_next is False

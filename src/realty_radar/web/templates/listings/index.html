@@ -44,6 +44,7 @@
               hx-target="#listings-container" 
               hx-trigger="change delay:300ms, submit"
               class="space-y-6">
+            <input type="hidden" id="filter-page" name="page" value="{{ filters.page if filters else 1 }}">
             
             <!-- 1. 지역 선택기 (시/도 및 시/군/구 2차 연동 셀렉트 + 퀵 칩) -->
             <div class="space-y-3 bg-slate-900/80 border border-slate-700/70 p-4 rounded-xl">
@@ -282,6 +283,26 @@
                 </div>
             </div>
 
+            <!-- 6. 맞춤 조건 설정 (정책대출) -->
+            <div class="flex items-center space-x-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                <input type="checkbox" 
+                       id="filter-only-eligible-loans" 
+                       name="only_eligible_loans" 
+                       value="true" 
+                       {% if filters.only_eligible_loans %}checked{% endif %} 
+                       onchange="triggerFormSubmit()"
+                       class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                <div>
+                    <label for="filter-only-eligible-loans" class="text-sm font-bold text-indigo-300 cursor-pointer flex items-center space-x-1.5">
+                        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                        </svg>
+                        <span>내 자격 조건으로 정책대출 가능한 매물만 보기</span>
+                    </label>
+                    <span class="block text-xs text-slate-400 mt-0.5 font-medium">설정 메뉴에서 저장한 소득, 자산, 무주택 조건 기준 디딤돌/버팀목 적격 매물만 필터링합니다.</span>
+                </div>
+            </div>
+
             <!-- 6. 하단 툴바 -->
             <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
                 <div class="flex items-center space-x-2">
@@ -329,12 +350,22 @@
                 sigunguSelect.appendChild(opt);
             });
         }
-        applyRegion(sido);
+        const sidoFullName = sido === '서울' ? '서울특별시' : (sido === '경기' ? '경기도' : (sido === '인천' ? '인천광역시' : sido));
+        applyRegion(sidoFullName || '');
     }
 
     function onSigunguChange(sigungu) {
         const sido = document.getElementById('sido-select').value;
-        const targetRegion = sigungu || sido || '';
+        const sidoFullName = sido === '서울' ? '서울특별시' : (sido === '경기' ? '경기도' : (sido === '인천' ? '인천광역시' : sido));
+        
+        let targetRegion = '';
+        if (sidoFullName && sigungu) {
+            targetRegion = sidoFullName + ' ' + sigungu;
+        } else if (sigungu) {
+            targetRegion = sigungu;
+        } else if (sidoFullName) {
+            targetRegion = sidoFullName;
+        }
         applyRegion(targetRegion);
     }
 
@@ -377,7 +408,7 @@
             let text = '';
             if (eok > 0) text += eok + '억 ';
             if (cheon > 0) text += cheon + '천만 ';
-            lbl.innerText = text.trim() + '원 이하';
+            lbl.innerText = text.trim() + '원 (' + num.toLocaleString('ko-KR') + '원) 이하';
         }
     }
 
@@ -459,6 +490,11 @@
         document.getElementById('filter-min-households-range').value = 0;
         updateHouseholdsLabel(0);
         syncHouseholdsInput(0);
+
+        const onlyEligibleLoansCb = document.getElementById('filter-only-eligible-loans');
+        if (onlyEligibleLoansCb) {
+            onlyEligibleLoansCb.checked = false;
+        }
 
         setTransactionType('');
     }

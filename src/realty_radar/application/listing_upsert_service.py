@@ -48,7 +48,23 @@ class ListingUpsertService:
         tx_val = getattr(item, "transaction_type", None)
         tx_str = tx_val.value if hasattr(tx_val, "value") else str(tx_val or "SALE")
 
-        floor_str = getattr(item, "floor_group", None) or getattr(item, "floor_info", None) or getattr(item, "floor_raw", None)
+        # 층수 표시 정보 결정 (1순위: 숫자/전체 층 조합, 2순위: 원본 floor_raw 텍스트(예: "중/15층"), 3순위: fallback)
+        fl_num = getattr(item, "floor_number", None)
+        tot_fl = getattr(item, "total_floor", None) or getattr(item, "total_floors", None)
+        fl_grp = getattr(item, "floor_group", None)
+        fl_raw = getattr(item, "floor_raw", None) or getattr(item, "floor_info", None)
+
+        if fl_num and tot_fl:
+            floor_str = f"{fl_num}/{tot_fl}층"
+        elif fl_num:
+            floor_str = f"{fl_num}층"
+        elif fl_raw and fl_raw.strip():
+            floor_str = fl_raw.strip()
+        elif fl_grp and tot_fl:
+            floor_str = f"{fl_grp}/{tot_fl}층"
+        else:
+            floor_str = fl_grp or "-"
+
         desc_str = getattr(item, "description", None) or getattr(item, "description_raw", None)
 
         if not existing_listing:
@@ -101,6 +117,7 @@ class ListingUpsertService:
             existing_listing.last_seen_at = now
             existing_listing.stale_count = 0
             existing_listing.status = status_str
+            existing_listing.floor_info = floor_str
 
         self.db.commit()
         return existing_listing, is_created

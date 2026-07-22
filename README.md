@@ -103,7 +103,19 @@ python -m realty_radar.scheduler
 
 ---
 
-### 5. CLI 수동 명령 사용 방법
+### 5. DB 데이터 재초기화 (리셋) 방법
+
+수집된 데이터베이스 전체 테이블을 안전하게 삭제(Drop) 후 최신 스키마로 재초기화(Migrate)하려면 다음 명령어를 실행합니다.
+
+```bash
+python scripts/reset_and_migrate_db.py
+```
+
+> **주의**: 이 스크립트를 실행하면 기존 수집된 매물 데이터(`listing`), 단지 정보(`apartment_complex`), 크롤링 작업 이력(`crawl_job`)이 모두 드롭되고 깨끗한 상태로 재초기화됩니다.
+
+---
+
+### 6. CLI 수동 명령 사용 방법
 
 #### ① 크롤링 대상 사이트 로그인 세션 저장:
 ```bash
@@ -119,7 +131,7 @@ python -m realty_radar.cli.crawl --source SITE_A --region 여의도동
 
 ## 🧪 테스트 실행 (Pytest)
 
-전체 31개 단위 및 통합 테스트를 실행하여 시스템 검증을 수행합니다.
+전체 단위 및 통합 테스트를 실행하여 시스템 검증을 수행합니다.
 
 ```bash
 python -m pytest

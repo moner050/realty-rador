@@ -52,6 +52,9 @@ def test_loan_evaluation_service_didimdol(db_session):
 
     results = service.evaluate_listing_loans(listing_id=1, applicant=applicant)
 
-    assert len(results) == 1
-    assert results[0].product_code == "DIDIMDOL"
+    assert len(results) == 3
+    product_codes = [r.product_code for r in results]
+    assert "DIDIMDOL" in product_codes
+    assert "BOGUMJARI" in product_codes
+    assert "NEONATAL_PURCHASE" in product_codes
     assert results[0].status == LoanEligibilityStatus.ELIGIBLE
