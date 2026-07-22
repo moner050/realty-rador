@@ -38,7 +38,7 @@ def _run_async_crawl_job(job_id: int, source_code: str, region_name: str):
             pipeline = CrawlPipelineService(db)
             result = asyncio.run(pipeline.execute_search_pipeline(source_code=source_code, region_name=region_name))
 
-            job.status = CrawlJobStatus.COMPLETED.value
+            job.status = CrawlJobStatus.SUCCESS.value
             job.completed_at = datetime.now()
             job.total_items_fetched = result.get("total_fetched", 0)
             job.total_items_upserted = result.get("created_count", 0) + result.get("updated_count", 0)

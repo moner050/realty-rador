@@ -103,8 +103,22 @@ def comma_number(val: Any) -> str:
         return str(val)
 
 
+def to_pyeong(area_val: Any) -> str:
+    """㎡ 면적 수치를 평수(1㎡ = 0.3025평)로 계산하여 변환 (예: 84.67 -> 약 25.6평)."""
+    if area_val is None or area_val == "":
+        return "-"
+    try:
+        val = float(str(area_val))
+        pyeong = round(val * 0.3025, 1)
+        if pyeong.is_integer():
+            return f"약 {int(pyeong)}평"
+        return f"약 {pyeong}평"
+    except (ValueError, TypeError):
+        return "-"
+
+
 def register_jinja_filters(templates: Any) -> None:
-    """Jinja2Templates 객체에 한글 변환 커스텀 필터 일괄 등록."""
+    """Jinja2Templates 객체에 한글 변환 및 평수 변환 커스텀 필터 일괄 등록."""
     templates.env.filters["korean_tx_type"] = korean_tx_type
     templates.env.filters["korean_mortgage"] = korean_mortgage
     templates.env.filters["korean_status"] = korean_status
@@ -112,3 +126,4 @@ def register_jinja_filters(templates: Any) -> None:
     templates.env.filters["korean_price"] = korean_price
     templates.env.filters["korean_money"] = korean_money
     templates.env.filters["comma_number"] = comma_number
+    templates.env.filters["to_pyeong"] = to_pyeong

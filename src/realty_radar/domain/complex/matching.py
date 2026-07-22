@@ -14,7 +14,7 @@ def normalize_complex_name(raw_name: str | None) -> str:
     # 1. 괄호 내용 제거 (예: "여의도 시범 (아파트)" -> "여의도 시범")
     clean = re.sub(r"\([^)]*\)", "", raw_name)
 
-    # 2. 동/차수/단지 표현 정규화 (예: "1동", "2차", "단지" 제거)
+    # 2. 동/차수/단지 표현 정규화 (예: "101동", "1동", "2차", "단지" 제거)
     clean = re.sub(r"\d+동|\d+차|\d+단지|단지", "", clean)
 
     # 3. 특수문자 제거
@@ -24,6 +24,15 @@ def normalize_complex_name(raw_name: str | None) -> str:
     clean = " ".join(clean.split()).strip()
 
     return clean
+
+
+def extract_pure_complex_name(raw_name: str | None) -> str:
+    """동 번호나 호수를 완전히 제거한 대표 아파트 단지명 추출 (예: '롯데캐슬 101동' -> '롯데캐슬')."""
+    if not raw_name:
+        return ""
+    clean = re.sub(r"\([^)]*\)", "", raw_name)
+    clean = re.sub(r"\b\d+동\b|\b\d+호\b|\d+동$", "", clean).strip()
+    return clean or raw_name.strip()
 
 
 class ComplexMatchEngine:
@@ -38,7 +47,9 @@ class ComplexMatchEngine:
         candidate_address: str | None = None,
     ) -> tuple[Decimal, MatchMethod]:
         """두 단지명 및 주소 정보의 매칭 점수 (0~99.99)와 매칭 방식 산출."""
-        
+        norm_target = normalize_complex_name(target_name)
+        norm_cand = candidate_normalized_name or normalize_complex_name(candidate_official_name)
+
         # 0. 지역 불일치 검증 (시/도 또는 시/군/구가 다르면 매칭 원천 차단)
         if target_address and candidate_address:
             def get_sido(addr: str) -> str:
@@ -66,19 +77,26 @@ class ComplexMatchEngine:
             if target_sigungu and candidate_sigungu and target_sigungu != candidate_sigungu:
                 return Decimal("0.00"), MatchMethod.FUZZY
 
-        norm_target = normalize_complex_name(target_name)
-
-        # 1. 주소 및 단지명 완전 일치 (+99.99점)
+        # 1. 주소 및 단지명 정규화 텍스트가 모두 완전 일치 (+99.99점)
         if target_address and candidate_address and target_address.strip() == candidate_address.strip():
-            return Decimal("99.99"), MatchMethod.ADDRESS_EXACT
+            # 단지명 정규화 텍스트 간 유사도가 60% 이상일 때 주소 완전 일치 인정
+            if norm_target and norm_cand:
+                sim = fuzz.ratio(norm_target, norm_cand)
+                if sim >= 60:
+                    return Decimal("99.99"), MatchMethod.ADDRESS_EXACT
+            else:
+                return Decimal("99.99"), MatchMethod.ADDRESS_EXACT
 
         # 2. 정규화 단지명 완전 일치 (+95.00점)
-        if norm_target and norm_target == candidate_normalized_name:
+        if norm_target and norm_target == norm_cand:
             return Decimal("95.00"), MatchMethod.NAME_EXACT
 
         # 3. RapidFuzz 유사도 계산 (+0~80점)
-        similarity = fuzz.ratio(norm_target, candidate_normalized_name)
-        score = Decimal(str(min(99.99, round(similarity * 0.9, 2))))
+        if norm_target and norm_cand:
+            similarity = fuzz.ratio(norm_target, norm_cand)
+            score = Decimal(str(min(99.99, round(similarity * 0.9, 2))))
+        else:
+            score = Decimal("0.00")
 
         return score, MatchMethod.FUZZY
 
@@ -108,7 +126,7 @@ class ComplexMatchEngine:
                 best_method = method
 
         requires_review = Decimal("75.00") <= best_score < Decimal("90.00")
-        matched_id = best_complex_id if best_score >= Decimal("75.00") else None
+        matched_id = best_complex_id if best_score >= Decimal("85.00") else None
 
         return ComplexMatchResult(
             complex_id=matched_id,

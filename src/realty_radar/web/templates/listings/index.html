@@ -5,7 +5,7 @@
 {% block content %}
 <div class="space-y-6">
 
-    <!-- 페이지 헤더 및 즉시 크롤링 버튼 -->
+    <!-- 페이지 헤더 -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h1 id="page-title" class="text-2xl font-bold text-white tracking-tight flex items-center space-x-2">
@@ -14,29 +14,9 @@
             </h1>
             <p class="text-sm text-slate-400 mt-1">수집된 아파트 매물을 지역별 & 조건별로 즉시 정밀 검색합니다.</p>
         </div>
-        
-        <div class="flex items-center space-x-3">
-            <!-- HTMX 수동 크롤링 전송 폼 (클릭 시 진행도 위젯 즉시 갱신) -->
-            <form hx-post="/api/crawl-jobs" 
-                  hx-target="#crawl-progress-widget" 
-                  hx-swap="outerHTML" 
-                  class="inline">
-                <input type="hidden" name="source_code" value="SITE_A">
-                <input type="hidden" name="region_name" value="전체">
-                <button type="submit" class="px-4 py-2.5 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-2 border border-indigo-400/30 active:scale-95">
-                    <svg class="w-4 h-4 animate-spin-hover" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    <span>즉시 수동 크롤링 실행</span>
-                </button>
-            </form>
-        </div>
     </div>
 
-    <!-- 실시간 크롤링 진행도 프로그레스 위젯 (HTMX 3초 자동 폴링) -->
-    {% include "jobs/progress_partial.html" %}
-
-    <!-- 스마트 필터 메인 폼 패널 (지역 선택기 탑재) -->
+    <!-- 스마트 필터 메인 폼 패널 (지역 선택기 및 고급필터 Accordion 탑재) -->
     <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-2xl backdrop-blur-xl space-y-6">
         
         <form id="search-filter-form" 
@@ -147,177 +127,202 @@
                 </button>
             </div>
 
-            <!-- 4. 마우스 드래그 조절 레인지 슬라이더 Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                
-                <!-- (1) 최대 가격 슬라이더 -->
-                <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
-                    <div class="flex justify-between items-center">
-                        <label for="filter-max-price-range" class="text-xs font-bold text-slate-300">최대 가격 조절</label>
-                        <span id="label-max-price" class="text-xs font-extrabold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded border border-indigo-500/20">
-                            무제한
-                        </span>
-                    </div>
-                    <input type="range" 
-                           id="filter-max-price-range" 
-                           min="0" 
-                           max="2000000000" 
-                           step="10000000" 
-                           value="{{ filters.max_price or 2000000000 }}" 
-                           oninput="updatePriceLabel(this.value)"
-                           onchange="syncPriceInput(this.value)"
-                           class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
-                    <input type="hidden" id="filter-max-price" name="max_price" value="{{ filters.max_price or '' }}">
-                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
-                        <span>0원</span>
-                        <span>5억</span>
-                        <span>10억</span>
-                        <span>15억</span>
-                        <span>20억+ (무제한)</span>
-                    </div>
-                </div>
-
-                <!-- (2) 최소 전용면적 슬라이더 -->
-                <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
-                    <div class="flex justify-between items-center">
-                        <label for="filter-min-area-range" class="text-xs font-bold text-slate-300">최소 전용면적 조절</label>
-                        <span id="label-min-area" class="text-xs font-extrabold text-teal-400 bg-teal-500/10 px-2.5 py-0.5 rounded border border-teal-500/20">
-                            전체 면적
-                        </span>
-                    </div>
-                    <input type="range" 
-                           id="filter-min-area-range" 
-                           min="0" 
-                           max="200" 
-                           step="1" 
-                           value="{{ filters.min_exclusive_area or 0 }}" 
-                           oninput="updateAreaLabel(this.value)"
-                           onchange="syncAreaInput(this.value)"
-                           class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500">
-                    <input type="hidden" id="filter-min-area" name="min_exclusive_area" value="{{ filters.min_exclusive_area or '' }}">
-                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
-                        <span>전체</span>
-                        <span>59㎡ (24평)</span>
-                        <span>84㎡ (34평)</span>
-                        <span>114㎡ (43평)</span>
-                        <span>200㎡+</span>
-                    </div>
-                </div>
-
-                <!-- (3) 최소 준공연도 슬라이더 -->
-                <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
-                    <div class="flex justify-between items-center">
-                        <label for="filter-min-year-range" class="text-xs font-bold text-slate-300">최소 준공연도 조절</label>
-                        <span id="label-min-year" class="text-xs font-extrabold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/20">
-                            전체 연식
-                        </span>
-                    </div>
-                    <input type="range" 
-                           id="filter-min-year-range" 
-                           min="1980" 
-                           max="2026" 
-                           step="1" 
-                           value="{{ filters.min_construction_year or 1980 }}" 
-                           oninput="updateYearLabel(this.value)"
-                           onchange="syncYearInput(this.value)"
-                           class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                    <input type="hidden" id="filter-min-year" name="min_construction_year" value="{{ filters.min_construction_year or '' }}">
-                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
-                        <span>전체</span>
-                        <span>1990년</span>
-                        <span>2000년</span>
-                        <span>2010년</span>
-                        <span>2020년+</span>
-                    </div>
-                </div>
-
-                <!-- (4) 최소 세대수 슬라이더 -->
-                <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
-                    <div class="flex justify-between items-center">
-                        <label for="filter-min-households-range" class="text-xs font-bold text-slate-300">최소 세대수 조절</label>
-                        <span id="label-min-households" class="text-xs font-extrabold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20">
-                            전체 세대수
-                        </span>
-                    </div>
-                    <input type="range" 
-                           id="filter-min-households-range" 
-                           min="0" 
-                           max="3000" 
-                           step="50" 
-                           value="{{ filters.min_households or 0 }}" 
-                           oninput="updateHouseholdsLabel(this.value)"
-                           onchange="syncHouseholdsInput(this.value)"
-                           class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
-                    <input type="hidden" id="filter-min-households" name="min_households" value="{{ filters.min_households or '' }}">
-                    <div class="flex justify-between text-[10px] text-slate-500 font-mono">
-                        <span>전체</span>
-                        <span>500세대</span>
-                        <span>1,000세대</span>
-                        <span>2,000세대</span>
-                        <span>3,000세대+</span>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- 5. 서브 조건 선택 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-700/50">
-                <div class="space-y-1">
-                    <label for="filter-mortgage" class="block text-xs font-semibold text-slate-400">융자 상태</label>
-                    <select id="filter-mortgage" name="mortgage_status" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                        <option value="">전체 (융자무/융자유 포함)</option>
-                        <option value="EXPLICIT_NONE" {% if filters.mortgage_status and filters.mortgage_status.value == 'EXPLICIT_NONE' %}selected{% endif %}>융자금 없음 명시</option>
-                        <option value="EXPLICIT_EXISTS" {% if filters.mortgage_status and filters.mortgage_status.value == 'EXPLICIT_EXISTS' %}selected{% endif %}>융자금 있음</option>
-                        <option value="UNKNOWN" {% if filters.mortgage_status and filters.mortgage_status.value == 'UNKNOWN' %}selected{% endif %}>정보 미상</option>
-                    </select>
-                </div>
-
-                <div class="space-y-1">
-                    <label for="filter-recent-days" class="block text-xs font-semibold text-slate-400">최근 발견 기간</label>
-                    <select id="filter-recent-days" name="recent_days" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                        <option value="">전체 기간</option>
-                        <option value="1" {% if filters.recent_days == 1 %}selected{% endif %}>최근 1일 이내</option>
-                        <option value="3" {% if filters.recent_days == 3 %}selected{% endif %}>최근 3일 이내</option>
-                        <option value="7" {% if filters.recent_days == 7 %}selected{% endif %}>최근 7일 이내</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- 6. 맞춤 조건 설정 (정책대출) -->
-            <div class="flex items-center space-x-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
-                <input type="checkbox" 
-                       id="filter-only-eligible-loans" 
-                       name="only_eligible_loans" 
-                       value="true" 
-                       {% if filters.only_eligible_loans %}checked{% endif %} 
-                       onchange="triggerFormSubmit()"
-                       class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                <div>
-                    <label for="filter-only-eligible-loans" class="text-sm font-bold text-indigo-300 cursor-pointer flex items-center space-x-1.5">
-                        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+            <!-- 고급 필터 접기 / 펼치기 Accordion 토글 헤더 -->
+            <div class="border-t border-slate-700/60 pt-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/70 p-3 rounded-xl border border-slate-700/80">
+                    <button type="button" 
+                            onclick="toggleAdvancedFilters()" 
+                            class="flex items-center space-x-2 text-xs font-bold text-indigo-300 hover:text-white transition-colors cursor-pointer">
+                        <svg id="advanced-filter-arrow" class="w-4 h-4 transition-transform transform rotate-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
-                        <span>내 자격 조건으로 정책대출 가능한 매물만 보기</span>
-                    </label>
-                    <span class="block text-xs text-slate-400 mt-0.5 font-medium">설정 메뉴에서 저장한 소득, 자산, 무주택 조건 기준 디딤돌/버팀목 적격 매물만 필터링합니다.</span>
-                </div>
-            </div>
-
-            <!-- 6. 하단 툴바 -->
-            <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
-                <div class="flex items-center space-x-2">
-                    <input type="checkbox" id="filter-exclude-unknown" name="exclude_unknown_mortgage" value="true" {% if filters.exclude_unknown_mortgage %}checked{% endif %} class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
-                    <label for="filter-exclude-unknown" class="text-xs text-slate-300 font-medium">융자 미상 매물 제외</label>
-                </div>
-
-                <div class="flex items-center space-x-3">
-                    <button type="button" onclick="resetAllFilters()" class="text-xs font-semibold text-slate-400 hover:text-white transition-colors flex items-center space-x-1">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        <span>조건 초기화</span>
+                        <span>고급 필터 <span id="advanced-filter-status-text" class="font-normal text-slate-400">(펼치기)</span></span>
                     </button>
+
+                    <!-- 접힌 상태에서 조그만한 글씨로 실시간 적용 중인 필터 요약 표시 -->
+                    <div class="text-[11px] font-medium text-slate-400 flex items-center space-x-1 overflow-hidden truncate max-w-full md:max-w-xl">
+                        <span class="text-indigo-400 font-semibold shrink-0">적용 조건:</span>
+                        <span id="filter-summary-text" class="text-slate-300 truncate">전체 (기본 조건)</span>
+                    </div>
                 </div>
+            </div>
+
+            <!-- 4. 고급 필터 감싸는 Collapsible 컨테이너 (기본 hidden 접힘) -->
+            <div id="advanced-filter-panel" class="hidden space-y-6 pt-2 transition-all">
+                
+                <!-- (1) 마우스 드래그 조절 레인지 슬라이더 Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- 최대 가격 슬라이더 -->
+                    <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
+                        <div class="flex justify-between items-center">
+                            <label for="filter-max-price-range" class="text-xs font-bold text-slate-300">최대 가격 조절</label>
+                            <span id="label-max-price" class="text-xs font-extrabold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded border border-indigo-500/20">
+                                무제한
+                            </span>
+                        </div>
+                        <input type="range" 
+                               id="filter-max-price-range" 
+                               min="0" 
+                               max="2000000000" 
+                               step="10000000" 
+                               value="{{ filters.max_price or 2000000000 }}" 
+                               oninput="updatePriceLabel(this.value)"
+                               onchange="syncPriceInput(this.value)"
+                               class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                        <input type="hidden" id="filter-max-price" name="max_price" value="{{ filters.max_price or '' }}">
+                        <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>0원</span>
+                            <span>5억</span>
+                            <span>10억</span>
+                            <span>15억</span>
+                            <span>20억+ (무제한)</span>
+                        </div>
+                    </div>
+
+                    <!-- 최소 전용면적 슬라이더 -->
+                    <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
+                        <div class="flex justify-between items-center">
+                            <label for="filter-min-area-range" class="text-xs font-bold text-slate-300">최소 전용면적 조절</label>
+                            <span id="label-min-area" class="text-xs font-extrabold text-teal-400 bg-teal-500/10 px-2.5 py-0.5 rounded border border-teal-500/20">
+                                전체 면적
+                            </span>
+                        </div>
+                        <input type="range" 
+                               id="filter-min-area-range" 
+                               min="0" 
+                               max="200" 
+                               step="1" 
+                               value="{{ filters.min_exclusive_area or 0 }}" 
+                               oninput="updateAreaLabel(this.value)"
+                               onchange="syncAreaInput(this.value)"
+                               class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-500">
+                        <input type="hidden" id="filter-min-area" name="min_exclusive_area" value="{{ filters.min_exclusive_area or '' }}">
+                        <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>전체</span>
+                            <span>59㎡ (24평)</span>
+                            <span>84㎡ (34평)</span>
+                            <span>114㎡ (43평)</span>
+                            <span>200㎡+</span>
+                        </div>
+                    </div>
+
+                    <!-- 최소 준공연도 슬라이더 -->
+                    <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
+                        <div class="flex justify-between items-center">
+                            <label for="filter-min-year-range" class="text-xs font-bold text-slate-300">최소 준공연도 조절</label>
+                            <span id="label-min-year" class="text-xs font-extrabold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/20">
+                                전체 연식
+                            </span>
+                        </div>
+                        <input type="range" 
+                               id="filter-min-year-range" 
+                               min="1980" 
+                               max="2026" 
+                               step="1" 
+                               value="{{ filters.min_construction_year or 1980 }}" 
+                               oninput="updateYearLabel(this.value)"
+                               onchange="syncYearInput(this.value)"
+                               class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                        <input type="hidden" id="filter-min-year" name="min_construction_year" value="{{ filters.min_construction_year or '' }}">
+                        <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>전체</span>
+                            <span>1990년</span>
+                            <span>2000년</span>
+                            <span>2010년</span>
+                            <span>2020년+</span>
+                        </div>
+                    </div>
+
+                    <!-- 최소 세대수 슬라이더 -->
+                    <div class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-xl space-y-2.5">
+                        <div class="flex justify-between items-center">
+                            <label for="filter-min-households-range" class="text-xs font-bold text-slate-300">최소 세대수 조절</label>
+                            <span id="label-min-households" class="text-xs font-extrabold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20">
+                                전체 세대수
+                            </span>
+                        </div>
+                        <input type="range" 
+                               id="filter-min-households-range" 
+                               min="0" 
+                               max="3000" 
+                               step="50" 
+                               value="{{ filters.min_households or 0 }}" 
+                               oninput="updateHouseholdsLabel(this.value)"
+                               onchange="syncHouseholdsInput(this.value)"
+                               class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        <input type="hidden" id="filter-min-households" name="min_households" value="{{ filters.min_households or '' }}">
+                        <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>전체</span>
+                            <span>500세대</span>
+                            <span>1,000세대</span>
+                            <span>2,000세대</span>
+                            <span>3,000세대+</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- (2) 서브 조건 선택 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-700/50">
+                    <div class="space-y-1">
+                        <label for="filter-mortgage" class="block text-xs font-semibold text-slate-400">융자 상태</label>
+                        <select id="filter-mortgage" name="mortgage_status" onchange="updateFilterSummaryText(); triggerFormSubmit();" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <option value="">전체 (융자무/융자유 포함)</option>
+                            <option value="EXPLICIT_NONE" {% if filters.mortgage_status and filters.mortgage_status.value == 'EXPLICIT_NONE' %}selected{% endif %}>융자금 없음 명시</option>
+                            <option value="EXPLICIT_EXISTS" {% if filters.mortgage_status and filters.mortgage_status.value == 'EXPLICIT_EXISTS' %}selected{% endif %}>융자금 있음</option>
+                            <option value="UNKNOWN" {% if filters.mortgage_status and filters.mortgage_status.value == 'UNKNOWN' %}selected{% endif %}>정보 미상</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label for="filter-recent-days" class="block text-xs font-semibold text-slate-400">최근 발견 기간</label>
+                        <select id="filter-recent-days" name="recent_days" onchange="updateFilterSummaryText(); triggerFormSubmit();" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <option value="">전체 기간</option>
+                            <option value="1" {% if filters.recent_days == 1 %}selected{% endif %}>최근 1일 이내</option>
+                            <option value="3" {% if filters.recent_days == 3 %}selected{% endif %}>최근 3일 이내</option>
+                            <option value="7" {% if filters.recent_days == 7 %}selected{% endif %}>최근 7일 이내</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- (3) 맞춤 조건 설정 (정책대출) -->
+                <div class="flex items-center space-x-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                    <input type="checkbox" 
+                           id="filter-only-eligible-loans" 
+                           name="only_eligible_loans" 
+                           value="true" 
+                           {% if filters.only_eligible_loans %}checked{% endif %} 
+                           onchange="updateFilterSummaryText(); triggerFormSubmit();"
+                           class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                    <div>
+                        <label for="filter-only-eligible-loans" class="text-sm font-bold text-indigo-300 cursor-pointer flex items-center space-x-1.5">
+                            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                            </svg>
+                            <span>내 자격 조건으로 정책대출 가능한 매물만 보기</span>
+                        </label>
+                        <span class="block text-xs text-slate-400 mt-0.5 font-medium">설정 메뉴에서 저장한 소득, 자산, 무주택 조건 기준 디딤돌/버팀목 적격 매물만 필터링합니다.</span>
+                    </div>
+                </div>
+
+                <!-- (4) 하단 툴바 -->
+                <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="filter-exclude-unknown" name="exclude_unknown_mortgage" value="true" {% if filters.exclude_unknown_mortgage %}checked{% endif %} onchange="updateFilterSummaryText(); triggerFormSubmit();" class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                        <label for="filter-exclude-unknown" class="text-xs text-slate-300 font-medium">융자 미상 매물 제외</label>
+                    </div>
+
+                    <div class="flex items-center space-x-3">
+                        <button type="button" onclick="resetAllFilters()" class="text-xs font-semibold text-slate-400 hover:text-white transition-colors flex items-center space-x-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            <span>조건 초기화</span>
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </form>
 
@@ -330,13 +335,87 @@
 
 </div>
 
-<!-- 지역 선택 & 클라이언트 JS -->
+<!-- 지역 선택 & 고급필터 JS -->
 <script>
     const sigunguMap = {
         '서울': ['강남구', '서초구', '송파구', '영등포구', '마포구', '용산구', '성동구', '양천구', '강동구', '노원구', '도봉구', '강북구', '성북구', '동대문구', '중랑구', '광진구', '종로구', '중구', '서대문구', '은평구', '강서구', '구로구', '금천구', '관악구', '동작구'],
         '경기': ['성남시 분당구', '과천시', '하남시', '고양시 일산동구', '용인시 수지구', '부천시', '안산시', '남양주시', '안양시 동안구', '화성시', '평택시', '의정부시', '파주시', '시흥시', '김포시', '광명시', '수원시 영통구', '군포시', '의왕시'],
         '인천': ['연수구', '서구', '중구', '남동구', '부평구']
     };
+
+    function toggleAdvancedFilters() {
+        const panel = document.getElementById('advanced-filter-panel');
+        const arrow = document.getElementById('advanced-filter-arrow');
+        const statusText = document.getElementById('advanced-filter-status-text');
+
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+            arrow.classList.add('rotate-180');
+            statusText.innerText = '(접기)';
+        } else {
+            panel.classList.add('hidden');
+            arrow.classList.remove('rotate-180');
+            statusText.innerText = '(펼치기)';
+        }
+    }
+
+    function updateFilterSummaryText() {
+        const parts = [];
+
+        // 1. 최대 가격
+        const priceVal = parseInt(document.getElementById('filter-max-price-range').value);
+        if (priceVal > 0 && priceVal < 2000000000) {
+            const eok = Math.floor(priceVal / 100000000);
+            const cheon = Math.floor((priceVal % 100000000) / 10000000);
+            let pText = '';
+            if (eok > 0) pText += eok + '억 ';
+            if (cheon > 0) pText += cheon + '천만 ';
+            parts.push(pText.trim() + ' 이하');
+        }
+
+        // 2. 최소 면적
+        const areaVal = parseInt(document.getElementById('filter-min-area-range').value);
+        if (areaVal > 0) {
+            const py = Math.round(areaVal / 3.3057);
+            parts.push('전용 ' + areaVal + '㎡(' + py + '평) 이상');
+        }
+
+        // 3. 최소 연식
+        const yearVal = parseInt(document.getElementById('filter-min-year-range').value);
+        if (yearVal > 1980) {
+            parts.push(yearVal + '년 이후');
+        }
+
+        // 4. 최소 세대수
+        const houseVal = parseInt(document.getElementById('filter-min-households-range').value);
+        if (houseVal > 0) {
+            parts.push(houseVal.toLocaleString() + '세대 이상');
+        }
+
+        // 5. 융자 상태
+        const mortSelect = document.getElementById('filter-mortgage');
+        if (mortSelect && mortSelect.value) {
+            if (mortSelect.value === 'EXPLICIT_NONE') parts.push('융자금 없음');
+            else if (mortSelect.value === 'EXPLICIT_EXISTS') parts.push('융자금 있음');
+        }
+
+        // 6. 정책 대출
+        const loanCb = document.getElementById('filter-only-eligible-loans');
+        if (loanCb && loanCb.checked) {
+            parts.push('정책대출 적격');
+        }
+
+        const summaryEl = document.getElementById('filter-summary-text');
+        if (parts.length > 0) {
+            summaryEl.innerText = parts.join(' • ');
+            summaryEl.classList.remove('text-slate-400');
+            summaryEl.classList.add('text-indigo-300', 'font-semibold');
+        } else {
+            summaryEl.innerText = '전체 (기본 조건)';
+            summaryEl.classList.remove('text-indigo-300', 'font-semibold');
+            summaryEl.classList.add('text-slate-400');
+        }
+    }
 
     function onSidoChange(sido) {
         const sigunguSelect = document.getElementById('sigungu-select');
@@ -410,11 +489,13 @@
             if (cheon > 0) text += cheon + '천만 ';
             lbl.innerText = text.trim() + '원 (' + num.toLocaleString('ko-KR') + '원) 이하';
         }
+        updateFilterSummaryText();
     }
 
     function syncPriceInput(val) {
         const num = parseInt(val);
         document.getElementById('filter-max-price').value = (num >= 2000000000 || num === 0) ? '' : val;
+        updateFilterSummaryText();
         triggerFormSubmit();
     }
 
@@ -427,11 +508,13 @@
             const pyeong = Math.round(num / 3.3057);
             lbl.innerText = num + '㎡ (' + pyeong + '평) 이상';
         }
+        updateFilterSummaryText();
     }
 
     function syncAreaInput(val) {
         const num = parseInt(val);
         document.getElementById('filter-min-area').value = num <= 0 ? '' : val;
+        updateFilterSummaryText();
         triggerFormSubmit();
     }
 
@@ -445,11 +528,13 @@
             const age = currentYear - num;
             lbl.innerText = num + '년 이후 (' + age + '년차 이하)';
         }
+        updateFilterSummaryText();
     }
 
     function syncYearInput(val) {
         const num = parseInt(val);
         document.getElementById('filter-min-year').value = num <= 1980 ? '' : val;
+        updateFilterSummaryText();
         triggerFormSubmit();
     }
 
@@ -461,11 +546,13 @@
         } else {
             lbl.innerText = num.toLocaleString() + '세대 이상';
         }
+        updateFilterSummaryText();
     }
 
     function syncHouseholdsInput(val) {
         const num = parseInt(val);
         document.getElementById('filter-min-households').value = num <= 0 ? '' : val;
+        updateFilterSummaryText();
         triggerFormSubmit();
     }
 
@@ -497,6 +584,7 @@
         }
 
         setTransactionType('');
+        updateFilterSummaryText();
     }
 
     function triggerFormSubmit() {
@@ -508,6 +596,7 @@
         updateAreaLabel(document.getElementById('filter-min-area-range').value);
         updateYearLabel(document.getElementById('filter-min-year-range').value);
         updateHouseholdsLabel(document.getElementById('filter-min-households-range').value);
+        updateFilterSummaryText();
     });
 </script>
 {% endblock %}

@@ -12,6 +12,83 @@ class SiteAParser:
 
     SOURCE_CODE = "SITE_A"
 
+    def parse_new_article_json(
+        self,
+        item: dict,
+        source_code: str = "SITE_A",
+        default_complex_name: str = "",
+        default_address: str = "",
+        total_households: int | None = None,
+        construction_year: int | None = None,
+    ) -> RawListing | None:
+        """new.land.naver.com /api/articles/complex/ 응답 JSON 객체 → RawListing 정밀 변환."""
+        if not item or not isinstance(item, dict):
+            return None
+
+        article_no = str(item.get("articleNo", ""))
+        if not article_no:
+            return None
+
+        base_cpx = item.get("articleName") or default_complex_name
+        dong_name = str(item.get("buildingName") or "").strip()
+        if dong_name and dong_name not in base_cpx:
+            dong_str = f"{dong_name}동" if not dong_name.endswith("동") else dong_name
+            complex_name_full = f"{base_cpx} {dong_str}"
+        else:
+            complex_name_full = base_cpx
+
+        trade_type = item.get("tradeTypeName") or ""
+        price_str = item.get("dealOrWarrantPrc") or ""
+        rent_prc = item.get("rentPrc")
+        if rent_prc and str(rent_prc) != "0":
+            price_raw = f"{trade_type} {price_str}/{rent_prc}"
+        else:
+            price_raw = f"{trade_type} {price_str}".strip()
+
+        area1 = item.get("area1")
+        area2 = item.get("area2")
+        if area1 and area2:
+            area_raw = f"전용 {area2}㎡ / 공급 {area1}㎡"
+        elif area2:
+            area_raw = f"전용 {area2}㎡"
+        else:
+            area_raw = None
+
+        floor_info = item.get("floorInfo")
+        floor_raw = f"{floor_info}층" if floor_info and "층" not in str(floor_info) else floor_info
+
+        desc_raw = item.get("detailDescription") or item.get("articleFeatureDesc")
+
+        full_addr = default_address
+
+        # 네이버 부동산 웹페이지 원본 상세 표준 접속 URL (fin.land.naver.com 사용)
+        source_url = f"https://fin.land.naver.com/articles/{article_no}"
+
+        raw_payload = {
+            "new_article_json": item,
+            "tradeTypeName": trade_type,
+            "dealOrWarrantPrc": price_str,
+            "area1": area1,
+            "area2": area2,
+            "floorInfo": floor_raw,
+            "total_households": total_households,
+            "construction_year": construction_year,
+        }
+
+        return RawListing(
+            source_code=source_code,
+            external_listing_id=article_no,
+            source_url=source_url,
+            complex_name_raw=complex_name_full,
+            address_raw=full_addr,
+            price_raw=price_raw,
+            area_raw=area_raw,
+            floor_raw=floor_raw,
+            description_raw=desc_raw,
+            collected_at=datetime.now(),
+            raw_payload=raw_payload,
+        )
+
     def parse_fin_article_json(
         self,
         item: dict,
@@ -19,10 +96,14 @@ class SiteAParser:
         default_complex_name: str = "",
         default_address: str = "",
         total_households: int | None = None,
+        construction_year: int | None = None,
     ) -> RawListing | None:
         """fin.land.naver.com front-api/v1/complex/article/list 응답 객체 → RawListing 정밀 변환."""
         if not item or not isinstance(item, dict):
             return None
+
+        if "articleNo" in item and "articleName" in item and "dealOrWarrantPrc" in item:
+            return self.parse_new_article_json(item, source_code, default_complex_name, default_address, total_households, construction_year)
 
         info = item.get("representativeArticleInfo") or {}
         if not info:
@@ -32,7 +113,6 @@ class SiteAParser:
         if not article_no:
             return None
 
-        # 단지명 + 동 명칭 결합 (예: "가양2단지성지 205동")
         base_cpx = info.get("complexName") or info.get("articleName") or default_complex_name
         dong_name = str(info.get("dongName") or "").strip()
         if dong_name and dong_name not in base_cpx:
@@ -41,7 +121,6 @@ class SiteAParser:
         else:
             complex_name_full = base_cpx
 
-        # 거래유형 및 가격 정보
         trade_type = info.get("tradeType", "A1")
         price_info = item.get("priceInfo") or info.get("priceInfo") or {}
 
@@ -56,7 +135,6 @@ class SiteAParser:
         else:
             price_raw = f"매매 {deal_price}"
 
-        # 면적 정보
         space_info = info.get("spaceInfo") or {}
         supply_space = space_info.get("supplySpace")
         exclusive_space = space_info.get("exclusiveSpace")
@@ -67,7 +145,6 @@ class SiteAParser:
         else:
             area_raw = None
 
-        # 층수 정보 (다양한 경로 및 targetFloor/totalFloor 조합)
         article_detail = info.get("articleDetail") or {}
         floor_detail = article_detail.get("floorDetailInfo") or info.get("floorDetailInfo") or {}
 
@@ -91,20 +168,17 @@ class SiteAParser:
         else:
             floor_raw = None
 
-        # 준공연도 정보 (buildingInfo: buildingConjunctionDate -> 예: "19921118")
         building_info = info.get("buildingInfo") or item.get("buildingInfo") or {}
         conj_date = str(building_info.get("buildingConjunctionDate") or "").strip()
-        construction_year = None
+        parsed_const_year = construction_year
         if conj_date and len(conj_date) >= 4 and conj_date[:4].isdigit():
-            construction_year = int(conj_date[:4])
+            parsed_const_year = int(conj_date[:4])
 
-        # 특징 설명 및 방향
         desc_text = article_detail.get("articleFeatureDescription") or ""
         direction = article_detail.get("directionStandard") or article_detail.get("direction") or ""
         desc_parts = [p for p in [desc_text, direction] if p]
         description_raw = ", ".join(desc_parts) if desc_parts else None
 
-        # 확인 일자
         verification_info = info.get("verificationInfo") or {}
         confirm_date_str = verification_info.get("articleConfirmDate") or ""
         try:
@@ -112,7 +186,6 @@ class SiteAParser:
         except ValueError:
             collected_at = datetime.now()
 
-        # 주소 정보
         addr_info = item.get("address") or {}
         city = addr_info.get("city", "")
         division = addr_info.get("division", "")
@@ -133,7 +206,7 @@ class SiteAParser:
             "dongName": dong_name,
             "floorInfo": floor_raw,
             "total_households": total_households,
-            "construction_year": construction_year,
+            "construction_year": parsed_const_year,
         }
 
         return RawListing(
@@ -157,9 +230,10 @@ class SiteAParser:
         complex_name: str = "",
         dong_address: str = "",
         total_households: int | None = None,
+        construction_year: int | None = None,
     ) -> RawListing | None:
         """이전 API 응답 파싱 별칭 메서드."""
-        return self.parse_fin_article_json(article, source_code, complex_name, dong_address, total_households)
+        return self.parse_fin_article_json(article, source_code, complex_name, dong_address, total_households, construction_year)
 
     def parse_scraped_text(
         self,
@@ -219,7 +293,7 @@ class SiteAParser:
         return RawListing(
             source_code=source_code,
             external_listing_id=external_listing_id or f"{source_code}-{hash(raw_text) & 0xFFFFFFFF}",
-            source_url=source_url or "https://new.land.naver.com",
+            source_url=source_url or "https://fin.land.naver.com",
             complex_name_raw=complex_name or default_complex_name,
             address_raw=default_address,
             price_raw=price_str,

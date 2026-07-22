@@ -22,10 +22,14 @@ async def test_site_a_adapter_with_mock():
         description_raw="초품아 역세권 디딤돌 가능",
     )
 
-    with patch.object(adapter.client, "get_dong_list", new_callable=AsyncMock) as mock_dong, \
+    mock_ctx = AsyncMock()
+
+    with patch.object(adapter.client, "create_context", new_callable=AsyncMock) as mock_create_ctx, \
+         patch.object(adapter.client, "get_dong_list", new_callable=AsyncMock) as mock_dong, \
          patch.object(adapter.client, "get_complexes_in_dong", new_callable=AsyncMock) as mock_cpx, \
          patch.object(adapter.client, "fetch_complex_articles", new_callable=AsyncMock) as mock_scrape:
 
+        mock_create_ctx.return_value = mock_ctx
         mock_dong.return_value = [{"cortarNo": "1150010200", "cortarName": "등촌동"}]
         mock_cpx.return_value = [{
             "complexNo": "1001",

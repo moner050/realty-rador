@@ -99,8 +99,8 @@ SIGUNGU_CODES: dict[str, dict[str, str]] = {
 
 def resolve_cortarno(region_name: str | None) -> str | None:
     """지역명(시/도, 구/시)을 입력받아 해당 시/도 또는 구/시의 cortarNo 코드를 반환."""
-    if not region_name or region_name.strip() in ["전체", "서울", "서울특별시", "서울시", "ALL", "all", ""]:
-        return SIDO_CODES["서울특별시"]
+    if not region_name or region_name.strip() in ["전체", "서울 및 경기도", "서울/경기", "수동전체", "ALL", "all", ""]:
+        return "ALL_METRO"
 
     name_clean = region_name.strip()
 
@@ -125,7 +125,7 @@ def resolve_cortarno(region_name: str | None) -> str | None:
         if name_clean in sido or sido in name_clean:
             return code
 
-    return SIDO_CODES["서울특별시"]
+    return "ALL_METRO"
 
 
 def get_all_sigungu_codes(sido: str | None = None) -> list[tuple[str, str, str]]:

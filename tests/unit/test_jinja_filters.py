@@ -5,6 +5,7 @@ from realty_radar.web.jinja_filters import (
     korean_source,
     korean_status,
     korean_tx_type,
+    to_pyeong,
 )
 
 
@@ -44,3 +45,10 @@ def test_korean_price_filter():
     assert korean_price(50_000_000) == "5,000만 원"
     assert korean_price(None) == "가격 미정"
     assert korean_money(650_000_000) == "6억 5,000만 원"
+
+
+def test_to_pyeong_filter():
+    """면적(㎡) -> 평수 환산 필터 테스트."""
+    assert to_pyeong(84.67) == "약 25.6평"
+    assert to_pyeong(105.80) == "약 32평"
+    assert to_pyeong(None) == "-"

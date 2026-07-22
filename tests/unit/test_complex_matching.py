@@ -1,4 +1,5 @@
 from decimal import Decimal
+from realty_radar.application.complex_match_service import parse_address_components
 from realty_radar.domain.complex.matching import ComplexMatchEngine, normalize_complex_name
 
 
@@ -7,6 +8,19 @@ def test_normalize_complex_name():
     assert normalize_complex_name("여의도 시범 (아파트)") == "여의도 시범"
     assert normalize_complex_name("여의도 시범아파트 1동") == "여의도 시범아파트"
     assert normalize_complex_name("삼풍 2차 단지") == "삼풍"
+
+
+def test_parse_address_components():
+    """주소 텍스트 기반 시/도, 시/군/구, 동 파싱 단위 테스트."""
+    sido, sigungu, dong = parse_address_components("서울시 강남구 대치동 983-1")
+    assert sido == "서울특별시"
+    assert sigungu == "강남구"
+    assert dong == "대치동"
+
+    sido2, sigungu2, dong2 = parse_address_components("경기도 성남시 분당구 백현동")
+    assert sido2 == "경기도"
+    assert sigungu2 == "성남시 분당구"
+    assert dong2 == "백현동"
 
 
 def test_complex_match_engine_calculation():
