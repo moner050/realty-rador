@@ -6,11 +6,35 @@ from typing import Any
 from sqlalchemy import func, or_, select, and_
 from sqlalchemy.orm import Session, contains_eager
 
+from realty_radar.application.complex_match_service import parse_address_components
 from realty_radar.constants import MortgageStatus, SortBy, TransactionType
-from realty_radar.domain.listing.models import ListingFilterParams, SearchResult
+from realty_radar.domain.complex.matching import extract_pure_complex_name
+from realty_radar.domain.listing.models import ComplexGroupItem, ListingFilterParams, SearchResult
 from realty_radar.domain.loan.entities import ApplicantProfile
 from realty_radar.infrastructure.cache.redis_client import redis_cache
 from realty_radar.infrastructure.database.models import ApartmentComplex, CrawlSource, Listing
+
+
+def format_korean_money(amount: int | float | Decimal | None) -> str:
+    """원 단위 금액을 '5억 5,000만 원', '6억 원' 형식의 한글 표현으로 변환."""
+    if not amount:
+        return "0원"
+
+    val = int(amount)
+    eok = val // 100_000_000
+    remainder = val % 100_000_000
+    man = remainder // 10_000
+
+    parts = []
+    if eok > 0:
+        parts.append(f"{eok}억")
+    if man > 0:
+        parts.append(f"{man:,}만")
+
+    if not parts:
+        return f"{val:,}원"
+
+    return f"{' '.join(parts)} 원"
 
 
 class ListingSearchService:
@@ -289,13 +313,13 @@ class ListingSearchService:
         if params.max_exclusive_area is not None:
             stmt = stmt.where(Listing.exclusive_area <= params.max_exclusive_area)
 
-        # 6. 아파트 단지 조건 필터 (Listing 비정규화 + ApartmentComplex fallback)
+        # 6. 아파트 단지 조건 필터 (Listing 정제데이터 1순위 + ApartmentComplex fallback)
         if params.min_construction_year or params.min_households:
             stmt = stmt.outerjoin(Listing.complex)
             if params.min_construction_year:
-                stmt = stmt.where(or_(Listing.construction_year >= params.min_construction_year, ApartmentComplex.construction_year >= params.min_construction_year))
+                stmt = stmt.where(func.coalesce(Listing.construction_year, ApartmentComplex.construction_year) >= params.min_construction_year)
             if params.min_households:
-                stmt = stmt.where(or_(Listing.total_households >= params.min_households, ApartmentComplex.total_households >= params.min_households))
+                stmt = stmt.where(func.coalesce(Listing.total_households, ApartmentComplex.total_households) >= params.min_households)
 
         # 7. 융자 상태 조건
         if params.mortgage_status:
@@ -323,11 +347,115 @@ class ListingSearchService:
             # price_asc (가격 낮은순 기본)
             stmt = stmt.order_by(Listing.price_deposit.asc())
 
-        # 전체 개수 산출 (모든 복합 필터 조건 100% 동기화)
+        # 동일 아파트 단지별 묶어서 보기 모드인 경우 (필터링된 전체 매물 대상 전역 묶음 & 단지 수 기준 페이징)
+        if getattr(params, "group_by_complex", False):
+            # 전체 매물 목록 조회 (offset/limit 미적용)
+            all_items = list(self.db.scalars(stmt).unique().all())
+
+            group_dict: dict[str, dict] = {}
+            for item in all_items:
+                cpx_id = getattr(item, "complex_id", None)
+                raw_cpx_name = getattr(item, "complex_name_raw", "") or ""
+                pure_cpx_name = extract_pure_complex_name(raw_cpx_name) or raw_cpx_name.strip()
+                sido_p, sigungu_p, dong_p = parse_address_components(getattr(item, "address_raw", None))
+
+                if cpx_id:
+                    group_key = f"CPX_{cpx_id}"
+                elif dong_p and pure_cpx_name:
+                    group_key = f"DONG_CPX_{dong_p}_{pure_cpx_name}"
+                else:
+                    group_key = f"NAME_{pure_cpx_name or '기타단지'}"
+
+                if group_key not in group_dict:
+                    cpx_obj = getattr(item, "complex", None)
+                    official_cpx_name = cpx_obj.official_name if cpx_obj and getattr(cpx_obj, "official_name", None) else (pure_cpx_name or "단지")
+
+                    group_dict[group_key] = {
+                        "complex_id": cpx_id,
+                        "complex_name": official_cpx_name,
+                        "address_raw": getattr(item, "address_raw", None),
+                        "sido": getattr(item, "sido", None) or (cpx_obj.sido if cpx_obj else None),
+                        "sigungu": getattr(item, "sigungu", None) or (cpx_obj.sigungu if cpx_obj else None),
+                        "total_households": getattr(item, "total_households", None) or (cpx_obj.total_households if cpx_obj else None),
+                        "construction_year": getattr(item, "construction_year", None) or (cpx_obj.construction_year if cpx_obj else None),
+                        "listings": [],
+                    }
+
+                group_dict[group_key]["listings"].append(item)
+
+            all_grouped_items: list[ComplexGroupItem] = []
+            for gkey, ginfo in group_dict.items():
+                g_listings = ginfo["listings"]
+                prices = [l.price_deposit for l in g_listings if getattr(l, "price_deposit", None) is not None]
+                min_p = min(prices) if prices else Decimal("0")
+                max_p = max(prices) if prices else Decimal("0")
+
+                if min_p == max_p:
+                    p_str = format_korean_money(min_p)
+                else:
+                    p_str = f"{format_korean_money(min_p)} ~ {format_korean_money(max_p)}"
+
+                group_item = ComplexGroupItem(
+                    complex_id=ginfo["complex_id"],
+                    complex_name=ginfo["complex_name"],
+                    address_raw=ginfo["address_raw"],
+                    sido=ginfo["sido"],
+                    sigungu=ginfo["sigungu"],
+                    total_households=ginfo["total_households"],
+                    construction_year=ginfo["construction_year"],
+                    min_price=min_p,
+                    max_price=max_p,
+                    price_range_str=p_str,
+                    listing_count=len(g_listings),
+                    listings=g_listings,
+                )
+                all_grouped_items.append(group_item)
+
+            # 단지 그룹 정렬 (sort_by 적용)
+            def _get_dt(item) -> datetime:
+                val = getattr(item, "first_seen_at", None)
+                if isinstance(val, datetime):
+                    return val
+                return datetime.min
+
+            def _get_area(item) -> float:
+                val = getattr(item, "exclusive_area", None)
+                if isinstance(val, (int, float, Decimal)):
+                    return float(val)
+                return 0.0
+
+            sort_kind = getattr(params, "sort_by", SortBy.RECENT)
+            if sort_kind == SortBy.PRICE_ASC:
+                all_grouped_items.sort(key=lambda g: g.min_price)
+            elif sort_kind == SortBy.PRICE_DESC:
+                all_grouped_items.sort(key=lambda g: g.max_price, reverse=True)
+            elif sort_kind == SortBy.AREA_DESC:
+                all_grouped_items.sort(key=lambda g: max([_get_area(l) for l in g.listings] or [0.0]), reverse=True)
+            else:  # RECENT
+                all_grouped_items.sort(key=lambda g: max([_get_dt(l) for l in g.listings] or [datetime.min]), reverse=True)
+
+            # 아파트 단지 수 기준 페이징 슬라이싱
+            total_groups_count = len(all_grouped_items)
+            start_idx = (page_val - 1) * limit
+            end_idx = start_idx + limit
+            paged_grouped_items = all_grouped_items[start_idx:end_idx]
+
+            # 현재 페이지 단지들에 속한 매물 목록
+            paged_listings = [l for g in paged_grouped_items for l in g.listings]
+
+            return SearchResult(
+                items=paged_listings,
+                total_count=total_groups_count,
+                page=page_val,
+                page_size=limit,
+                grouped_items=paged_grouped_items,
+                is_grouped=True,
+            )
+
+        # 일반 개별 매물 모드 DB Direct 조회 (offset, limit)
         count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total_count = self.db.scalar(count_stmt) or 0
 
-        # DB Direct 조회 (offset, limit)
         stmt_paged = stmt.offset(offset).limit(limit)
         items = list(self.db.scalars(stmt_paged).unique().all())
 

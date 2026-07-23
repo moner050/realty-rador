@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Iterator, Optional
@@ -20,6 +20,24 @@ class RawListingDTO:
     floor_raw: str | None
     description_raw: str | None
     collected_at: datetime
+
+
+@dataclass
+class ComplexGroupItem:
+    """동일 아파트 단지별 묶음 DTO."""
+
+    complex_id: Optional[int]
+    complex_name: str
+    address_raw: Optional[str]
+    sido: Optional[str]
+    sigungu: Optional[str]
+    total_households: Optional[int]
+    construction_year: Optional[int]
+    min_price: Decimal
+    max_price: Decimal
+    price_range_str: str
+    listing_count: int
+    listings: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -47,6 +65,7 @@ class ListingFilterParams:
     source_code: Optional[str] = None
     only_eligible_loans: bool = False
     exclude_short_term: bool = True
+    group_by_complex: bool = False
 
     def __post_init__(self):
         if self.region_keyword and not self.region_name:
@@ -60,11 +79,21 @@ ListingSearchFilter = ListingFilterParams
 class SearchResult:
     """검색 결과 객체 (객체 속성 접근 .items, .total_count, .total_pages 및 (items, count) 언패킹 모두 지원)."""
 
-    def __init__(self, items: list[Any], total_count: int, page: int = 1, page_size: int = 20):
+    def __init__(
+        self,
+        items: list[Any],
+        total_count: int,
+        page: int = 1,
+        page_size: int = 20,
+        grouped_items: Optional[list[ComplexGroupItem]] = None,
+        is_grouped: bool = False,
+    ):
         self.items = items
         self.total_count = total_count
         self.page = max(1, page)
         self.page_size = max(1, page_size)
+        self.grouped_items = grouped_items or []
+        self.is_grouped = is_grouped
 
     @property
     def total_pages(self) -> int:

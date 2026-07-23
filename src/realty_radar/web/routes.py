@@ -29,6 +29,7 @@ async def home_page(
     exclude_unknown_mortgage: bool = Query(False),
     recent_days: Optional[int] = Query(None),
     sort_by: str = Query("recent"),
+    group_by_complex: bool = Query(False),
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
 ):
@@ -58,20 +59,23 @@ async def home_page(
         sort_by=sort_enum,
         limit=limit,
         offset=offset,
+        group_by_complex=group_by_complex,
     )
 
-    listings, total_count = search_service.search_listings(params)
-    total_pages = max(1, (total_count + limit - 1) // limit)
+    search_res = search_service.search_listings(params)
+    total_pages = max(1, (search_res.total_count + limit - 1) // limit)
 
     return templates.TemplateResponse(
         "listings/index.html",
         {
             "request": request,
-            "listings": listings,
-            "total_count": total_count,
+            "listings": search_res.items,
+            "total_count": search_res.total_count,
             "current_page": page,
             "total_pages": total_pages,
             "filters": params,
+            "search_res": search_res,
+            "result": search_res,
         },
     )
 
@@ -92,6 +96,7 @@ async def search_listings_partial(
     exclude_unknown_mortgage: bool = Query(False),
     recent_days: Optional[int] = Query(None),
     sort_by: str = Query("recent"),
+    group_by_complex: bool = Query(False),
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
 ):
@@ -121,19 +126,24 @@ async def search_listings_partial(
         sort_by=sort_enum,
         limit=limit,
         offset=offset,
+        group_by_complex=group_by_complex,
     )
 
-    listings, total_count = search_service.search_listings(params)
-    total_pages = max(1, (total_count + limit - 1) // limit)
+    print(f"[DEBUG_ROUTE] group_by_complex received: {group_by_complex} (type: {type(group_by_complex)})")
+    search_res = search_service.search_listings(params)
+    print(f"[DEBUG_ROUTE] search_res.is_grouped: {search_res.is_grouped}, len(grouped_items): {len(search_res.grouped_items)}")
+    total_pages = max(1, (search_res.total_count + limit - 1) // limit)
 
     return templates.TemplateResponse(
         "listings/list_partial.html",
         {
             "request": request,
-            "listings": listings,
-            "total_count": total_count,
+            "listings": search_res.items,
+            "total_count": search_res.total_count,
             "current_page": page,
             "total_pages": total_pages,
             "filters": params,
+            "search_res": search_res,
+            "result": search_res,
         },
     )

@@ -35,6 +35,7 @@ class ListingSearchFilter:
 
     only_eligible_loans: bool = False
     exclude_short_term: bool = True
+    group_by_complex: bool = False
 
     sort_by: str = "recent"  # recent (최신순), price_asc (가격낮은순), price_desc (가격높은순), area_desc (면적넓은순)
     page: int = 1

@@ -140,9 +140,9 @@ class ComplexMatchService:
         if address_raw and not complex_obj.road_address:
             complex_obj.road_address = address_raw
 
-        if payload_households is not None and str(payload_households).isdigit():
+        if complex_obj.total_households is None and payload_households is not None and str(payload_households).isdigit():
             complex_obj.total_households = int(payload_households)
-        if payload_const_year is not None and str(payload_const_year).isdigit():
+        if complex_obj.construction_year is None and payload_const_year is not None and str(payload_const_year).isdigit():
             complex_obj.construction_year = int(payload_const_year)
 
     def match_listing_complex(

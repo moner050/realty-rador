@@ -108,6 +108,7 @@ def parse_search_filter(
     page_size: int = Query(20, ge=1, le=100),
     only_eligible_loans: bool = Query(False),
     exclude_short_term: bool = Query(True),
+    group_by_complex: bool = Query(False),
 ) -> ListingSearchFilter:
     """쿼리 파라미터로부터 ListingSearchFilter DTO 객체 안전 파싱 (기본 정렬: 가격 낮은순)."""
     trans_enum = TransactionType(transaction_type) if transaction_type and transaction_type != "" else None
@@ -143,6 +144,7 @@ def parse_search_filter(
         page_size=page_size,
         only_eligible_loans=only_eligible_loans,
         exclude_short_term=exclude_short_term,
+        group_by_complex=group_by_complex,
     )
 
 

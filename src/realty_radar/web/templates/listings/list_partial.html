@@ -1,11 +1,15 @@
 <!-- 상단 스티키 고정 검색 통계 서머리 바 & 미니 페이지네이션 & 정렬 스위처 -->
 <div class="sticky top-16 z-40 bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-xl border border-slate-700/70 shadow-xl flex flex-wrap items-center justify-between gap-3 mb-4 transition-all">
     <div class="flex items-center space-x-3 text-sm">
-        <span class="text-slate-300">전체 <strong class="text-indigo-400 font-bold">{{ result.total_count }}</strong>건</span>
+        {% if result and result.is_grouped %}
+        <span class="text-slate-300">전체 <strong class="text-purple-400 font-bold">{{ result.total_count }}</strong>개 아파트 단지 묶음</span>
+        {% else %}
+        <span class="text-slate-300">전체 <strong class="text-indigo-400 font-bold">{{ result.total_count if result else 0 }}</strong>건</span>
+        {% endif %}
         <span class="text-slate-600">•</span>
-        <span class="text-emerald-400">신규 <strong class="font-bold">{{ result.new_count if result.new_count is defined else result.items|length }}</strong>건</span>
+        <span class="text-emerald-400">신규 <strong class="font-bold">{{ result.new_count if result and result.new_count is defined else (result.items|length if result and result.items else 0) }}</strong>건</span>
         <span class="text-slate-600">•</span>
-        <span class="text-amber-400">가격 변동 <strong class="font-bold">{{ result.price_reduced_count if result.price_reduced_count is defined else 0 }}</strong>건</span>
+        <span class="text-amber-400">가격 변동 <strong class="font-bold">{{ result.price_reduced_count if result and result.price_reduced_count is defined else 0 }}</strong>건</span>
     </div>
     
     <div class="flex items-center space-x-4">
@@ -54,8 +58,146 @@
 
 <!-- 매물 카드 목록 -->
 <div class="space-y-4">
-    {% if result.items %}
-        {% for item in result.items %}
+    {% set is_grouped_mode = (search_res and search_res.is_grouped) or (result and result.is_grouped) %}
+    {% set grouped_list = (search_res.grouped_items if search_res and search_res.grouped_items else (result.grouped_items if result and result.grouped_items else [])) %}
+    {% set listing_items = (search_res.items if search_res and search_res.items else (result.items if result and result.items else [])) %}
+
+    {% if is_grouped_mode and grouped_list %}
+        <!-- 동일 아파트 단지별 묶어서 보기 모드 (아코디언 접이식) -->
+        {% for grp in grouped_list %}
+        <div x-data="{ open: true }" class="bg-slate-800/60 border border-purple-500/30 hover:border-purple-500/60 rounded-2xl p-5 transition-all shadow-md space-y-4">
+            <!-- 단지 헤더 (클릭 시 토글) -->
+            <div @click="open = !open" onclick="const content = this.nextElementSibling; if(content) { content.classList.toggle('hidden'); }" class="flex flex-wrap items-center justify-between gap-4 cursor-pointer select-none">
+                <div class="space-y-1.5">
+                    <div class="flex items-center space-x-3">
+                        <span class="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 font-extrabold text-xs border border-purple-500/30 flex items-center space-x-1">
+                            <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                            </svg>
+                            <span>아파트 묶음 (매물 {{ grp.listing_count }}개)</span>
+                        </span>
+                        <h2 class="text-xl font-extrabold text-white group-hover:text-purple-300 transition-colors">
+                            {{ grp.complex_name }}
+                        </h2>
+                    </div>
+                    <div class="text-xs text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1 font-medium">
+                        {% if grp.total_households %}
+                        <span class="text-emerald-400 font-bold">{{ grp.total_households | comma_number }}세대</span>
+                        <span class="text-slate-600">•</span>
+                        {% endif %}
+                        {% if grp.construction_year %}
+                        <span class="text-amber-400 font-bold">{{ grp.construction_year }}년 준공</span>
+                        <span class="text-slate-600">•</span>
+                        {% endif %}
+                        <span>{{ grp.address_raw or '' }}</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <!-- 가격대 범위 뱃지 -->
+                    <div class="text-right">
+                        <span class="text-[11px] text-slate-400 font-semibold block">필터 조건 매물 가격대</span>
+                        <span class="text-lg font-black text-purple-300 tracking-tight">
+                            {{ grp.price_range_str }}
+                        </span>
+                    </div>
+
+                    <!-- 접기/펴기 버튼 아이콘 -->
+                    <div class="p-2 rounded-xl bg-slate-700/60 text-purple-300 hover:bg-purple-600 hover:text-white transition-colors">
+                        <svg class="w-5 h-5 transform transition-transform duration-200" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 그룹 내부 매물 리스트 (접기/펴기 지원) -->
+            <div x-show="open" class="pt-3 border-t border-slate-700/50 space-y-3">
+                {% for item in grp.listings %}
+                <div class="bg-slate-900/60 border border-slate-700/60 hover:border-indigo-500/50 rounded-xl p-4 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                    <div class="space-y-1.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                {{ item.transaction_type | korean_tx_type }}
+                            </span>
+                            <h3 class="text-base font-bold text-white">
+                                {{ item.complex_name_raw or '아파트 단지' }}
+                            </h3>
+                            {% if item.is_short_term or (item.raw_payload and item.raw_payload.get('is_short_term')) %}
+                            <span class="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">단기임대</span>
+                            {% endif %}
+                            {% if item.source %}
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-600">
+                                {{ item.source.source_code | korean_source }}
+                            </span>
+                            {% endif %}
+                            {% if item.eligible_loans %}
+                                {% for loan in item.eligible_loans %}
+                                <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
+                                    {{ loan.product_name }}
+                                </span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <div class="text-xs text-slate-300 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span class="font-medium">전용 {{ item.exclusive_area or '-' }}㎡{% if item.exclusive_area %}<span class="ml-1 text-[11px] text-indigo-300 font-semibold">({{ item.exclusive_area | to_pyeong }})</span>{% endif %}</span>
+                            <span class="text-slate-600">•</span>
+                            <span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold text-[11px]">
+                                {{ item.floor_info or item.floor_group or '-' }}
+                            </span>
+                            {% set display_households = item.total_households or (item.complex and item.complex.total_households) %}
+                            {% set display_const_year = item.construction_year or (item.complex and item.complex.construction_year) %}
+                            {% if display_households %}
+                            <span class="text-slate-600">•</span>
+                            <span class="text-emerald-400 font-semibold text-[11px]">{{ display_households | comma_number }}세대</span>
+                            {% endif %}
+                            {% if display_const_year %}
+                            <span class="text-slate-600">•</span>
+                            <span class="text-amber-400 font-semibold text-[11px]">{{ display_const_year }}년 준공</span>
+                            {% endif %}
+                            {% if item.address_raw %}
+                            <span class="text-slate-600">•</span>
+                            <span class="text-slate-400 text-[11px]">{{ item.address_raw }}</span>
+                            {% endif %}
+                        </div>
+
+                        {% if item.description_raw %}
+                        <p class="text-xs text-slate-400 line-clamp-1 italic">
+                            "{{ item.description_raw }}"
+                        </p>
+                        {% endif %}
+                    </div>
+
+                    <div class="flex md:flex-col items-end justify-between md:justify-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800">
+                        <div class="text-right">
+                            {% if item.transaction_type == 'SALE' %}
+                                <div class="text-lg font-extrabold text-indigo-400">{{ item.price_deposit | korean_money }}</div>
+                            {% elif item.transaction_type == 'JEONSE' %}
+                                <div class="text-lg font-extrabold text-blue-400">{{ item.price_deposit | korean_money }}</div>
+                            {% elif item.transaction_type == 'MONTHLY_RENT' %}
+                                <div class="text-lg font-extrabold text-amber-400">{{ item.price_deposit | korean_money }} / {{ item.price_monthly | korean_money }}</div>
+                            {% else %}
+                                <div class="text-lg font-extrabold text-slate-200">{{ item.price_deposit | korean_money }}</div>
+                            {% endif %}
+                        </div>
+
+                        {% if item.source_url %}
+                        <a href="{{ item.source_url | replace('new.land.naver.com/articles', 'fin.land.naver.com/articles') }}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-lg border border-slate-700 transition-all flex items-center space-x-1">
+                            <span>원본 보기</span>
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+    {% elif listing_items %}
+        <!-- 기본 개별 매물 카드 모드 -->
+        {% for item in listing_items %}
         <div class="bg-slate-800/40 border border-slate-700/50 hover:border-indigo-500/50 rounded-xl p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm hover:shadow-indigo-500/5">
             <div class="space-y-2">
                 <div class="flex flex-wrap items-center gap-2">
@@ -117,22 +259,24 @@
                     <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 text-xs">
                         {{ item.floor_info or item.floor_group or '-' }}
                     </span>
-                    {% if item.complex and item.complex.total_households %}
+                    {% set display_households = item.total_households or (item.complex and item.complex.total_households) %}
+                    {% set display_const_year = item.construction_year or (item.complex and item.complex.construction_year) %}
+                    {% if display_households %}
                     <span class="text-slate-600">•</span>
                     <span class="text-emerald-400 font-semibold text-xs flex items-center space-x-1">
                         <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
                         </svg>
-                        <span>{{ item.complex.total_households | comma_number }}세대</span>
+                        <span>{{ display_households | comma_number }}세대</span>
                     </span>
                     {% endif %}
-                    {% if item.complex and item.complex.construction_year %}
+                    {% if display_const_year %}
                     <span class="text-slate-600">•</span>
                     <span class="text-amber-400 font-semibold text-xs flex items-center space-x-1">
                         <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                         </svg>
-                        <span>{{ item.complex.construction_year }}년 준공</span>
+                        <span>{{ display_const_year }}년 준공</span>
                     </span>
                     {% endif %}
                     {% if item.address_raw %}
@@ -186,11 +330,12 @@
         {% endfor %}
 
         <!-- 페이징 컨트롤 컴포넌트 -->
-        {% if result.total_pages and result.total_pages > 1 %}
+        {% set res_obj = search_res if search_res and search_res.total_pages is defined else result %}
+        {% if res_obj and res_obj.total_pages and res_obj.total_pages > 1 %}
         <div class="flex flex-wrap items-center justify-center gap-1.5 pt-8 pb-4">
             <!-- 이전 페이지 버튼 -->
-            {% if result.has_prev %}
-            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.page - 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-all shadow-sm">
+            {% if res_obj.has_prev %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ res_obj.page - 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-all shadow-sm">
                 이전
             </button>
             {% else %}
@@ -200,8 +345,8 @@
             {% endif %}
 
             <!-- 페이지 번호 다이렉트 선택 버튼 -->
-            {% set start_p = result.page - 2 if result.page - 2 > 1 else 1 %}
-            {% set end_p = result.page + 2 if result.page + 2 < result.total_pages else result.total_pages %}
+            {% set start_p = res_obj.page - 2 if res_obj.page - 2 > 1 else 1 %}
+            {% set end_p = res_obj.page + 2 if res_obj.page + 2 < res_obj.total_pages else res_obj.total_pages %}
 
             {% if start_p > 1 %}
             <button type="button" onclick="document.getElementById('filter-page').value='1';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
@@ -213,7 +358,7 @@
             {% endif %}
 
             {% for p in range(start_p, end_p + 1) %}
-                {% if p == result.page %}
+                {% if p == res_obj.page %}
                 <span class="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg border border-indigo-500 shadow-md">
                     {{ p }}
                 </span>
@@ -224,18 +369,18 @@
                 {% endif %}
             {% endfor %}
 
-            {% if end_p < result.total_pages %}
-            {% if end_p < result.total_pages - 1 %}
+            {% if end_p < res_obj.total_pages %}
+            {% if end_p < res_obj.total_pages - 1 %}
             <span class="text-slate-600 px-1">...</span>
             {% endif %}
-            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.total_pages }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
-                {{ result.total_pages }}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ res_obj.total_pages }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
+                {{ res_obj.total_pages }}
             </button>
             {% endif %}
 
             <!-- 다음 페이지 버튼 -->
-            {% if result.has_next %}
-            <button type="button" onclick="document.getElementById('filter-page').value='{{ result.page + 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-all shadow-sm">
+            {% if res_obj.has_next %}
+            <button type="button" onclick="document.getElementById('filter-page').value='{{ res_obj.page + 1 }}';" hx-get="/listings/search" hx-include="#search-filter-form" hx-target="#listings-container" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-all shadow-sm">
                 다음
             </button>
             {% else %}

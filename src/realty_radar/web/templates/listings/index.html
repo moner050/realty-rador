@@ -277,8 +277,8 @@
                     </div>
                 </div>
 
-                <!-- (3) 맞춤 조건 설정 (정책대출 및 단기임대 필터) -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- (3) 맞춤 조건 설정 (정책대출, 단기임대, 동일 아파트 묶어서 보기 필터) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="flex items-center space-x-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
                         <input type="checkbox" 
                                id="filter-only-eligible-loans" 
@@ -315,6 +315,26 @@
                                 <span>단기임대 / 단기 월세 매물 제외 (기본값 ON)</span>
                             </label>
                             <span class="block text-xs text-slate-400 mt-0.5 font-medium">매매/전세에 혼재된 단기 깔세 및 단기임대 매물을 걸러냅니다.</span>
+                        </div>
+                    </div>
+
+                    <!-- 동일 아파트 묶어서 보기 옵션 -->
+                    <div class="flex items-center space-x-3 p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 shadow-sm">
+                        <input type="checkbox" 
+                               id="filter-group-by-complex" 
+                               name="group_by_complex" 
+                               value="true" 
+                               {% if filters and filters.group_by_complex %}checked{% endif %} 
+                               onchange="document.getElementById('filter-page').value=1; updateFilterSummaryText(); triggerFormSubmit();"
+                               class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-purple-500 focus:ring-purple-500 cursor-pointer">
+                        <div>
+                            <label for="filter-group-by-complex" class="text-sm font-bold text-purple-300 cursor-pointer flex items-center space-x-1.5">
+                                <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                </svg>
+                                <span>동일 아파트 묶어서 보기</span>
+                            </label>
+                            <span class="block text-xs text-slate-400 mt-0.5 font-medium">필터링된 매물을 아파트별로 묶어 가격범위와 접이식 UI로 제공합니다.</span>
                         </div>
                     </div>
                 </div>
