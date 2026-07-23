@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 
 from realty_radar.infrastructure.database.models.base import Base
@@ -17,6 +17,11 @@ class Listing(Base):
         Index("idx_listing_complex_status", "complex_id", "status"),
         Index("idx_listing_status_seen", "status", "last_seen_at"),
         Index("idx_listing_mortgage", "mortgage_status"),
+        Index("idx_listing_short_term", "is_short_term"),
+        Index("idx_listing_fast_search", "status", "is_short_term", "transaction_type", "price_deposit"),
+        Index("idx_listing_super_search", "status", "is_short_term", "sido", "sigungu", "transaction_type", "price_deposit"),
+        Index("idx_listing_super_filter", "status", "is_short_term", "construction_year", "total_households"),
+        Index("idx_listing_ultra_fast", "status", "is_short_term", "sido", "price_deposit"),
         {"comment": "통합 부동산 매물 마스터 테이블"},
     )
 
@@ -31,6 +36,11 @@ class Listing(Base):
     complex_name_raw = Column(String(100), nullable=False, comment="수집된 원본 아파트 단지명")
     address_raw = Column(String(200), nullable=True, comment="수집된 원본 매물 상세 주소")
 
+    sido = Column(String(50), nullable=True, index=True, comment="정제된 시/도 (예: 서울특별시, 경기도)")
+    sigungu = Column(String(50), nullable=True, index=True, comment="정제된 시/군/구 (예: 송파구, 성남시 분당구)")
+    construction_year = Column(Integer, nullable=True, index=True, comment="비정규화 준공연도 (JOIN 0건 전용)")
+    total_households = Column(Integer, nullable=True, index=True, comment="비정규화 세대수 (JOIN 0건 전용)")
+
     transaction_type = Column(String(20), nullable=False, comment="거래 유형 (SALE: 매매, JEONSE: 전세, MONTHLY_RENT: 월세)")
     price_deposit = Column(Numeric(15, 2), nullable=False, comment="매매가 또는 전/월세 보증금 (단위: 원)")
     price_monthly = Column(Numeric(15, 2), default=0, nullable=False, comment="월세액 (단위: 원, 매매/전세 시 0)")
@@ -41,6 +51,7 @@ class Listing(Base):
 
     mortgage_status = Column(String(30), default="UNKNOWN", nullable=False, comment="융자 상태 (EXPLICIT_NONE: 없음, EXPLICIT_EXISTS: 있음, UNKNOWN: 미확인)")
     description_raw = Column(Text, nullable=True, comment="수집된 원본 매물 상세 설명 문구")
+    is_short_term = Column(Boolean, default=False, nullable=False, comment="단기임대 또는 단기 월세 둔갑 매물 여부")
 
     status = Column(String(30), default="ACTIVE", nullable=False, comment="매물 상태 (ACTIVE: 유효, STALE: 미확인, REMOVED: 삭제됨, SOLD_OR_CONTRACTED: 거래완료)")
     first_seen_at = Column(DateTime, default=datetime.now, nullable=False, comment="최초 크롤링 발견 일시")

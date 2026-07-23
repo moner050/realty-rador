@@ -27,7 +27,8 @@ async def test_site_a_adapter_with_mock():
     with patch.object(adapter.client, "create_context", new_callable=AsyncMock) as mock_create_ctx, \
          patch.object(adapter.client, "get_dong_list", new_callable=AsyncMock) as mock_dong, \
          patch.object(adapter.client, "get_complexes_in_dong", new_callable=AsyncMock) as mock_cpx, \
-         patch.object(adapter.client, "fetch_complex_articles", new_callable=AsyncMock) as mock_scrape:
+         patch.object(adapter.client, "fetch_complex_articles", new_callable=AsyncMock) as mock_scrape, \
+         patch.object(adapter.client, "fetch_complex_articles_batch", new_callable=AsyncMock) as mock_batch:
 
         mock_create_ctx.return_value = mock_ctx
         mock_dong.return_value = [{"cortarNo": "1150010200", "cortarName": "등촌동"}]
@@ -41,6 +42,7 @@ async def test_site_a_adapter_with_mock():
             "rentCount": 0,
         }]
         mock_scrape.return_value = [mock_raw_item]
+        mock_batch.return_value = [mock_raw_item]
 
         listings = await adapter.search(req, limit=5)
         assert len(listings) == 1

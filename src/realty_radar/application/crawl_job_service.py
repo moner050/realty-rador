@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from realty_radar.constants import CrawlJobStatus, CrawlJobType
+from realty_radar.infrastructure.cache.redis_client import redis_cache
 from realty_radar.infrastructure.database.models import CrawlJob, CrawlSource
 
 
@@ -115,13 +116,18 @@ class CrawlJobService:
         return None
 
     def get_progress_summary(self) -> dict[str, Any]:
-        """최근 크롤링 진행 현황, 수치 통계 및 백분율(%) 계산."""
+        """최근 크롤링 진행 현황, 수치 통계 및 백분율(%) 계산 (Redis 5초 인메모리 캐싱 지원)."""
+        cache_key = "crawl_job_progress_summary"
+        cached_summary = redis_cache.get(cache_key)
+        if cached_summary and isinstance(cached_summary, dict):
+            return cached_summary
+
         stmt = select(CrawlJob).order_by(CrawlJob.created_at.desc()).limit(100)
         jobs = list(self.db.scalars(stmt).all())
 
         total_jobs = len(jobs)
         if total_jobs == 0:
-            return {
+            res = {
                 "total_jobs": 0,
                 "completed_jobs": 0,
                 "running_jobs": 0,
@@ -132,18 +138,18 @@ class CrawlJobService:
                 "current_target": "대기 중인 수집 없음",
                 "recent_jobs": [],
             }
+            redis_cache.set(cache_key, res, ttl=5)
+            return res
 
         pending_jobs = sum(1 for j in jobs if j.status == "PENDING")
         running_jobs = sum(1 for j in jobs if j.status == "RUNNING")
         success_jobs = sum(1 for j in jobs if j.status == "SUCCESS")
         failed_jobs = sum(1 for j in jobs if j.status in ["FAILED", "RETRY_WAIT"])
 
-        # 완료된 작업 수
         completed_jobs = success_jobs + failed_jobs
         progress_percent = int((completed_jobs / total_jobs) * 100) if total_jobs > 0 else 100
         is_active_crawling = (running_jobs + pending_jobs) > 0
 
-        # 현재 수집 중인 대상 텍스트
         active_job = next((j for j in jobs if j.status == "RUNNING"), None)
         if active_job:
             region = active_job.target_region or "전국"
@@ -153,7 +159,7 @@ class CrawlJobService:
         else:
             current_target = "모든 작업 완료됨"
 
-        return {
+        res = {
             "total_jobs": total_jobs,
             "completed_jobs": completed_jobs,
             "running_jobs": running_jobs,
@@ -162,5 +168,15 @@ class CrawlJobService:
             "progress_percent": progress_percent,
             "is_active_crawling": is_active_crawling,
             "current_target": current_target,
-            "recent_jobs": jobs[:5],
+            "recent_jobs": [
+                {
+                    "id": j.id,
+                    "status": j.status,
+                    "target_region": j.target_region,
+                    "created_at": j.created_at.isoformat() if j.created_at else None,
+                }
+                for j in jobs[:5]
+            ],
         }
+        redis_cache.set(cache_key, res, ttl=5)
+        return res

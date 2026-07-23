@@ -81,8 +81,14 @@ class ListingUpsertService:
             desc_str = getattr(item, "description", None) or getattr(item, "description_raw", None)
             raw_payload_val = getattr(item, "raw_payload", None)
 
+            is_short_term_val = getattr(item, "is_short_term", False)
             existing_listing = existing_map.get(item.external_listing_id)
             is_created = False
+
+            sido_val = getattr(item, "sido", None)
+            sigungu_val = getattr(item, "sigungu", None)
+            cyear_val = getattr(item, "construction_year", None)
+            households_val = getattr(item, "total_households", None)
 
             if not existing_listing:
                 existing_listing = Listing(
@@ -91,6 +97,10 @@ class ListingUpsertService:
                     source_url=item.source_url,
                     complex_name_raw=item.complex_name_raw,
                     address_raw=item.address_raw,
+                    sido=sido_val,
+                    sigungu=sigungu_val,
+                    construction_year=cyear_val,
+                    total_households=households_val,
                     transaction_type=tx_str,
                     price_deposit=price_val,
                     price_monthly=monthly_val,
@@ -99,6 +109,7 @@ class ListingUpsertService:
                     floor_info=floor_str,
                     mortgage_status=mortgage_str,
                     description_raw=desc_str,
+                    is_short_term=is_short_term_val,
                     status=status_str,
                     raw_payload=raw_payload_val,
                     first_seen_at=now,
@@ -135,6 +146,7 @@ class ListingUpsertService:
                 existing_listing.stale_count = 0
                 existing_listing.status = status_str
                 existing_listing.floor_info = floor_str
+                existing_listing.is_short_term = is_short_term_val
 
             results.append((existing_listing, is_created))
 

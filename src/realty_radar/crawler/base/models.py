@@ -55,10 +55,15 @@ class NormalizedListing:
     direction: str | None = None
     address_raw: str | None = None
     description: str | None = None
+    sido: str | None = None
+    sigungu: str | None = None
+    construction_year: int | None = None
+    total_households: int | None = None
     mortgage_status: MortgageStatus = MortgageStatus.UNKNOWN
     mortgage_amount: int | None = None
     mortgage_raw_text: str | None = None
     mortgage_confidence: Decimal | None = None
+    is_short_term: bool = False
     listing_status: ListingStatus = ListingStatus.ACTIVE
     first_seen_at: datetime = field(default_factory=datetime.now)
     last_seen_at: datetime = field(default_factory=datetime.now)

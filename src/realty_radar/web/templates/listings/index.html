@@ -25,6 +25,7 @@
               hx-trigger="change delay:300ms, submit"
               class="space-y-6">
             <input type="hidden" id="filter-page" name="page" value="{{ filters.page if filters else 1 }}">
+            <input type="hidden" id="filter-sort-by-input" name="sort_by" value="{{ filters.sort_by if filters and filters.sort_by else 'price_asc' }}">
             
             <!-- 1. 지역 선택기 (시/도 및 시/군/구 2차 연동 셀렉트 + 퀵 칩) -->
             <div class="space-y-3 bg-slate-900/80 border border-slate-700/70 p-4 rounded-xl">
@@ -76,7 +77,7 @@
                 </div>
             </div>
             
-            <!-- 2. 상단 거래 유형 수평 세그먼트 태그 바 및 정렬 옵션 -->
+            <!-- 2. 상단 거래 유형 수평 세그먼트 태그 바 -->
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/60 pb-4">
                 <div class="flex items-center space-x-2">
                     <span class="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">거래유형</span>
@@ -96,17 +97,6 @@
                         <span>월세</span>
                     </button>
                 </div>
-
-                <!-- 정렬 기준 스위처 -->
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs font-semibold text-slate-400">정렬:</span>
-                    <select id="filter-sort-by" name="sort_by" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="recent">최신 발견순</option>
-                        <option value="price_asc">가격 낮은순</option>
-                        <option value="price_desc">가격 높은순</option>
-                        <option value="area_desc">면적 넓은순</option>
-                    </select>
-                </div>
             </div>
 
             <!-- 3. 스마트 통합 검색바 -->
@@ -120,24 +110,25 @@
                        id="filter-complex-keyword" 
                        name="complex_keyword" 
                        value="{{ filters.complex_keyword or '' }}"
+                       onkeydown="if(event.key==='Enter'){ document.getElementById('filter-page').value=1; }"
                        placeholder="단지명, 아파트 이름 또는 상세 주소를 입력하세요 (예: 래미안, 자이, 반포자이)" 
                        class="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-11 pr-24 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner">
-                <button type="submit" class="absolute right-2 top-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors shadow">
+                <button type="button" onclick="document.getElementById('filter-page').value=1; triggerFormSubmit();" class="absolute right-2 top-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors shadow">
                     검색
                 </button>
             </div>
 
-            <!-- 고급 필터 접기 / 펼치기 Accordion 토글 헤더 -->
+            <!-- 고급 필터 접기 / 펼치기 Accordion 전체 클릭 가능한 토글 바 -->
             <div class="border-t border-slate-700/60 pt-3">
-                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/70 p-3 rounded-xl border border-slate-700/80">
-                    <button type="button" 
-                            onclick="toggleAdvancedFilters()" 
-                            class="flex items-center space-x-2 text-xs font-bold text-indigo-300 hover:text-white transition-colors cursor-pointer">
+                <div id="advanced-filter-header" 
+                     onclick="toggleAdvancedFilters()" 
+                     class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/70 hover:bg-slate-900 p-3.5 rounded-xl border border-slate-700/80 cursor-pointer select-none transition-all shadow-sm">
+                    <div class="flex items-center space-x-2 text-xs font-bold text-indigo-300">
                         <svg id="advanced-filter-arrow" class="w-4 h-4 transition-transform transform rotate-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
                         <span>고급 필터 <span id="advanced-filter-status-text" class="font-normal text-slate-400">(펼치기)</span></span>
-                    </button>
+                    </div>
 
                     <!-- 접힌 상태에서 조그만한 글씨로 실시간 적용 중인 필터 요약 표시 -->
                     <div class="text-[11px] font-medium text-slate-400 flex items-center space-x-1 overflow-hidden truncate max-w-full md:max-w-xl">
@@ -267,7 +258,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-700/50">
                     <div class="space-y-1">
                         <label for="filter-mortgage" class="block text-xs font-semibold text-slate-400">융자 상태</label>
-                        <select id="filter-mortgage" name="mortgage_status" onchange="updateFilterSummaryText(); triggerFormSubmit();" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        <select id="filter-mortgage" name="mortgage_status" onchange="document.getElementById('filter-page').value=1; updateFilterSummaryText(); triggerFormSubmit();" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
                             <option value="">전체 (융자무/융자유 포함)</option>
                             <option value="EXPLICIT_NONE" {% if filters.mortgage_status and filters.mortgage_status.value == 'EXPLICIT_NONE' %}selected{% endif %}>융자금 없음 명시</option>
                             <option value="EXPLICIT_EXISTS" {% if filters.mortgage_status and filters.mortgage_status.value == 'EXPLICIT_EXISTS' %}selected{% endif %}>융자금 있음</option>
@@ -277,7 +268,7 @@
 
                     <div class="space-y-1">
                         <label for="filter-recent-days" class="block text-xs font-semibold text-slate-400">최근 발견 기간</label>
-                        <select id="filter-recent-days" name="recent_days" onchange="updateFilterSummaryText(); triggerFormSubmit();" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        <select id="filter-recent-days" name="recent_days" onchange="document.getElementById('filter-page').value=1; updateFilterSummaryText(); triggerFormSubmit();" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
                             <option value="">전체 기간</option>
                             <option value="1" {% if filters.recent_days == 1 %}selected{% endif %}>최근 1일 이내</option>
                             <option value="3" {% if filters.recent_days == 3 %}selected{% endif %}>최근 3일 이내</option>
@@ -286,30 +277,52 @@
                     </div>
                 </div>
 
-                <!-- (3) 맞춤 조건 설정 (정책대출) -->
-                <div class="flex items-center space-x-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
-                    <input type="checkbox" 
-                           id="filter-only-eligible-loans" 
-                           name="only_eligible_loans" 
-                           value="true" 
-                           {% if filters.only_eligible_loans %}checked{% endif %} 
-                           onchange="updateFilterSummaryText(); triggerFormSubmit();"
-                           class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                    <div>
-                        <label for="filter-only-eligible-loans" class="text-sm font-bold text-indigo-300 cursor-pointer flex items-center space-x-1.5">
-                            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
-                            </svg>
-                            <span>내 자격 조건으로 정책대출 가능한 매물만 보기</span>
-                        </label>
-                        <span class="block text-xs text-slate-400 mt-0.5 font-medium">설정 메뉴에서 저장한 소득, 자산, 무주택 조건 기준 디딤돌/버팀목 적격 매물만 필터링합니다.</span>
+                <!-- (3) 맞춤 조건 설정 (정책대출 및 단기임대 필터) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center space-x-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                        <input type="checkbox" 
+                               id="filter-only-eligible-loans" 
+                               name="only_eligible_loans" 
+                               value="true" 
+                               {% if filters.only_eligible_loans %}checked{% endif %} 
+                               onchange="document.getElementById('filter-page').value=1; updateFilterSummaryText(); triggerFormSubmit();"
+                               class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                        <div>
+                            <label for="filter-only-eligible-loans" class="text-sm font-bold text-indigo-300 cursor-pointer flex items-center space-x-1.5">
+                                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                                </svg>
+                                <span>정책대출 가능한 매물만 보기</span>
+                            </label>
+                            <span class="block text-xs text-slate-400 mt-0.5 font-medium">디딤돌/버팀목 적격 매물만 필터링합니다.</span>
+                        </div>
+                    </div>
+
+                    <!-- 단기임대 매물 제외 옵션 (기본값 제외) -->
+                    <div class="flex items-center space-x-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                        <input type="checkbox" 
+                               id="filter-exclude-short-term" 
+                               name="exclude_short_term" 
+                               value="true" 
+                               {% if filters and filters.exclude_short_term is not false %}checked{% endif %} 
+                               onchange="document.getElementById('filter-page').value=1; updateFilterSummaryText(); triggerFormSubmit();"
+                               class="w-5 h-5 bg-slate-900 border-slate-700 rounded text-amber-500 focus:ring-amber-500 cursor-pointer">
+                        <div>
+                            <label for="filter-exclude-short-term" class="text-sm font-bold text-amber-300 cursor-pointer flex items-center space-x-1.5">
+                                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <span>단기임대 / 단기 월세 매물 제외 (기본값 ON)</span>
+                            </label>
+                            <span class="block text-xs text-slate-400 mt-0.5 font-medium">매매/전세에 혼재된 단기 깔세 및 단기임대 매물을 걸러냅니다.</span>
+                        </div>
                     </div>
                 </div>
 
                 <!-- (4) 하단 툴바 -->
                 <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
                     <div class="flex items-center space-x-2">
-                        <input type="checkbox" id="filter-exclude-unknown" name="exclude_unknown_mortgage" value="true" {% if filters.exclude_unknown_mortgage %}checked{% endif %} onchange="updateFilterSummaryText(); triggerFormSubmit();" class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                        <input type="checkbox" id="filter-exclude-unknown" name="exclude_unknown_mortgage" value="true" {% if filters.exclude_unknown_mortgage %}checked{% endif %} onchange="document.getElementById('filter-page').value=1; updateFilterSummaryText(); triggerFormSubmit();" class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
                         <label for="filter-exclude-unknown" class="text-xs text-slate-300 font-medium">융자 미상 매물 제외</label>
                     </div>
 
@@ -405,6 +418,12 @@
             parts.push('정책대출 적격');
         }
 
+        // 7. 단기임대 제외
+        const shortTermCb = document.getElementById('filter-exclude-short-term');
+        if (shortTermCb && shortTermCb.checked) {
+            parts.push('단기임대 제외');
+        }
+
         const summaryEl = document.getElementById('filter-summary-text');
         if (parts.length > 0) {
             summaryEl.innerText = parts.join(' • ');
@@ -418,6 +437,7 @@
     }
 
     function onSidoChange(sido) {
+        document.getElementById('filter-page').value = 1;
         const sigunguSelect = document.getElementById('sigungu-select');
         sigunguSelect.innerHTML = '<option value="">시/군/구 전체</option>';
 
@@ -434,6 +454,7 @@
     }
 
     function onSigunguChange(sigungu) {
+        document.getElementById('filter-page').value = 1;
         const sido = document.getElementById('sido-select').value;
         const sidoFullName = sido === '서울' ? '서울특별시' : (sido === '경기' ? '경기도' : (sido === '인천' ? '인천광역시' : sido));
         
@@ -449,16 +470,19 @@
     }
 
     function setQuickRegion(region) {
+        document.getElementById('filter-page').value = 1;
         applyRegion(region);
     }
 
     function applyRegion(regionStr) {
+        document.getElementById('filter-page').value = 1;
         document.getElementById('filter-region-name').value = regionStr;
         document.getElementById('current-region-text').innerText = regionStr || '전체';
         triggerFormSubmit();
     }
 
     function setTransactionType(val) {
+        document.getElementById('filter-page').value = 1;
         document.getElementById('filter-transaction-type').value = val;
         
         const btns = document.querySelectorAll('.tx-type-btn');
@@ -493,6 +517,7 @@
     }
 
     function syncPriceInput(val) {
+        document.getElementById('filter-page').value = 1;
         const num = parseInt(val);
         document.getElementById('filter-max-price').value = (num >= 2000000000 || num === 0) ? '' : val;
         updateFilterSummaryText();
@@ -512,6 +537,7 @@
     }
 
     function syncAreaInput(val) {
+        document.getElementById('filter-page').value = 1;
         const num = parseInt(val);
         document.getElementById('filter-min-area').value = num <= 0 ? '' : val;
         updateFilterSummaryText();
@@ -532,6 +558,7 @@
     }
 
     function syncYearInput(val) {
+        document.getElementById('filter-page').value = 1;
         const num = parseInt(val);
         document.getElementById('filter-min-year').value = num <= 1980 ? '' : val;
         updateFilterSummaryText();
@@ -550,6 +577,7 @@
     }
 
     function syncHouseholdsInput(val) {
+        document.getElementById('filter-page').value = 1;
         const num = parseInt(val);
         document.getElementById('filter-min-households').value = num <= 0 ? '' : val;
         updateFilterSummaryText();
@@ -557,6 +585,7 @@
     }
 
     function resetAllFilters() {
+        document.getElementById('filter-page').value = 1;
         document.getElementById('search-filter-form').reset();
         document.getElementById('sido-select').value = '';
         document.getElementById('sigungu-select').innerHTML = '<option value="">시/군/구 전체</option>';
@@ -581,6 +610,11 @@
         const onlyEligibleLoansCb = document.getElementById('filter-only-eligible-loans');
         if (onlyEligibleLoansCb) {
             onlyEligibleLoansCb.checked = false;
+        }
+
+        const excludeShortTermCb = document.getElementById('filter-exclude-short-term');
+        if (excludeShortTermCb) {
+            excludeShortTermCb.checked = true;
         }
 
         setTransactionType('');

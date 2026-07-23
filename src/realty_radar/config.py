@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     mysql_user: str = Field(default="realty_app", validation_alias="MYSQL_USER")
     mysql_password: str = Field(default="realty_secret_pass", validation_alias="MYSQL_PASSWORD")
 
+    redis_host: str = Field(default="127.0.0.1", validation_alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
+    redis_password: str | None = Field(default=None, validation_alias="REDIS_PASSWORD")
+    redis_db: int = Field(default=0, validation_alias="REDIS_DB")
+
     data_directory: Path = Field(default=Path("./data"), validation_alias="DATA_DIRECTORY")
     auth_directory: Path = Field(default=Path("./data/auth"), validation_alias="AUTH_DIRECTORY")
     snapshot_directory: Path = Field(default=Path("./data/snapshots"), validation_alias="SNAPSHOT_DIRECTORY")

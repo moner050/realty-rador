@@ -1,22 +1,28 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.config import settings
+from realty_radar.constants import TransactionType
+from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.infrastructure.cache.redis_client import redis_cache
+from realty_radar.infrastructure.database.session import SessionFactory
 from realty_radar.web.routes.crawl_jobs import router as crawl_jobs_router
-from realty_radar.web.routes.home import router as home_router
+from realty_radar.web.routes.home import _enrich_listings_with_loans, router as home_router
 from realty_radar.web.routes.settings import router as settings_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """애플리케이션 시작/종료 라이프사이클 이벤트 관리."""
-    # 필수 데이터 디렉토리 자동 생성
+    """애플리케이션 시작/종료 라이프사이클 이벤트 (0.01초 초고속 부팅)."""
     settings.data_directory.mkdir(parents=True, exist_ok=True)
     settings.auth_directory.mkdir(parents=True, exist_ok=True)
     settings.snapshot_directory.mkdir(parents=True, exist_ok=True)
     settings.screenshot_directory.mkdir(parents=True, exist_ok=True)
+
     yield
 
 

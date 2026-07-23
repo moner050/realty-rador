@@ -1,4 +1,4 @@
-<!-- 상단 스티키 고정 검색 통계 서머리 바 & 미니 페이지네이션 -->
+<!-- 상단 스티키 고정 검색 통계 서머리 바 & 미니 페이지네이션 & 정렬 스위처 -->
 <div class="sticky top-16 z-40 bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-xl border border-slate-700/70 shadow-xl flex flex-wrap items-center justify-between gap-3 mb-4 transition-all">
     <div class="flex items-center space-x-3 text-sm">
         <span class="text-slate-300">전체 <strong class="text-indigo-400 font-bold">{{ result.total_count }}</strong>건</span>
@@ -8,7 +8,18 @@
         <span class="text-amber-400">가격 변동 <strong class="font-bold">{{ result.price_reduced_count if result.price_reduced_count is defined else 0 }}</strong>건</span>
     </div>
     
-    <div class="flex items-center space-x-3">
+    <div class="flex items-center space-x-4">
+        <!-- 정렬 기준 스위처 (상단 고정 배치) -->
+        <div class="flex items-center space-x-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">
+            <span class="text-xs font-semibold text-slate-400">정렬:</span>
+            <select id="filter-sort-by" onchange="document.getElementById('filter-page').value=1; document.getElementById('filter-sort-by-input').value=this.value; triggerFormSubmit();" class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium">
+                <option value="price_asc" {% if not filters or not filters.sort_by or filters.sort_by == 'price_asc' %}selected{% endif %}>가격 낮은순</option>
+                <option value="recent" {% if filters and filters.sort_by == 'recent' %}selected{% endif %}>최신 발견순</option>
+                <option value="price_desc" {% if filters and filters.sort_by == 'price_desc' %}selected{% endif %}>가격 높은순</option>
+                <option value="area_desc" {% if filters and filters.sort_by == 'area_desc' %}selected{% endif %}>면적 넓은순</option>
+            </select>
+        </div>
+
         <span class="text-xs text-slate-300 font-medium">
             페이지 <strong class="text-indigo-400 font-bold">{{ result.page if result.page is defined else 1 }}</strong> / {{ result.total_pages if result.total_pages is defined else 1 }}
         </span>
@@ -57,6 +68,16 @@
                     <h2 class="text-lg font-bold text-white hover:text-indigo-300 transition-colors">
                         {{ item.complex_name_raw or '아파트 단지 미매칭' }}
                     </h2>
+
+                    <!-- 단기임대 뱃지 표기 -->
+                    {% if item.is_short_term or (item.raw_payload and item.raw_payload.get('is_short_term')) %}
+                    <span class="text-xs font-bold px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1 shadow-sm">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>단기임대</span>
+                    </span>
+                    {% endif %}
 
                     <!-- 출처 사이트 한글 명칭 -->
                     {% if item.source %}
@@ -178,7 +199,7 @@
             </button>
             {% endif %}
 
-            <!-- 페이지 번호 다이렉트 선택 버튼 (현재 페이지 전후 2개 범위) -->
+            <!-- 페이지 번호 다이렉트 선택 버튼 -->
             {% set start_p = result.page - 2 if result.page - 2 > 1 else 1 %}
             {% set end_p = result.page + 2 if result.page + 2 < result.total_pages else result.total_pages %}
 

@@ -40,7 +40,12 @@ class SiteAParser:
         trade_type = item.get("tradeTypeName") or ""
         price_str = item.get("dealOrWarrantPrc") or ""
         rent_prc = item.get("rentPrc")
-        if rent_prc and str(rent_prc) != "0":
+        if trade_type == "단기임대" or item.get("tradeTypeCd") == "B3":
+            if rent_prc and str(rent_prc) != "0":
+                price_raw = f"단기임대 {price_str}/{rent_prc}"
+            else:
+                price_raw = f"단기임대 {price_str}".strip()
+        elif rent_prc and str(rent_prc) != "0":
             price_raw = f"{trade_type} {price_str}/{rent_prc}"
         else:
             price_raw = f"{trade_type} {price_str}".strip()
@@ -128,7 +133,10 @@ class SiteAParser:
         warranty_price = price_info.get("warrantyPrice") or 0
         rent_price = price_info.get("rentPrice") or 0
 
-        if trade_type == "B2" or (rent_price and rent_price > 0):
+        trade_type_name = info.get("tradeTypeName") or info.get("tradeTypeTitle") or ""
+        if trade_type == "B3" or trade_type_name == "단기임대":
+            price_raw = f"단기임대 {warranty_price // 10000 if warranty_price >= 10000 else warranty_price}/{rent_price // 10000 if rent_price >= 10000 else rent_price}"
+        elif trade_type == "B2" or (rent_price and rent_price > 0):
             price_raw = f"월세 {warranty_price // 10000 if warranty_price >= 10000 else warranty_price}/{rent_price // 10000 if rent_price >= 10000 else rent_price}"
         elif trade_type == "B1" or (warranty_price and warranty_price > 0 and not deal_price):
             price_raw = f"전세 {warranty_price}"

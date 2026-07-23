@@ -46,6 +46,7 @@ class ListingFilterParams:
     region_keyword: Optional[str] = None
     source_code: Optional[str] = None
     only_eligible_loans: bool = False
+    exclude_short_term: bool = True
 
     def __post_init__(self):
         if self.region_keyword and not self.region_name:
