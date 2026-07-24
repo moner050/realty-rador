@@ -58,27 +58,38 @@ python -m alembic upgrade head
 
 ---
 
-### 3. 멀티 프로세스 한번에 실행 (추천)
+### 3. OS별 멀티 프로세스 실행 방법 (추천)
 
-제공된 배치 스크립트를 실행하여 **Web Server, Worker, Scheduler** 3개 프로세스를 한번에 구동합니다.
+제공된 오케스트레이터 스크립트를 구동하여 **Web Server, Worker, Scheduler** 3개 프로세스를 한번에 구동합니다.
 
-#### Windows (CMD / PowerShell):
+#### 🪟 Windows (윈도우 CMD / PowerShell):
 
 ```cmd
-scripts\start.bat
+.\scripts\start.bat
 ```
 
-> **포트 안내**:
+> **Windows 프로세스 종료**: `scripts\stop.bat` 실행 또는 콘솔에서 `Ctrl + C` 입력.
+
+#### 🐧 Ubuntu / Linux (우분투 / 리눅스):
+
+```bash
+# 1) 최초 1회 Playwright 브라우저 OS 디펜던시 설치
+playwright install --with-deps
+
+# 2) 실행 권한 부여 (최초 1회)
+chmod +x scripts/start.sh
+
+# 3) 시스템 구동
+./scripts/start.sh
+# 또는 python3 scripts/run.py
+```
+
+> **웹 접속 포트 & 로그인 안내**:
 > - 메인 웹 인터페이스: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+> - 관리자 로그인: [http://127.0.0.1:8000/login](http://127.0.0.1:8000/login) (기본 계정: `admin` / `admin1234`)
 > - 통합 매물 검색: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-> - 수집 현황 모니터링: [http://127.0.0.1:8000/jobs](http://127.0.0.1:8000/jobs)
-> - 개인 조건 설정: [http://127.0.0.1:8000/settings](http://127.0.0.1:8000/settings)
-
-#### 프로세스 종료:
-
-```cmd
-scripts\stop.bat
-```
+> - 수집 현황 모니터링 (로그인 권한): [http://127.0.0.1:8000/jobs](http://127.0.0.1:8000/jobs)
+> - 개인 조건 설정 (로그인 권한): [http://127.0.0.1:8000/settings](http://127.0.0.1:8000/settings)
 
 ---
 
