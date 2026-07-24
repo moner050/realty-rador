@@ -22,6 +22,8 @@ class TaskScheduler:
             id="job_regular_search_site_a",
             name="네이버부동산 매일 06시 전체 지역 정기 수집",
             replace_existing=True,
+            misfire_grace_time=3600,
+            coalesce=True,
             kwargs={"source_code": "SITE_A", "region_name": "ALL_METRO"},
         )
 
