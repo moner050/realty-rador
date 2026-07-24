@@ -7,11 +7,17 @@ data/snapshots/
 data/screenshots/
 data/exports/
 data/backups/
+data/user_profile.json
+data/user_profiles/
 
 # Python 및 가상환경
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+*.egg
+dist/
+.eggs/
 .venv/
 env/
 venv/
@@ -21,13 +27,20 @@ ENV/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+htmlcov/
+.coverage
+.tox/
 
 # IDE 설정
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # Node.js 의존성 및 로그
 node_modules/
+package-lock.json
+package.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -46,4 +59,4 @@ build/
 # 운영체제 임시 파일
 .DS_Store
 Thumbs.db
-
+desktop.ini
