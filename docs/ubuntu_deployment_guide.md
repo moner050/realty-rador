@@ -201,3 +201,20 @@ sudo certbot --nginx -d your-domain.com
    브라우저에서 `http://<서버_공인_IP>` 또는 `https://your-domain.com` 접속 확인.
 4. **크롤링 및 스케줄러 동시 실행 확인**:
    `/jobs` 모니터링 페이지 및 DB 테이블 상태 검증.
+
+---
+
+## 🛡️ 4. 무차별 보안 스캔(Automated Vulnerability Scan) 로그 원인 및 대응 방안
+
+### 1) 발생 원인
+서버가 외부에 노출(공인 IP 오픈)되면 전 세계의 **자동화 보안 스캐너 봇(Shodan, Censys, 봇넷 등)**이 백업 파일(`.env`, `dump.sql`), 인증 키(`.ssh/id_rsa`), 관리자 페이지(`actuator`, `config`) 등의 취약점 유무를 파악하기 위해 무차별 탐색(Scanning) 요청을 보냅니다.
+- 로그의 모든 요청이 **`404 Not Found`**로 응답되고 있다면, 애플리케이션에서 해당 민감 파일이 노출되지 않고 **정상 차단**되고 있는 상태입니다.
+
+### 2) 권장 보안 대책
+1. **Nginx에서 IP 직접 접근 및 알 수 없는 Host 요청 차단**:
+   도메인 없이 IP로 들어오는 봇 스캔을 Nginx `default_server`에서 `444` (응답 없이 연결 종료) 처리.
+2. **Fail2ban 도입**:
+   짧은 시간 내 연속으로 404/403 에러를 유발하는 IP를 자동으로 IPTables 레벨에서 24시간 동안 차단.
+3. **민감 경로 Nginx 차단 규칙 추가**:
+   `.env`, `.git`, `.svn` 등 숨김 파일 및 `.sql`, `.bak` 요청을 Nginx 단에서 즉시 404/403 응답 처리하여 백엔드(Python)로 전달되지 않게 방어.
+

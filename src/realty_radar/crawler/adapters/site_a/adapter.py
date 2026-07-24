@@ -88,8 +88,16 @@ class NaverLandScraperClient:
 
                 self._session_page.on("request", on_request)
 
-                await self._session_page.goto(f"{NEW_LAND_BASE}/complexes/1001", wait_until="networkidle", timeout=20000)
-                await asyncio.sleep(0.5)
+                try:
+                    await self._session_page.goto(
+                        f"{NEW_LAND_BASE}/complexes/1001",
+                        wait_until="domcontentloaded",
+                        timeout=15000,
+                    )
+                except Exception as goto_err:
+                    logger.warning("페이지 진입 중 경고(수집 계속 진행): %s", goto_err)
+
+                await asyncio.sleep(1.0)
 
                 if not self._auth_token:
                     logger.warning("메인 페이지 접속 시 Authorization 토큰 캡처 미완료 (기본 토큰 대기)")
