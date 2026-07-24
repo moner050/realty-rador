@@ -127,7 +127,7 @@ After=network.target mysql.service
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/real-estate-search
-ExecStart=/home/ubuntu/real-estate-search/venv/bin/python scripts/run.py
+ExecStart=/home/ubuntu/real-estate-search/venv/bin/python scripts/run_web_only.py
 Restart=always
 RestartSec=5
 Environment=PYTHONPATH=/home/ubuntu/real-estate-search/src
@@ -135,6 +135,10 @@ Environment=PYTHONPATH=/home/ubuntu/real-estate-search/src
 [Install]
 WantedBy=multi-user.target
 ```
+
+> **⚠️ 참고**: 네이버 부동산은 클라우드 서버 IP를 차단하므로, 크롤러(Worker/Scheduler)는 **로컬 Windows PC**에서 실행합니다.
+> - Ubuntu: `run_web_only.py` → 웹서버만 실행
+> - Windows: `scripts/start_crawler.bat` → 크롤러만 실행 (클라우드 DB에 직접 저장)
 
 #### 서비스 등록 및 구동:
 ```bash
