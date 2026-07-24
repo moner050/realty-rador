@@ -49,13 +49,17 @@ def main():
             p_scheduler = subprocess.Popen(cmd_scheduler, env=dict(os.environ, PYTHONPATH="src"))
         procs.append(p_scheduler)
 
-        # 3. FastAPI Web Server 실행 (메인 스레드 대기)
-        print("3. Starting FastAPI Web Server (http://127.0.0.1:8000)...")
+        # 3. FastAPI Web Server 실행 (환경 변수 또는 기본값 적용)
+        host = os.getenv("HOST") or os.getenv("APP_HOST") or "127.0.0.1"
+        port = int(os.getenv("PORT") or os.getenv("APP_PORT") or "8000")
+        is_reload = os.getenv("APP_ENV", "local").lower() == "local"
+
+        print(f"3. Starting FastAPI Web Server (http://{host}:{port})...")
         uvicorn.run(
             "realty_radar.web.main:app",
-            host="127.0.0.1",
-            port=8000,
-            reload=True,
+            host=host,
+            port=port,
+            reload=is_reload,
         )
 
     except (KeyboardInterrupt, SystemExit):
