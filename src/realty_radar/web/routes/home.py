@@ -11,6 +11,7 @@ from realty_radar.constants import MortgageStatus, TransactionType
 from realty_radar.domain.listing.filters import ListingSearchFilter
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.session import get_db
+from realty_radar.web.auth import is_authenticated
 from realty_radar.web.jinja_filters import register_jinja_filters
 from realty_radar.web.routes.settings import session_user_profile
 
@@ -171,6 +172,7 @@ def index(
             "total_pages": (result.total_count + result.page_size - 1) // result.page_size if result.page_size else 1,
             "filters": filters,
             "applicant": session_user_profile,
+            "is_authenticated": is_authenticated(request),
         },
     )
 
@@ -198,5 +200,6 @@ def search_listings(
             "total_pages": (result.total_count + result.page_size - 1) // result.page_size if result.page_size else 1,
             "filters": filters,
             "applicant": session_user_profile,
+            "is_authenticated": is_authenticated(request),
         },
     )

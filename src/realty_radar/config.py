@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     public_data_api_key: str | None = Field(default=None, validation_alias="PUBLIC_DATA_API_KEY")
 
+    admin_username: str = Field(default="admin", validation_alias="ADMIN_USERNAME")
+    admin_password: str = Field(default="admin1234", validation_alias="ADMIN_PASSWORD")
+    secret_key: str = Field(default="realty-radar-secret-key-2026", validation_alias="SECRET_KEY")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

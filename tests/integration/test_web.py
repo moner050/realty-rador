@@ -15,6 +15,7 @@ from realty_radar.infrastructure.database.models import (
     ListingSnapshot,
 )
 from realty_radar.infrastructure.database.session import get_db
+from realty_radar.web.auth import SESSION_COOKIE_NAME, create_session_token
 from realty_radar.web.main import app
 
 
@@ -40,6 +41,7 @@ def client_fixture():
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
+        test_client.cookies.set(SESSION_COOKIE_NAME, create_session_token("admin"))
         yield test_client
     app.dependency_overrides.clear()
 

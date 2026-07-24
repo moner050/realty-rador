@@ -10,6 +10,7 @@ from realty_radar.constants import TransactionType
 from realty_radar.domain.listing.filters import ListingSearchFilter
 from realty_radar.infrastructure.cache.redis_client import redis_cache
 from realty_radar.infrastructure.database.session import SessionFactory
+from realty_radar.web.routes.auth import router as auth_router
 from realty_radar.web.routes.crawl_jobs import router as crawl_jobs_router
 from realty_radar.web.routes.home import _enrich_listings_with_loans, router as home_router
 from realty_radar.web.routes.settings import router as settings_router
@@ -40,6 +41,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # 라우터 등록
 app.include_router(home_router)
+app.include_router(auth_router)
 app.include_router(crawl_jobs_router)
 app.include_router(settings_router)
 

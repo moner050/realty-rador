@@ -13,11 +13,12 @@ from realty_radar.application.crawl_pipeline_service import CrawlPipelineService
 from realty_radar.constants import CrawlJobStatus, CrawlJobType
 from realty_radar.infrastructure.database.models import CrawlJob
 from realty_radar.infrastructure.database.session import get_db, SessionFactory
+from realty_radar.web.auth import is_authenticated, require_authentication
 from realty_radar.web.jinja_filters import register_jinja_filters
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["jobs"])
+router = APIRouter(tags=["jobs"], dependencies=[Depends(require_authentication)])
 templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
 
@@ -79,6 +80,7 @@ def get_jobs_dashboard(
             "running_count": summary["running_jobs"],
             "success_count": summary["completed_jobs"],
             "failed_count": summary["failed_jobs"],
+            "is_authenticated": True,
         },
     )
 

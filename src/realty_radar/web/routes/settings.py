@@ -1,13 +1,14 @@
 import re
 from typing import Annotated
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from realty_radar.domain.loan.entities import ApplicantProfile, PromissoryNoteEntry
+from realty_radar.web.auth import require_authentication
 from realty_radar.web.jinja_filters import register_jinja_filters
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(prefix="/settings", tags=["settings"], dependencies=[Depends(require_authentication)])
 templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
 
@@ -21,7 +22,7 @@ def get_settings(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="settings/index.html",
-        context={"profile": session_user_profile},
+        context={"profile": session_user_profile, "is_authenticated": True},
     )
 
 
@@ -72,5 +73,6 @@ def update_settings(
         context={
             "profile": session_user_profile,
             "success_message": "개인 자격 조건이 성공적으로 저장되었습니다.",
+            "is_authenticated": True,
         },
     )
