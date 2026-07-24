@@ -88,19 +88,32 @@ class NaverLandScraperClient:
 
                 self._session_page.on("request", on_request)
 
-                try:
-                    await self._session_page.goto(
-                        f"{NEW_LAND_BASE}/complexes/1001",
-                        wait_until="domcontentloaded",
-                        timeout=15000,
-                    )
-                except Exception as goto_err:
-                    logger.warning("페이지 진입 중 경고(수집 계속 진행): %s", goto_err)
+                # 토큰 캡처 최대 3회 재시도
+                for attempt in range(3):
+                    try:
+                        await self._session_page.goto(
+                            f"{NEW_LAND_BASE}/complexes/1001",
+                            wait_until="domcontentloaded",
+                            timeout=60000,
+                        )
+                    except Exception as goto_err:
+                        logger.warning("페이지 진입 시도 %d/3 경고: %s", attempt + 1, goto_err)
 
-                await asyncio.sleep(1.0)
+                    await asyncio.sleep(3.0)
+
+                    if self._auth_token:
+                        break
+
+                    if attempt < 2:
+                        logger.info("토큰 미캡처, 재시도 %d/3...", attempt + 2)
+                        try:
+                            await self._session_page.reload(wait_until="domcontentloaded", timeout=30000)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(2.0)
 
                 if not self._auth_token:
-                    logger.warning("메인 페이지 접속 시 Authorization 토큰 캡처 미완료 (기본 토큰 대기)")
+                    logger.warning("3회 시도 후에도 Authorization 토큰 캡처 실패 (토큰 없이 진행)")
 
                 self._initialized = True
                 logger.info("Playwright 메인 브라우저 및 Bearer Authorization 토큰 세션 완료")
@@ -116,68 +129,86 @@ class NaverLandScraperClient:
         return self._main_context
 
     async def _fetch_json(self, api_url: str, timeout_sec: float = 10.0) -> dict | list | None:
-        """메인 세션 페이지에서 direct fetch() 호출."""
-        await self._ensure_browser()
-        try:
-            await self.rate_limiter.acquire()
+        """메인 세션 페이지에서 direct fetch() 호출 (컨텍스트 파괴 시 자동 복구)."""
+        for retry in range(2):
+            await self._ensure_browser()
             try:
-                token = self._auth_token or ""
-                js_code = f"""
-                    async () => {{
-                        try {{
-                            const headers = {{}};
-                            if ("{token}") headers["Authorization"] = "{token}";
-                            const r = await fetch("{api_url}", {{ headers }});
-                            if (!r.ok) return null;
-                            return await r.json();
-                        }} catch(e) {{
-                            return null;
-                        }}
-                    }}
-                """
-                result = await self._session_page.evaluate(js_code)
-                return result
-            finally:
-                self.rate_limiter.release()
-        except Exception as e:
-            logger.warning("API GET fetch 실패 (%s): %s", api_url[:80], e)
-            return None
-
-    async def _fetch_json_batch(self, api_urls: list[str]) -> list[dict | list | None]:
-        """Promise.all 다중 fetch: 1회 evaluate 호출로 N개 API 동시 요청 (오버헤드 1/N)."""
-        if not api_urls:
-            return []
-        await self._ensure_browser()
-        try:
-            await self.rate_limiter.acquire()
-            try:
-                token = self._auth_token or ""
-                urls_json = json.dumps(api_urls)
-                js_code = f"""
-                    async () => {{
-                        const urls = {urls_json};
-                        const token = "{token}";
-                        const results = await Promise.all(urls.map(async (url) => {{
+                await self.rate_limiter.acquire()
+                try:
+                    token = self._auth_token or ""
+                    js_code = f"""
+                        async () => {{
                             try {{
                                 const headers = {{}};
-                                if (token) headers["Authorization"] = token;
-                                const r = await fetch(url, {{ headers }});
+                                if ("{token}") headers["Authorization"] = "{token}";
+                                const r = await fetch("{api_url}", {{ headers }});
                                 if (!r.ok) return null;
                                 return await r.json();
                             }} catch(e) {{
                                 return null;
                             }}
-                        }}));
-                        return results;
-                    }}
-                """
-                result = await self._session_page.evaluate(js_code)
-                return result if result else [None] * len(api_urls)
-            finally:
-                self.rate_limiter.release()
-        except Exception as e:
-            logger.warning("Promise.all 배치 fetch 실패 (%d건): %s", len(api_urls), e)
-            return [None] * len(api_urls)
+                        }}
+                    """
+                    result = await self._session_page.evaluate(js_code)
+                    return result
+                finally:
+                    self.rate_limiter.release()
+            except Exception as e:
+                err_msg = str(e)
+                if "context was destroyed" in err_msg or "closed" in err_msg.lower():
+                    logger.warning("페이지 컨텍스트 파괴 감지, 브라우저 재초기화 시도 (%d/2)", retry + 1)
+                    self._initialized = False
+                    self._auth_token = None
+                    continue
+                logger.warning("API GET fetch 실패 (%s): %s", api_url[:80], e)
+                return None
+        logger.warning("API GET fetch 최종 실패 (%s): 재시도 횟수 초과", api_url[:80])
+        return None
+
+    async def _fetch_json_batch(self, api_urls: list[str]) -> list[dict | list | None]:
+        """Promise.all 다중 fetch: 1회 evaluate 호출로 N개 API 동시 요청 (오버헤드 1/N)."""
+        if not api_urls:
+            return []
+        for retry in range(2):
+            await self._ensure_browser()
+            try:
+                await self.rate_limiter.acquire()
+                try:
+                    token = self._auth_token or ""
+                    urls_json = json.dumps(api_urls)
+                    js_code = f"""
+                        async () => {{
+                            const urls = {urls_json};
+                            const token = "{token}";
+                            const results = await Promise.all(urls.map(async (url) => {{
+                                try {{
+                                    const headers = {{}};
+                                    if (token) headers["Authorization"] = token;
+                                    const r = await fetch(url, {{ headers }});
+                                    if (!r.ok) return null;
+                                    return await r.json();
+                                }} catch(e) {{
+                                    return null;
+                                }}
+                            }}));
+                            return results;
+                        }}
+                    """
+                    result = await self._session_page.evaluate(js_code)
+                    return result if result else [None] * len(api_urls)
+                finally:
+                    self.rate_limiter.release()
+            except Exception as e:
+                err_msg = str(e)
+                if "context was destroyed" in err_msg or "closed" in err_msg.lower():
+                    logger.warning("배치 fetch 컨텍스트 파괴 감지, 브라우저 재초기화 시도 (%d/2)", retry + 1)
+                    self._initialized = False
+                    self._auth_token = None
+                    continue
+                logger.warning("Promise.all 배치 fetch 실패 (%d건): %s", len(api_urls), e)
+                return [None] * len(api_urls)
+        logger.warning("Promise.all 배치 fetch 최종 실패 (%d건): 재시도 횟수 초과", len(api_urls))
+        return [None] * len(api_urls)
 
     async def get_dong_list(self, sigungu_cortarno: str) -> list[dict]:
         """구/시 cortarNo에 해당하는 하위 동 목록 조회."""
