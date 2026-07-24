@@ -26,70 +26,125 @@
 
 ---
 
-## ⚙️ 상세 실행 방법 (Step-by-Step)
+## ⚙️ OS별 초기 세팅 & 설정 & 실행 가이드 (Step-by-Step)
 
-### 1. 환경 변수 설정 (`.env`)
+---
 
-프로젝트 루트 디렉토리에 `.env` 파일을 작성합니다 (`.env.example` 참고).
+### 🪟 [1] Windows (윈도우 환경)
 
+#### Step 1. 가상환경 생성 및 활성화
+```cmd
+# 1) 가상환경 생성 (Python 3.10+)
+python -m venv venv
+
+# 2) 가상환경 활성화 (CMD / PowerShell)
+.\venv\Scripts\activate
+```
+
+#### Step 2. 환경 변수 파일 (`.env`) 복사 및 설정
+```cmd
+# 1) .env.example 복사
+copy .env.example .env
+```
+> `.env` 파일을 열어 MySQL DB 접속 정보 및 관리자 계정 정보를 설정합니다:
 ```ini
 APP_ENV=local
-SECRET_KEY=your-super-secret-key-change-in-production
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin1234
+SECRET_KEY=realty-radar-secret-key-2026
 
-# 사용자 클라우드 MySQL DB 접속 정보
-MYSQL_HOST=localhost
+MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
-MYSQL_USER=your_db_user
-MYSQL_PASSWORD=your_db_password
+MYSQL_USER=realty_app
+MYSQL_PASSWORD=realty_secret_pass
 MYSQL_DATABASE=realty_radar
 ```
 
----
-
-### 2. 패키지 설치 및 마이그레이션 실행
-
-```bash
-# 1) 패키지 설치 (Editable 모드)
+#### Step 3. 패키지 설치 및 Playwright 브라우저 설치
+```cmd
+# 1) pip 최신화 및 패키지 설치 (Editable 모드)
+python -m pip install --upgrade pip
 python -m pip install -e .
 
-# 2) DB 마이그레이션 (테이블 스키마 최신화)
+# 2) Playwright 브라우저 다운로드
+playwright install
+```
+
+#### Step 4. 데이터베이스 마이그레이션 (테이블 생성)
+```cmd
 python -m alembic upgrade head
 ```
 
----
-
-### 3. OS별 멀티 프로세스 실행 방법 (추천)
-
-제공된 오케스트레이터 스크립트를 구동하여 **Web Server, Worker, Scheduler** 3개 프로세스를 한번에 구동합니다.
-
-#### 🪟 Windows (윈도우 CMD / PowerShell):
-
+#### Step 5. 원클릭 시스템 구동
 ```cmd
 .\scripts\start.bat
 ```
+> **종초/종료**: `scripts\stop.bat` 실행 또는 콘솔에서 `Ctrl + C` 입력.
 
-> **Windows 프로세스 종료**: `scripts\stop.bat` 실행 또는 콘솔에서 `Ctrl + C` 입력.
+---
 
-#### 🐧 Ubuntu / Linux (우분투 / 리눅스):
+### 🐧 [2] Ubuntu / Linux (우분투 / 리눅스 환경)
 
+#### Step 1. 사전 필수 패키지 설치
 ```bash
-# 1) 최초 1회 Playwright 브라우저 OS 디펜던시 설치
-playwright install --with-deps
+# 시스템 라이브러리 및 파이썬 venv 설치
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv git
+```
 
-# 2) 실행 권한 부여 (최초 1회)
+#### Step 2. 가상환경 생성 및 활성화
+```bash
+# 1) 가상환경 생성
+python3 -m venv venv
+
+# 2) 가상환경 활성화
+source venv/bin/activate
+```
+
+#### Step 3. 환경 변수 파일 (`.env`) 복사 및 설정
+```bash
+# 1) .env.example 복사
+cp .env.example .env
+
+# 2) .env 편집 (DB 접속 정보 및 비밀번호 설정)
+nano .env
+```
+
+#### Step 4. 패키지 설치 및 Playwright OS 디펜던시 설치 (필수)
+```bash
+# 1) pip 최신화 및 패키지 설치
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
+
+# 2) Ubuntu 전용 Playwright OS 시스템 라이브러리 패키지 일괄 설치 (필수)
+playwright install --with-deps
+```
+
+#### Step 5. 데이터베이스 마이그레이션 (테이블 생성)
+```bash
+python3 -m alembic upgrade head
+```
+
+#### Step 6. 원클릭 시스템 구동
+```bash
+# 1) 실행 권한 부여 (최초 1회)
 chmod +x scripts/start.sh
 
-# 3) 시스템 구동
+# 2) 시스템 구동
 ./scripts/start.sh
 # 또는 python3 scripts/run.py
 ```
+> **종료**: 콘솔에서 `Ctrl + C` 입력.
 
-> **웹 접속 포트 & 로그인 안내**:
-> - 메인 웹 인터페이스: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-> - 관리자 로그인: [http://127.0.0.1:8000/login](http://127.0.0.1:8000/login) (기본 계정: `admin` / `admin1234`)
-> - 통합 매물 검색: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-> - 수집 현황 모니터링 (로그인 권한): [http://127.0.0.1:8000/jobs](http://127.0.0.1:8000/jobs)
-> - 개인 조건 설정 (로그인 권한): [http://127.0.0.1:8000/settings](http://127.0.0.1:8000/settings)
+---
+
+### 🌐 웹 접속 및 관리자 포트 안내
+
+> - **메인 웹 인터페이스**: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+> - **관리자 로그인**: [http://127.0.0.1:8000/login](http://127.0.0.1:8000/login) (기본 계정: `admin` / `admin1234`)
+> - **통합 매물 검색**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+> - **수집 현황 모니터링 (로그인 필수)**: [http://127.0.0.1:8000/jobs](http://127.0.0.1:8000/jobs)
+> - **개인 조건 설정 (로그인 필수)**: [http://127.0.0.1:8000/settings](http://127.0.0.1:8000/settings)
 
 ---
 
