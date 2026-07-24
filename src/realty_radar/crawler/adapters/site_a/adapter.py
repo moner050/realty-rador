@@ -88,29 +88,30 @@ class NaverLandScraperClient:
 
                 self._session_page.on("request", on_request)
 
-                # 토큰 캡처 최대 3회 재시도
-                for attempt in range(3):
+                # 토큰 캡처용 URL 후보 (차단 시 대체 시도)
+                token_urls = [
+                    f"{FIN_LAND_BASE}/complexes/1001",
+                    f"{NEW_LAND_BASE}/complexes/1001",
+                    f"{FIN_LAND_BASE}/",
+                ]
+
+                # 토큰 캡처 최대 시도
+                for attempt, url in enumerate(token_urls):
                     try:
+                        logger.info("토큰 캡처 시도 %d/%d: %s", attempt + 1, len(token_urls), url)
                         await self._session_page.goto(
-                            f"{NEW_LAND_BASE}/complexes/1001",
+                            url,
                             wait_until="domcontentloaded",
-                            timeout=60000,
+                            timeout=30000,
                         )
                     except Exception as goto_err:
-                        logger.warning("페이지 진입 시도 %d/3 경고: %s", attempt + 1, goto_err)
+                        logger.warning("페이지 진입 시도 %d/%d 경고: %s", attempt + 1, len(token_urls), goto_err)
 
                     await asyncio.sleep(3.0)
 
                     if self._auth_token:
+                        logger.info("토큰 캡처 성공 (시도 %d/%d)", attempt + 1, len(token_urls))
                         break
-
-                    if attempt < 2:
-                        logger.info("토큰 미캡처, 재시도 %d/3...", attempt + 2)
-                        try:
-                            await self._session_page.reload(wait_until="domcontentloaded", timeout=30000)
-                        except Exception:
-                            pass
-                        await asyncio.sleep(2.0)
 
                 if not self._auth_token:
                     logger.warning("3회 시도 후에도 Authorization 토큰 캡처 실패 (토큰 없이 진행)")
