@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class LoanEligibilityStatus(str, Enum):
@@ -18,6 +19,13 @@ class PromissoryNoteEntry:
 
     name: str = ""
     amount: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "amount": self.amount}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PromissoryNoteEntry":
+        return cls(name=data.get("name", ""), amount=data.get("amount", 0))
 
 
 @dataclass
@@ -51,6 +59,41 @@ class ApplicantProfile:
     def total_capital(self) -> int:
         """순자산 및 차용증 작성 자금을 합산한 총 가용 자본금."""
         return self.net_assets + self.promissory_note_total
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON 직렬화용 Dict 변환."""
+        return {
+            "is_homeless": self.is_homeless,
+            "annual_income": self.annual_income,
+            "net_assets": self.net_assets,
+            "is_newlywed": self.is_newlywed,
+            "is_first_home_buyer": self.is_first_home_buyer,
+            "child_count": self.child_count,
+            "has_newborn": self.has_newborn,
+            "use_promissory_note": self.use_promissory_note,
+            "promissory_note_person_count": self.promissory_note_person_count,
+            "promissory_note_amount": self.promissory_note_amount,
+            "promissory_notes": [e.to_dict() for e in self.promissory_notes],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ApplicantProfile":
+        """Dict 데이터로부터 ApplicantProfile 객체 복원."""
+        notes_data = data.get("promissory_notes", [])
+        notes = [PromissoryNoteEntry.from_dict(n) for n in notes_data if isinstance(n, dict)]
+        return cls(
+            is_homeless=data.get("is_homeless", True),
+            annual_income=data.get("annual_income", 60_000_000),
+            net_assets=data.get("net_assets", 300_000_000),
+            is_newlywed=data.get("is_newlywed", False),
+            is_first_home_buyer=data.get("is_first_home_buyer", False),
+            child_count=data.get("child_count", 0),
+            has_newborn=data.get("has_newborn", False),
+            use_promissory_note=data.get("use_promissory_note", False),
+            promissory_note_person_count=data.get("promissory_note_person_count", 0),
+            promissory_note_amount=data.get("promissory_note_amount", 0),
+            promissory_notes=notes,
+        )
 
 
 @dataclass

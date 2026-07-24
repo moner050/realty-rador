@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from sqlalchemy import func, or_, select, and_
-from sqlalchemy.orm import Session, contains_eager
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from realty_radar.application.complex_match_service import parse_address_components
 from realty_radar.constants import MortgageStatus, SortBy, TransactionType
@@ -266,24 +266,109 @@ class ListingSearchService:
                 )
             )
 
-        # 2. 지역 선택 검색 (sido, sigungu 인덱스 B-Tree Equal + address_raw 호환 fallback)
-        if effective_region_val and effective_region_val.strip() and effective_region_val.strip() != "전체":
+        # 2. 세분화 지역 검색 (sido: 시/도, city: 시, county: 군, district: 구)
+        sido_param = getattr(params, "sido", None)
+        city_param = getattr(params, "city", None)
+        county_param = getattr(params, "county", None)
+        district_param = getattr(params, "district", None)
+
+        # 개별 파라미터가 없고 effective_region_val만 있는 경우 자동 분단 파싱
+        if not any([sido_param, city_param, county_param, district_param]) and effective_region_val and effective_region_val.strip() and effective_region_val.strip() != "전체":
             raw_region = effective_region_val.strip()
             tokens = raw_region.split()
-            sido_token = tokens[0]
-            sigungu_token = tokens[1] if len(tokens) >= 2 else None
+            for token in tokens:
+                if token.endswith(("시", "도")) and any(s in token for s in ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]):
+                    sido_param = token
+                elif token.endswith("군"):
+                    county_param = token
+                elif token.endswith("구"):
+                    district_param = token
+                elif token.endswith("시"):
+                    city_param = token
+                elif not sido_param and len(tokens) == 1:
+                    # 단일 키워드인 경우(예: '강남구' -> 구, '과천시' -> 시, '여의도' -> 구/동 fallback)
+                    if "구" in token:
+                        district_param = token
+                    elif "군" in token:
+                        county_param = token
+                    elif "시" in token:
+                        city_param = token
+                    else:
+                        district_param = token
 
-            if "서울" in sido_token:
-                stmt = stmt.where(or_(Listing.sido == "서울특별시", Listing.address_raw.like("서울 %"), Listing.address_raw.like("서울특별시 %")))
-            elif "경기" in sido_token:
-                stmt = stmt.where(or_(Listing.sido == "경기도", Listing.address_raw.like("경기 %"), Listing.address_raw.like("경기도 %")))
-            elif "인천" in sido_token:
-                stmt = stmt.where(or_(Listing.sido == "인천광역시", Listing.address_raw.like("인천 %"), Listing.address_raw.like("인천광역시 %")))
+        has_joined_complex = False
+
+        # 시/도 (sido) 필터링 - 타 지역 매물 우회 침투 원천 차단 (Null-safe 처리)
+        if sido_param and sido_param.strip():
+            s_tok = sido_param.strip()
+            if "서울" in s_tok:
+                stmt = stmt.where(
+                    and_(
+                        or_(
+                            Listing.sido == "서울특별시",
+                            Listing.address_raw.like("%서울%"),
+                            Listing.address_raw.like("%서울특별시%"),
+                        ),
+                        func.coalesce(Listing.sido, "") != "경기도",
+                        func.coalesce(Listing.sido, "") != "인천광역시",
+                        ~Listing.address_raw.like("경기 %"),
+                        ~Listing.address_raw.like("경기도 %"),
+                        ~Listing.address_raw.like("인천 %"),
+                    )
+                )
+            elif "경기" in s_tok:
+                stmt = stmt.where(
+                    and_(
+                        or_(
+                            Listing.sido == "경기도",
+                            Listing.address_raw.like("%경기%"),
+                            Listing.address_raw.like("%경기도%"),
+                        ),
+                        func.coalesce(Listing.sido, "") != "서울특별시",
+                        func.coalesce(Listing.sido, "") != "인천광역시",
+                        ~Listing.address_raw.like("서울 %"),
+                        ~Listing.address_raw.like("서울특별시 %"),
+                        ~Listing.address_raw.like("인천 %"),
+                    )
+                )
+            elif "인천" in s_tok:
+                stmt = stmt.where(
+                    and_(
+                        or_(
+                            Listing.sido == "인천광역시",
+                            Listing.address_raw.like("%인천%"),
+                            Listing.address_raw.like("%인천광역시%"),
+                        ),
+                        func.coalesce(Listing.sido, "") != "서울특별시",
+                        func.coalesce(Listing.sido, "") != "경기도",
+                        ~Listing.address_raw.like("서울 %"),
+                        ~Listing.address_raw.like("서울특별시 %"),
+                        ~Listing.address_raw.like("경기 %"),
+                        ~Listing.address_raw.like("경기도 %"),
+                    )
+                )
             else:
-                stmt = stmt.where(or_(Listing.sido == sido_token, Listing.address_raw.like(f"{sido_token}%")))
+                stmt = stmt.where(
+                    or_(
+                        Listing.sido == s_tok,
+                        Listing.address_raw.like(f"%{s_tok}%"),
+                    )
+                )
 
-            if sigungu_token:
-                stmt = stmt.where(or_(Listing.sigungu.ilike(f"%{sigungu_token}%"), Listing.address_raw.ilike(f"%{sigungu_token}%")))
+        # 시 (city) 필터링 (독립 검색)
+        if city_param and city_param.strip():
+            c_tok = city_param.strip()
+            stmt = stmt.where(or_(Listing.sigungu.ilike(f"%{c_tok}%"), Listing.address_raw.ilike(f"%{c_tok}%")))
+
+        # 군 (county) 필터링 (독립 검색)
+        if county_param and county_param.strip():
+            co_tok = county_param.strip()
+            stmt = stmt.where(or_(Listing.sigungu.ilike(f"%{co_tok}%"), Listing.address_raw.ilike(f"%{co_tok}%")))
+
+        # 구 (district) 필터링 (독립 검색)
+        if district_param and district_param.strip():
+            d_tok = district_param.strip()
+            stmt = stmt.where(or_(Listing.sigungu.ilike(f"%{d_tok}%"), Listing.address_raw.ilike(f"%{d_tok}%")))
 
         # 3. 거래 유형 필터
         if params.transaction_type:
@@ -313,9 +398,11 @@ class ListingSearchService:
         if params.max_exclusive_area is not None:
             stmt = stmt.where(Listing.exclusive_area <= params.max_exclusive_area)
 
-        # 6. 아파트 단지 조건 필터 (Listing 정제데이터 1순위 + ApartmentComplex fallback)
+        # 6. 아파트 단지 조건 필터 (Listing 비정규화 컬럼 1순위 + ApartmentComplex fallback)
         if params.min_construction_year or params.min_households:
-            stmt = stmt.outerjoin(Listing.complex)
+            if not has_joined_complex:
+                stmt = stmt.outerjoin(Listing.complex)
+                has_joined_complex = True
             if params.min_construction_year:
                 stmt = stmt.where(func.coalesce(Listing.construction_year, ApartmentComplex.construction_year) >= params.min_construction_year)
             if params.min_households:
@@ -336,16 +423,32 @@ class ListingSearchService:
         if src_code:
             stmt = stmt.where(CrawlSource.code == src_code)
 
-        # 9. 정렬 옵션 (기본값: price_asc 가격 낮은순)
-        if sort_by_val == SortBy.PRICE_DESC or sort_by_val == "price_desc":
+        # 9. 정렬 옵션 (가격/최신/면적/세대수 정밀 정렬)
+        is_households_sort = sort_by_val in [SortBy.HOUSEHOLDS_DESC, "households_desc", SortBy.HOUSEHOLDS_ASC, "households_asc"]
+        if is_households_sort:
+            if sort_by_val == SortBy.HOUSEHOLDS_DESC or sort_by_val == "households_desc":
+                stmt = stmt.order_by(Listing.total_households.desc())
+            else:
+                stmt = stmt.order_by(Listing.total_households.is_(None).asc(), Listing.total_households.asc())
+        elif sort_by_val == SortBy.PRICE_DESC or sort_by_val == "price_desc":
             stmt = stmt.order_by(Listing.price_deposit.desc())
         elif sort_by_val == SortBy.RECENT or sort_by_val == "recent":
             stmt = stmt.order_by(Listing.first_seen_at.desc())
         elif sort_by_val == SortBy.AREA_DESC or sort_by_val == "area_desc":
             stmt = stmt.order_by(Listing.exclusive_area.desc())
+        elif sort_by_val == SortBy.AREA_ASC or sort_by_val == "area_asc":
+            stmt = stmt.order_by(Listing.exclusive_area.is_(None).asc(), Listing.exclusive_area.asc())
         else:
             # price_asc (가격 낮은순 기본)
             stmt = stmt.order_by(Listing.price_deposit.asc())
+
+        # 지연 로딩 에러 원천 차단 (has_joined_complex 상태에 따라 contains_eager / joinedload 적용)
+        if has_joined_complex:
+            stmt = stmt.options(contains_eager(Listing.complex))
+        else:
+            stmt = stmt.options(joinedload(Listing.complex))
+
+        stmt = stmt.options(joinedload(Listing.source))
 
         # 동일 아파트 단지별 묶어서 보기 모드인 경우 (필터링된 전체 매물 대상 전역 묶음 & 단지 수 기준 페이징)
         if getattr(params, "group_by_complex", False):
@@ -425,12 +528,18 @@ class ListingSearchService:
                 return 0.0
 
             sort_kind = getattr(params, "sort_by", SortBy.RECENT)
-            if sort_kind == SortBy.PRICE_ASC:
+            if sort_kind == SortBy.PRICE_ASC or sort_kind == "price_asc":
                 all_grouped_items.sort(key=lambda g: g.min_price)
-            elif sort_kind == SortBy.PRICE_DESC:
+            elif sort_kind == SortBy.PRICE_DESC or sort_kind == "price_desc":
                 all_grouped_items.sort(key=lambda g: g.max_price, reverse=True)
-            elif sort_kind == SortBy.AREA_DESC:
+            elif sort_kind == SortBy.AREA_DESC or sort_kind == "area_desc":
                 all_grouped_items.sort(key=lambda g: max([_get_area(l) for l in g.listings] or [0.0]), reverse=True)
+            elif sort_kind == SortBy.AREA_ASC or sort_kind == "area_asc":
+                all_grouped_items.sort(key=lambda g: min([_get_area(l) for l in g.listings if _get_area(l) > 0] or [999999.0]))
+            elif sort_kind == SortBy.HOUSEHOLDS_DESC or sort_kind == "households_desc":
+                all_grouped_items.sort(key=lambda g: g.total_households or 0, reverse=True)
+            elif sort_kind == SortBy.HOUSEHOLDS_ASC or sort_kind == "households_asc":
+                all_grouped_items.sort(key=lambda g: g.total_households or 999999)
             else:  # RECENT
                 all_grouped_items.sort(key=lambda g: max([_get_dt(l) for l in g.listings] or [datetime.min]), reverse=True)
 
@@ -452,7 +561,7 @@ class ListingSearchService:
                 is_grouped=True,
             )
 
-        # 일반 개별 매물 모드 DB Direct 조회 (offset, limit)
+        # 일반 개별 매물 모드 - 카테시안 곱 경고 방지 서브쿼리 COUNT & 페이징 슬라이싱
         count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total_count = self.db.scalar(count_stmt) or 0
 

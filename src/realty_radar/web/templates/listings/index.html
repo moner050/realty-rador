@@ -22,43 +22,52 @@
         <form id="search-filter-form" 
               hx-get="/listings/search" 
               hx-target="#listings-container" 
+              hx-indicator="#search-loading-indicator"
+              hx-push-url="true"
               hx-trigger="change delay:300ms, submit"
               class="space-y-6">
             <input type="hidden" id="filter-page" name="page" value="{{ filters.page if filters else 1 }}">
             <input type="hidden" id="filter-sort-by-input" name="sort_by" value="{{ filters.sort_by if filters and filters.sort_by else 'price_asc' }}">
             
-            <!-- 1. 지역 선택기 (시/도 및 시/군/구 2차 연동 셀렉트 + 퀵 칩) -->
-            <div class="space-y-3 bg-slate-900/80 border border-slate-700/70 p-4 rounded-xl">
+            <!-- 1. 대한민국 행정구역 표준 주소 표기법 계단식 선택기 -->
+            <div class="flex flex-col space-y-2 border-b border-slate-700/60 pb-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center space-x-1">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            </svg>
-                            <span>지역 선택</span>
-                        </span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">지역 선택</span>
                         
-                        <!-- 시/도 선택 -->
-                        <select id="sido-select" onchange="onSidoChange(this.value)" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold">
+                        <!-- 1단계: 시/도 셀렉트 -->
+                        <select id="select-sido" onchange="onCascadingSidoChange()" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold cursor-pointer shadow-sm">
                             <option value="">시/도 전체</option>
-                            <option value="서울">서울특별시</option>
-                            <option value="경기">경기도</option>
-                            <option value="인천">인천광역시</option>
                         </select>
 
-                        <!-- 시/군/구 2차 선택 -->
-                        <select id="sigungu-select" onchange="onSigunguChange(this.value)" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold">
+                        <!-- 2단계: 시/군/구 셀렉트 (상위 선택 시 동적 생성) -->
+                        <select id="select-sigun" onchange="onCascadingSigunChange()" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold cursor-pointer shadow-sm">
                             <option value="">시/군/구 전체</option>
                         </select>
 
-                        <!-- 실제 전달 매개변수 -->
+                        <!-- 3단계: 세부 구 셀렉트 (대도시 시 선택 시 동적 생성) -->
+                        <select id="select-subdistrict" onchange="onCascadingSubdistrictChange()" class="hidden bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold cursor-pointer shadow-sm">
+                            <option value="">세부 구 전체</option>
+                        </select>
+
+                        <!-- 백엔드 서버 폼 전달용 매개변수 (숨김 처리) -->
+                        <input type="hidden" id="filter-sido" name="sido" value="{{ filters.sido or '' }}">
+                        <input type="hidden" id="filter-city" name="city" value="{{ filters.city or '' }}">
+                        <input type="hidden" id="filter-county" name="county" value="{{ filters.county or '' }}">
+                        <input type="hidden" id="filter-district" name="district" value="{{ filters.district or '' }}">
                         <input type="hidden" id="filter-region-name" name="region_name" value="{{ filters.region_name or '' }}">
                     </div>
 
-                    <!-- 선택된 지역 뱃지 -->
+                    <!-- 선택된 세분화 지역 뱃지 -->
                     <div class="text-xs font-semibold text-slate-300">
-                        선택 지역: <span id="current-region-text" class="text-indigo-400 font-bold">{{ filters.region_name or '전체' }}</span>
+                        선택 지역: <span id="current-region-text" class="text-indigo-400 font-bold">
+                            {% set region_parts = [] %}
+                            {% if filters.sido %}{% set _ = region_parts.append(filters.sido) %}{% endif %}
+                            {% if filters.city %}{% set _ = region_parts.append(filters.city) %}{% endif %}
+                            {% if filters.county %}{% set _ = region_parts.append(filters.county) %}{% endif %}
+                            {% if filters.district %}{% set _ = region_parts.append(filters.district) %}{% endif %}
+                            {{ region_parts | join(' ') if region_parts else (filters.region_name or '전체') }}
+                        </span>
                     </div>
                 </div>
 
@@ -68,12 +77,12 @@
                     <button type="button" onclick="setQuickRegion('')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">전체</button>
                     <button type="button" onclick="setQuickRegion('강남구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">강남구</button>
                     <button type="button" onclick="setQuickRegion('서초구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">서초구</button>
-                    <button type="button" onclick="setQuickRegion('송파구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">송파구</button>
-                    <button type="button" onclick="setQuickRegion('여의도')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">여의도</button>
                     <button type="button" onclick="setQuickRegion('마포구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">마포구</button>
-                    <button type="button" onclick="setQuickRegion('분당구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">분당구</button>
-                    <button type="button" onclick="setQuickRegion('과천시')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">과천시</button>
+                    <button type="button" onclick="setQuickRegion('강동구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">강동구</button>
+                    <button type="button" onclick="setQuickRegion('동작구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">동작구</button>
+                    <button type="button" onclick="setQuickRegion('영등포구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">영등포구</button>
                     <button type="button" onclick="setQuickRegion('하남시')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">하남시</button>
+                    <button type="button" onclick="setQuickRegion('남양주시')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">남양주시</button>
                 </div>
             </div>
             
@@ -361,6 +370,18 @@
 
     </div>
 
+    <!-- HTMX 실시간 검색 로딩 인디케이터 마스크 -->
+    <div id="search-loading-indicator" class="htmx-indicator hidden p-6 bg-indigo-950/80 border border-indigo-500/50 rounded-2xl text-center shadow-2xl backdrop-blur space-y-3 my-4">
+        <div class="flex items-center justify-center space-x-3">
+            <svg class="animate-spin h-7 w-7 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-base font-extrabold text-white tracking-wide">조건에 맞는 매물을 실시간 검색 중입니다...</span>
+        </div>
+        <p class="text-xs text-slate-300">필터 및 조건 변경 사항에 따라 결과를 불러오고 있습니다.</p>
+    </div>
+
     <!-- 매물 목록 컨테이너 (HTMX target) -->
     <div id="listings-container">
         {% include "listings/list_partial.html" %}
@@ -368,13 +389,186 @@
 
 </div>
 
+<style>
+.htmx-indicator {
+    display: none;
+}
+.htmx-request.htmx-indicator,
+.htmx-request .htmx-indicator {
+    display: block !important;
+}
+</style>
+
 <!-- 지역 선택 & 고급필터 JS -->
 <script>
-    const sigunguMap = {
-        '서울': ['강남구', '서초구', '송파구', '영등포구', '마포구', '용산구', '성동구', '양천구', '강동구', '노원구', '도봉구', '강북구', '성북구', '동대문구', '중랑구', '광진구', '종로구', '중구', '서대문구', '은평구', '강서구', '구로구', '금천구', '관악구', '동작구'],
-        '경기': ['성남시 분당구', '과천시', '하남시', '고양시 일산동구', '용인시 수지구', '부천시', '안산시', '남양주시', '안양시 동안구', '화성시', '평택시', '의정부시', '파주시', '시흥시', '김포시', '광명시', '수원시 영통구', '군포시', '의왕시'],
-        '인천': ['연수구', '서구', '중구', '남동구', '부평구']
+    const koreaRegionData = {
+        "서울특별시": [
+            "강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", 
+            "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", 
+            "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"
+        ],
+        "경기도": {
+            "수원시": ["장안구", "권선구", "팔달구", "영통구"],
+            "성남시": ["수정구", "중원구", "분당구"],
+            "고양시": ["덕양구", "일산동구", "일산서구"],
+            "용인시": ["처인구", "기흥구", "수지구"],
+            "부천시": ["원미구", "소사구", "오정구"],
+            "안산시": ["상록구", "단원구"],
+            "안양시": ["만안구", "동안구"],
+            "남양주시": [], "화성시": [], "평택시": [], "의정부시": [], "시흥시": [], "파주시": [], 
+            "광명시": [], "김포시": [], "군포시": [], "광주시": [], "이천시": [], "양주시": [], 
+            "오산시": [], "구리시": [], "안성시": [], "포천시": [], "의왕시": [], "하남시": [], 
+            "여주시": [], "동두천시": [], "과천시": [], 
+            "양평군": [], "가평군": [], "연천군": []
+        },
+        "인천광역시": [
+            "중구", "동구", "미추홀구", "연수구", "남동구", "부평구", "계양구", "서구", "강화군", "옹진군"
+        ]
     };
+
+    function initRegionCascadingSelects() {
+        const sidoSelect = document.getElementById("select-sido");
+        if (!sidoSelect) return;
+
+        sidoSelect.innerHTML = '<option value="">시/도 전체</option>';
+        Object.keys(koreaRegionData).forEach(sido => {
+            const opt = document.createElement("option");
+            opt.value = sido;
+            opt.innerText = sido;
+            sidoSelect.appendChild(opt);
+        });
+
+        // 템플릿/서버/로컬스토리지에서 복원된 기본값 세팅
+        const curSido = document.getElementById("filter-sido").value;
+        if (curSido) {
+            sidoSelect.value = curSido;
+            onCascadingSidoChange(true);
+        }
+    }
+
+    function onCascadingSidoChange(isInit = false) {
+        const sidoVal = document.getElementById("select-sido").value;
+        const sigunSelect = document.getElementById("select-sigun");
+        const subSelect = document.getElementById("select-subdistrict");
+
+        document.getElementById("filter-sido").value = sidoVal;
+        if (!isInit) {
+            document.getElementById("filter-city").value = "";
+            document.getElementById("filter-county").value = "";
+            document.getElementById("filter-district").value = "";
+            document.getElementById("filter-page").value = 1;
+        }
+
+        sigunSelect.innerHTML = '<option value="">시/군/구 전체</option>';
+        subSelect.innerHTML = '<option value="">세부 구 전체</option>';
+        subSelect.classList.add("hidden");
+
+        if (sidoVal && koreaRegionData[sidoVal]) {
+            const items = koreaRegionData[sidoVal];
+            if (Array.isArray(items)) {
+                items.forEach(sg => {
+                    const opt = document.createElement("option");
+                    opt.value = sg;
+                    opt.innerText = sg;
+                    sigunSelect.appendChild(opt);
+                });
+            } else if (typeof items === "object") {
+                Object.keys(items).forEach(cityOrCounty => {
+                    const opt = document.createElement("option");
+                    opt.value = cityOrCounty;
+                    opt.innerText = cityOrCounty;
+                    sigunSelect.appendChild(opt);
+                });
+            }
+        }
+
+        // 복원 세팅 처리
+        const curCity = document.getElementById("filter-city").value;
+        const curCounty = document.getElementById("filter-county").value;
+        const curDist = document.getElementById("filter-district").value;
+
+        const targetSigun = curCity || curCounty || (Array.isArray(koreaRegionData[sidoVal]) ? curDist : "");
+        if (targetSigun) {
+            sigunSelect.value = targetSigun;
+            onCascadingSigunChange(true);
+        }
+
+        updateRegionSummaryText();
+        if (!isInit) triggerFormSubmit();
+    }
+
+    function onCascadingSigunChange(isInit = false) {
+        const sidoVal = document.getElementById("select-sido").value;
+        const sigunVal = document.getElementById("select-sigun").value;
+        const subSelect = document.getElementById("select-subdistrict");
+
+        if (!isInit) {
+            document.getElementById("filter-city").value = "";
+            document.getElementById("filter-county").value = "";
+            document.getElementById("filter-district").value = "";
+            document.getElementById("filter-page").value = 1;
+        }
+
+        subSelect.innerHTML = '<option value="">세부 구 전체</option>';
+        subSelect.classList.add("hidden");
+
+        if (sigunVal) {
+            if (sigunVal.endsWith("시")) {
+                document.getElementById("filter-city").value = sigunVal;
+            } else if (sigunVal.endsWith("군")) {
+                document.getElementById("filter-county").value = sigunVal;
+            } else if (sigunVal.endsWith("구")) {
+                document.getElementById("filter-district").value = sigunVal;
+            }
+
+            // 대도시 일반구가 존재하는 시인 경우 (예: 성남시, 수원시, 용인시, 고양시 등)
+            if (sidoVal && koreaRegionData[sidoVal] && !Array.isArray(koreaRegionData[sidoVal])) {
+                const subDistricts = koreaRegionData[sidoVal][sigunVal];
+                if (subDistricts && subDistricts.length > 0) {
+                    subSelect.classList.remove("hidden");
+                    subDistricts.forEach(d => {
+                        const opt = document.createElement("option");
+                        opt.value = d;
+                        opt.innerText = d;
+                        subSelect.appendChild(opt);
+                    });
+                }
+            }
+        }
+
+        const curDist = document.getElementById("filter-district").value;
+        if (curDist && !subSelect.classList.contains("hidden")) {
+            subSelect.value = curDist;
+        }
+
+        updateRegionSummaryText();
+        if (!isInit) triggerFormSubmit();
+    }
+
+    function onCascadingSubdistrictChange() {
+        const subVal = document.getElementById("select-subdistrict").value;
+        document.getElementById("filter-district").value = subVal;
+        document.getElementById("filter-page").value = 1;
+
+        updateRegionSummaryText();
+        triggerFormSubmit();
+    }
+
+    function updateRegionSummaryText() {
+        const sido = document.getElementById("filter-sido").value;
+        const city = document.getElementById("filter-city").value;
+        const county = document.getElementById("filter-county").value;
+        const district = document.getElementById("filter-district").value;
+
+        const parts = [];
+        if (sido) parts.push(sido);
+        if (city) parts.push(city);
+        if (county) parts.push(county);
+        if (district) parts.push(district);
+
+        const summaryText = parts.length > 0 ? parts.join(" ") : "전체";
+        document.getElementById("current-region-text").innerText = summaryText;
+    }
 
     function toggleAdvancedFilters() {
         const panel = document.getElementById('advanced-filter-panel');
@@ -456,48 +650,58 @@
         }
     }
 
-    function onSidoChange(sido) {
-        document.getElementById('filter-page').value = 1;
-        const sigunguSelect = document.getElementById('sigungu-select');
-        sigunguSelect.innerHTML = '<option value="">시/군/구 전체</option>';
-
-        if (sido && sigunguMap[sido]) {
-            sigunguMap[sido].forEach(sg => {
-                const opt = document.createElement('option');
-                opt.value = sg;
-                opt.innerText = sg;
-                sigunguSelect.appendChild(opt);
-            });
-        }
-        const sidoFullName = sido === '서울' ? '서울특별시' : (sido === '경기' ? '경기도' : (sido === '인천' ? '인천광역시' : sido));
-        applyRegion(sidoFullName || '');
-    }
-
-    function onSigunguChange(sigungu) {
-        document.getElementById('filter-page').value = 1;
-        const sido = document.getElementById('sido-select').value;
-        const sidoFullName = sido === '서울' ? '서울특별시' : (sido === '경기' ? '경기도' : (sido === '인천' ? '인천광역시' : sido));
-        
-        let targetRegion = '';
-        if (sidoFullName && sigungu) {
-            targetRegion = sidoFullName + ' ' + sigungu;
-        } else if (sigungu) {
-            targetRegion = sigungu;
-        } else if (sidoFullName) {
-            targetRegion = sidoFullName;
-        }
-        applyRegion(targetRegion);
-    }
-
     function setQuickRegion(region) {
         document.getElementById('filter-page').value = 1;
-        applyRegion(region);
-    }
+        document.getElementById('filter-sido').value = '';
+        document.getElementById('filter-city').value = '';
+        document.getElementById('filter-county').value = '';
+        document.getElementById('filter-district').value = '';
+        document.getElementById('filter-region-name').value = '';
 
-    function applyRegion(regionStr) {
-        document.getElementById('filter-page').value = 1;
-        document.getElementById('filter-region-name').value = regionStr;
-        document.getElementById('current-region-text').innerText = regionStr || '전체';
+        if (!region) {
+            document.getElementById("select-sido").value = "";
+            onCascadingSidoChange();
+            return;
+        }
+
+        // koreaRegionData 트리 전체 검색 (시/도 및 시/군/구 탐색)
+        let foundSido = null;
+        let foundSigun = null;
+
+        for (const [sido, items] of Object.entries(koreaRegionData)) {
+            if (Array.isArray(items)) {
+                if (items.includes(region)) {
+                    foundSido = sido;
+                    foundSigun = region;
+                    break;
+                }
+            } else if (typeof items === 'object') {
+                if (items[region]) {
+                    foundSido = sido;
+                    foundSigun = region;
+                    break;
+                }
+                for (const [city, subDistricts] of Object.entries(items)) {
+                    if (Array.isArray(subDistricts) && subDistricts.includes(region)) {
+                        foundSido = sido;
+                        foundSigun = city;
+                        break;
+                    }
+                }
+                if (foundSido) break;
+            }
+        }
+
+        if (foundSido && foundSigun) {
+            document.getElementById('select-sido').value = foundSido;
+            onCascadingSidoChange(true);
+            document.getElementById('select-sigun').value = foundSigun;
+            onCascadingSigunChange();
+            return;
+        }
+
+        document.getElementById('filter-region-name').value = region;
+        updateRegionSummaryText();
         triggerFormSubmit();
     }
 
@@ -604,12 +808,137 @@
         triggerFormSubmit();
     }
 
+    function setTransactionTypeUI(val) {
+        const btns = document.querySelectorAll('.tx-type-btn');
+        btns.forEach(btn => {
+            btn.classList.remove('border-indigo-500', 'bg-indigo-600', 'text-white', 'shadow-indigo-600/30');
+            btn.classList.add('border-slate-700', 'bg-slate-900/60', 'text-slate-300');
+        });
+
+        const activeIndex = !val ? 0 : (val === 'SALE' ? 1 : (val === 'JEONSE' ? 2 : 3));
+        if (btns[activeIndex]) {
+            btns[activeIndex].classList.remove('border-slate-700', 'bg-slate-900/60', 'text-slate-300');
+            btns[activeIndex].classList.add('border-indigo-500', 'bg-indigo-600', 'text-white', 'shadow-indigo-600/30');
+        }
+    }
+
+    function setTransactionType(val) {
+        document.getElementById('filter-page').value = 1;
+        document.getElementById('filter-transaction-type').value = val;
+        setTransactionTypeUI(val);
+        triggerFormSubmit();
+    }
+
+    function saveFiltersToLocalStorage() {
+        try {
+            const form = document.getElementById('search-filter-form');
+            if (!form) return;
+            const formData = new FormData(form);
+            const data = {};
+            for (let [k, v] of formData.entries()) {
+                if (v !== '') data[k] = v;
+            }
+            localStorage.setItem('realty_radar_filter_state', JSON.stringify(data));
+        } catch (e) {
+            console.error('필터 상태 저장 중 예외:', e);
+        }
+    }
+
+    function loadFiltersFromLocalStorage() {
+        try {
+            const hasQuery = window.location.search && window.location.search.length > 1;
+            if (hasQuery) return false;
+
+            const saved = localStorage.getItem('realty_radar_filter_state');
+            if (!saved) return false;
+            
+            const data = JSON.parse(saved);
+            let restoredAny = false;
+            for (let key in data) {
+                const el = document.getElementById('filter-' + key) || document.querySelector(`[name="${key}"]`);
+                if (el) {
+                    if (el.type === 'checkbox') {
+                        el.checked = data[key] === 'true' || data[key] === 'on';
+                    } else {
+                        el.value = data[key];
+                    }
+                    restoredAny = true;
+                }
+            }
+
+            // 복원된 데이터에 맞게 range 슬라이더 엘리먼트 값 세팅
+            if (data.max_price !== undefined) {
+                const rangeEl = document.getElementById('filter-max-price-range');
+                if (rangeEl) rangeEl.value = data.max_price || 2000000000;
+            }
+            if (data.min_exclusive_area !== undefined) {
+                const rangeEl = document.getElementById('filter-min-area-range');
+                if (rangeEl) rangeEl.value = data.min_exclusive_area || 0;
+            }
+            if (data.min_construction_year !== undefined) {
+                const rangeEl = document.getElementById('filter-min-year-range');
+                if (rangeEl) rangeEl.value = data.min_construction_year || 1980;
+            }
+            if (data.min_households !== undefined) {
+                const rangeEl = document.getElementById('filter-min-households-range');
+                if (rangeEl) rangeEl.value = data.min_households || 0;
+            }
+
+            return restoredAny;
+        } catch (e) {
+            console.error('필터 상태 로드 중 예외:', e);
+            return false;
+        }
+    }
+
+    function syncAllSliderUI() {
+        // hidden input 필드에 바인딩된 최신 값으로 range 슬라이더 및 뱃지 라벨 UI 100% 동기화
+        const maxPriceHidden = document.getElementById('filter-max-price').value;
+        const maxPriceRange = document.getElementById('filter-max-price-range');
+        if (maxPriceRange) {
+            if (maxPriceHidden) maxPriceRange.value = maxPriceHidden;
+            updatePriceLabel(maxPriceRange.value);
+        }
+
+        const minAreaHidden = document.getElementById('filter-min-area').value;
+        const minAreaRange = document.getElementById('filter-min-area-range');
+        if (minAreaRange) {
+            if (minAreaHidden) minAreaRange.value = minAreaHidden;
+            updateAreaLabel(minAreaRange.value);
+        }
+
+        const minYearHidden = document.getElementById('filter-min-year').value;
+        const minYearRange = document.getElementById('filter-min-year-range');
+        if (minYearRange) {
+            if (minYearHidden) minYearRange.value = minYearHidden;
+            updateYearLabel(minYearRange.value);
+        }
+
+        const minHouseholdsHidden = document.getElementById('filter-min-households').value;
+        const minHouseholdsRange = document.getElementById('filter-min-households-range');
+        if (minHouseholdsRange) {
+            if (minHouseholdsHidden) minHouseholdsRange.value = minHouseholdsHidden;
+            updateHouseholdsLabel(minHouseholdsRange.value);
+        }
+
+        const txHidden = document.getElementById('filter-transaction-type').value;
+        setTransactionTypeUI(txHidden);
+
+        updateFilterSummaryText();
+    }
+
     function resetAllFilters() {
+        localStorage.removeItem('realty_radar_filter_state');
         document.getElementById('filter-page').value = 1;
         document.getElementById('search-filter-form').reset();
-        document.getElementById('sido-select').value = '';
-        document.getElementById('sigungu-select').innerHTML = '<option value="">시/군/구 전체</option>';
-        applyRegion('');
+        document.getElementById('filter-sido').value = '';
+        document.getElementById('filter-city').value = '';
+        document.getElementById('filter-county').value = '';
+        document.getElementById('filter-district').value = '';
+        document.getElementById('filter-region-name').value = '';
+        
+        document.getElementById('select-sido').value = '';
+        onCascadingSidoChange();
 
         document.getElementById('filter-max-price-range').value = 2000000000;
         updatePriceLabel(2000000000);
@@ -642,15 +971,37 @@
     }
 
     function triggerFormSubmit() {
+        saveFiltersToLocalStorage();
         htmx.trigger('#search-filter-form', 'submit');
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        updatePriceLabel(document.getElementById('filter-max-price-range').value);
-        updateAreaLabel(document.getElementById('filter-min-area-range').value);
-        updateYearLabel(document.getElementById('filter-min-year-range').value);
-        updateHouseholdsLabel(document.getElementById('filter-min-households-range').value);
-        updateFilterSummaryText();
+        const restored = loadFiltersFromLocalStorage();
+        initRegionCascadingSelects();
+        syncAllSliderUI();
+
+        if (restored) {
+            triggerFormSubmit();
+        }
+    });
+
+    // HTMX 비동기 통신 에러 발생 시 로딩 마스크 제거 및 알림 안내
+    document.body.addEventListener('htmx:responseError', function(evt) {
+        const indicator = document.getElementById('search-loading-indicator');
+        if (indicator) indicator.style.display = 'none';
+        const container = document.getElementById('listings-container');
+        if (container) {
+            container.innerHTML = '<div class="p-6 bg-red-900/30 border border-red-500/50 rounded-2xl text-center text-red-200 font-bold my-4">서버 응답 오류가 발생했습니다. (HTTP ' + evt.detail.xhr.status + ')</div>';
+        }
+    });
+
+    document.body.addEventListener('htmx:sendError', function(evt) {
+        const indicator = document.getElementById('search-loading-indicator');
+        if (indicator) indicator.style.display = 'none';
+        const container = document.getElementById('listings-container');
+        if (container) {
+            container.innerHTML = '<div class="p-6 bg-red-900/30 border border-red-500/50 rounded-2xl text-center text-red-200 font-bold my-4">서버 접속 실패: 네트워크 연결 상태 또는 서버(uvicorn) 구동 여부를 확인해주세요.</div>';
+        }
     });
 </script>
 {% endblock %}

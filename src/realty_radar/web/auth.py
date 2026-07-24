@@ -69,3 +69,10 @@ def require_authentication(request: Request) -> str:
         )
 
     return username
+
+
+def get_current_username(request: Request) -> str:
+    """요청 쿠키에서 유효한 로그인 사용자명을 반환하며, 비로그인 시 'guest_user'를 반환합니다."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    username = verify_session_token(token)
+    return username if username else "guest_user"

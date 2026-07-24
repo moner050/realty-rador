@@ -217,7 +217,42 @@ document.addEventListener("DOMContentLoaded", function() {
         attachMoneyInputFormatter(input);
     });
 
-    // 폼 전송 시 콤마 정제
+    const isAuth = {% if is_authenticated %}true{% else %}false{% endif %};
+
+    // 비로그인 사용자인 경우 localStorage에서 게스트 설정 복원
+    if (!isAuth) {
+        try {
+            const savedGuest = localStorage.getItem("realty_radar_guest_profile");
+            if (savedGuest) {
+                const data = JSON.parse(savedGuest);
+                if (data.annual_income !== undefined) {
+                    const incEl = document.getElementById("setting-income");
+                    if (incEl) incEl.value = Number(data.annual_income).toLocaleString("ko-KR");
+                }
+                if (data.net_assets !== undefined) {
+                    const assEl = document.getElementById("setting-assets");
+                    if (assEl) assEl.value = Number(data.net_assets).toLocaleString("ko-KR");
+                }
+                if (data.child_count !== undefined) {
+                    const chEl = document.getElementById("setting-child-count");
+                    if (chEl) chEl.value = data.child_count;
+                }
+                ["is_homeless", "is_newlywed", "has_newborn", "is_first_home_buyer", "use_promissory_note"].forEach(k => {
+                    const cb = document.querySelector(`input[name="${k}"]`);
+                    if (cb && data[k] !== undefined) {
+                        cb.checked = Boolean(data[k]);
+                        if (k === "use_promissory_note") {
+                            togglePromissorySection(Boolean(data[k]));
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("게스트 로컬스토리지 복원 오류:", e);
+        }
+    }
+
+    // 폼 전송 시 콤마 정제 및 게스트 로컬스토리지 저장
     const form = document.querySelector("form");
     if (form) {
         form.addEventListener("submit", function() {
@@ -225,6 +260,25 @@ document.addEventListener("DOMContentLoaded", function() {
             allMoneyInputs.forEach(input => {
                 input.value = input.value.replace(/[^0-9]/g, "");
             });
+
+            if (!isAuth) {
+                try {
+                    const formData = new FormData(form);
+                    const guestData = {
+                        is_homeless: formData.get("is_homeless") === "true",
+                        is_newlywed: formData.get("is_newlywed") === "true",
+                        has_newborn: formData.get("has_newborn") === "true",
+                        is_first_home_buyer: formData.get("is_first_home_buyer") === "true",
+                        use_promissory_note: formData.get("use_promissory_note") === "true",
+                        child_count: parseInt(formData.get("child_count") || "0"),
+                        annual_income: parseInt(formData.get("annual_income") || "60000000"),
+                        net_assets: parseInt(formData.get("net_assets") || "300000000"),
+                    };
+                    localStorage.setItem("realty_radar_guest_profile", JSON.stringify(guestData));
+                } catch (e) {
+                    console.error("게스트 로컬스토리지 저장 오류:", e);
+                }
+            }
         });
     }
 });

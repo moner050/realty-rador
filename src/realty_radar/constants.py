@@ -34,6 +34,9 @@ class SortBy(str, Enum):
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
     AREA_DESC = "area_desc"
+    AREA_ASC = "area_asc"
+    HOUSEHOLDS_DESC = "households_desc"
+    HOUSEHOLDS_ASC = "households_asc"
 
 
 class CrawlJobStatus(str, Enum):

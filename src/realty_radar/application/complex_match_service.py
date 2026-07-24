@@ -145,6 +145,19 @@ class ComplexMatchService:
         if complex_obj.construction_year is None and payload_const_year is not None and str(payload_const_year).isdigit():
             complex_obj.construction_year = int(payload_const_year)
 
+    def _sync_listing_denormalized_fields(self, listing: Listing, complex_obj: ApartmentComplex):
+        """Listing에 ApartmentComplex의 반정규화 정보(sido, sigungu, total_households, construction_year) 동기화."""
+        if not listing or not complex_obj:
+            return
+        if complex_obj.sido and not listing.sido:
+            listing.sido = complex_obj.sido
+        if complex_obj.sigungu and not listing.sigungu:
+            listing.sigungu = complex_obj.sigungu
+        if complex_obj.total_households and not listing.total_households:
+            listing.total_households = complex_obj.total_households
+        if complex_obj.construction_year and not listing.construction_year:
+            listing.construction_year = complex_obj.construction_year
+
     def match_listing_complex(
         self, listing_id: int, total_households: int | None = None, construction_year: int | None = None
     ) -> ComplexMatchResult:
@@ -181,6 +194,7 @@ class ComplexMatchService:
                         payload_households=payload_households,
                         payload_const_year=payload_const_year,
                     )
+                    self._sync_listing_denormalized_fields(listing, complex_obj)
                 return ComplexMatchResult(
                     complex_id=alias.complex_id,
                     match_score=self._safe_confidence(Decimal("99.99")),

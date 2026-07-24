@@ -46,6 +46,10 @@ class ListingFilterParams:
 
     complex_keyword: Optional[str] = None
     region_name: Optional[str] = None
+    sido: Optional[str] = None
+    city: Optional[str] = None
+    county: Optional[str] = None
+    district: Optional[str] = None
     transaction_type: Optional[TransactionType] = None
     min_price: Optional[Decimal] = None
     max_price: Optional[Decimal] = None

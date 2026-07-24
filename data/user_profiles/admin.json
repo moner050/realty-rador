@@ -1,0 +1,13 @@
+{
+  "is_homeless": true,
+  "annual_income": 75000000,
+  "net_assets": 350000000,
+  "is_newlywed": true,
+  "is_first_home_buyer": false,
+  "child_count": 1,
+  "has_newborn": false,
+  "use_promissory_note": false,
+  "promissory_note_person_count": 0,
+  "promissory_note_amount": 0,
+  "promissory_notes": []
+}
