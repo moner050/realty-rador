@@ -22,6 +22,10 @@ class Listing(Base):
         Index("idx_listing_super_search", "status", "is_short_term", "sido", "sigungu", "transaction_type", "price_deposit"),
         Index("idx_listing_super_filter", "status", "is_short_term", "construction_year", "total_households"),
         Index("idx_listing_ultra_fast", "status", "is_short_term", "sido", "price_deposit"),
+        Index("idx_listing_direction", "direction"),
+        Index("idx_listing_dir_search", "status", "is_short_term", "direction", "price_deposit"),
+        Index("idx_listing_super_direction", "status", "is_short_term", "sido", "sigungu", "direction"),
+        Index("idx_listing_floor_info", "floor_info"),
         {"comment": "통합 부동산 매물 마스터 테이블"},
     )
 
@@ -48,6 +52,7 @@ class Listing(Base):
     supply_area = Column(Numeric(8, 2), nullable=True, comment="공급면적 (단위: ㎡)")
     exclusive_area = Column(Numeric(8, 2), nullable=True, comment="전용면적 (단위: ㎡)")
     floor_info = Column(String(50), nullable=True, comment="층수 정보 (예: 고/15층, 7/12층)")
+    direction = Column(String(50), nullable=True, index=True, comment="매물 방향 (예: 남향, 남동향, 남서향, 동향, 서향, 북향 등)")
 
     mortgage_status = Column(String(30), default="UNKNOWN", nullable=False, comment="융자 상태 (EXPLICIT_NONE: 없음, EXPLICIT_EXISTS: 있음, UNKNOWN: 미확인)")
     description_raw = Column(Text, nullable=True, comment="수집된 원본 매물 상세 설명 문구")

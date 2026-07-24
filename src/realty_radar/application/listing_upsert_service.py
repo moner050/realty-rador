@@ -89,6 +89,7 @@ class ListingUpsertService:
             sigungu_val = getattr(item, "sigungu", None)
             cyear_val = getattr(item, "construction_year", None)
             households_val = getattr(item, "total_households", None)
+            dir_val = getattr(item, "direction", None)
 
             if not existing_listing:
                 existing_listing = Listing(
@@ -107,6 +108,7 @@ class ListingUpsertService:
                     supply_area=item.supply_area,
                     exclusive_area=item.exclusive_area,
                     floor_info=floor_str,
+                    direction=dir_val,
                     mortgage_status=mortgage_str,
                     description_raw=desc_str,
                     is_short_term=is_short_term_val,

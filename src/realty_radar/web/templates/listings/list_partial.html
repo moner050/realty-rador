@@ -149,6 +149,11 @@
                             <span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold text-[11px]">
                                 {{ item.floor_info or item.floor_group or '-' }}
                             </span>
+                            {% if item.direction %}
+                            <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold text-[11px] border border-amber-500/30">
+                                🧭 {{ item.direction }}
+                            </span>
+                            {% endif %}
                             {% set display_households = item.total_households or (item.complex and item.complex.total_households) %}
                             {% set display_const_year = item.construction_year or (item.complex and item.complex.construction_year) %}
                             {% if display_households %}
@@ -262,6 +267,11 @@
                     <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 text-xs">
                         {{ item.floor_info or item.floor_group or '-' }}
                     </span>
+                    {% if item.direction %}
+                    <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-xs">
+                        🧭 {{ item.direction }}
+                    </span>
+                    {% endif %}
                     {% set display_households = item.total_households or (item.complex and item.complex.total_households) %}
                     {% set display_const_year = item.construction_year or (item.complex and item.complex.construction_year) %}
                     {% if display_households %}

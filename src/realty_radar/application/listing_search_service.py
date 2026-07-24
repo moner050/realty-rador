@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
-from sqlalchemy import func, or_, select, and_
+from sqlalchemy import func, not_, or_, select, and_
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from realty_radar.application.complex_match_service import parse_address_components
@@ -398,15 +398,11 @@ class ListingSearchService:
         if params.max_exclusive_area is not None:
             stmt = stmt.where(Listing.exclusive_area <= params.max_exclusive_area)
 
-        # 6. 아파트 단지 조건 필터 (Listing 비정규화 컬럼 1순위 + ApartmentComplex fallback)
-        if params.min_construction_year or params.min_households:
-            if not has_joined_complex:
-                stmt = stmt.outerjoin(Listing.complex)
-                has_joined_complex = True
-            if params.min_construction_year:
-                stmt = stmt.where(func.coalesce(Listing.construction_year, ApartmentComplex.construction_year) >= params.min_construction_year)
-            if params.min_households:
-                stmt = stmt.where(func.coalesce(Listing.total_households, ApartmentComplex.total_households) >= params.min_households)
+        # 6. 아파트 단지 조건 필터 (Listing 비정규화 인덱스 컬럼 초고속 검색)
+        if params.min_construction_year:
+            stmt = stmt.where(Listing.construction_year >= params.min_construction_year)
+        if params.min_households:
+            stmt = stmt.where(Listing.total_households >= params.min_households)
 
         # 7. 융자 상태 조건
         if params.mortgage_status:
@@ -422,6 +418,92 @@ class ListingSearchService:
         src_code = getattr(params, "source_code", None)
         if src_code:
             stmt = stmt.where(CrawlSource.code == src_code)
+
+        # 8-1. 매물 방향 (남향, 남동향, 동향, 서향, 북향 등) 다중 선택 고성능 필터링
+        target_directions = getattr(params, "parsed_directions", [])
+        if target_directions:
+            dir_conditions = []
+            for d_tok in target_directions:
+                dir_conditions.append(Listing.direction.ilike(f"%{d_tok}%"))
+                dir_conditions.append(Listing.description_raw.ilike(f"%{d_tok}%"))
+            stmt = stmt.where(or_(*dir_conditions))
+
+        # 8-2. 매물 층수 (저층, 중층, 고층, 탑층, 반지하/지하) 다중 선택 고성능 필터링
+        target_floors = getattr(params, "parsed_floors", [])
+        if target_floors:
+            floor_conditions = []
+            for fl_tok in target_floors:
+                fl_clean = fl_tok.strip()
+                if fl_clean in ["저층", "저"]:
+                    floor_conditions.extend([
+                        Listing.floor_info.ilike("저/%"),
+                        Listing.floor_info.ilike("%1층%"),
+                        Listing.floor_info.ilike("%2층%"),
+                        Listing.floor_info.ilike("%3층%"),
+                        Listing.floor_info.ilike("저층%"),
+                    ])
+                elif fl_clean in ["중층", "중"]:
+                    floor_conditions.extend([
+                        Listing.floor_info.ilike("중/%"),
+                        Listing.floor_info.ilike("%4층%"),
+                        Listing.floor_info.ilike("%5층%"),
+                        Listing.floor_info.ilike("%6층%"),
+                        Listing.floor_info.ilike("%7층%"),
+                        Listing.floor_info.ilike("%8층%"),
+                        Listing.floor_info.ilike("%9층%"),
+                        Listing.floor_info.ilike("%10층%"),
+                        Listing.floor_info.ilike("중층%"),
+                    ])
+                elif fl_clean in ["고층", "고"]:
+                    floor_conditions.extend([
+                        Listing.floor_info.ilike("고/%"),
+                        Listing.floor_info.ilike("%11층%"),
+                        Listing.floor_info.ilike("%12층%"),
+                        Listing.floor_info.ilike("%13층%"),
+                        Listing.floor_info.ilike("%14층%"),
+                        Listing.floor_info.ilike("%15층%"),
+                        Listing.floor_info.ilike("%16층%"),
+                        Listing.floor_info.ilike("%17층%"),
+                        Listing.floor_info.ilike("%18층%"),
+                        Listing.floor_info.ilike("%19층%"),
+                        Listing.floor_info.ilike("%20층%"),
+                        Listing.floor_info.ilike("%층%"),
+                        Listing.floor_info.ilike("고층%"),
+                    ])
+                elif fl_clean in ["탑층", "최상층"]:
+                    floor_conditions.extend([
+                        Listing.floor_info.ilike("%탑%"),
+                        Listing.floor_info.ilike("%최상%"),
+                    ])
+                elif fl_clean in ["반지하", "지하"]:
+                    floor_conditions.extend([
+                        Listing.floor_info.ilike("%B%"),
+                        Listing.floor_info.ilike("%지하%"),
+                        Listing.floor_info.ilike("%반지하%"),
+                    ])
+                else:
+                    floor_conditions.append(Listing.floor_info.ilike(f"%{fl_clean}%"))
+            if floor_conditions:
+                stmt = stmt.where(or_(*floor_conditions))
+
+        # 8-3. 1층 제외 필터 (1층만 정밀 제외하고 11층/21층/31층 등은 유지)
+        is_exclude_1f = getattr(params, "exclude_first_floor", False) or ("1층제외" in target_floors)
+        if is_exclude_1f:
+            # 1층 정밀 제외 조건: '1층'이 들어가면서 '11층', '21층', '31층'이 아닌 경우 및 '1/'로 시작하는 층수 제외
+            stmt = stmt.where(
+                not_(
+                    or_(
+                        and_(
+                            Listing.floor_info.ilike("%1층%"),
+                            not_(Listing.floor_info.ilike("%11층%")),
+                            not_(Listing.floor_info.ilike("%21층%")),
+                            not_(Listing.floor_info.ilike("%31층%")),
+                        ),
+                        Listing.floor_info.ilike("1/%"),
+                        Listing.floor_info.ilike("1층%"),
+                    )
+                )
+            )
 
         # 9. 정렬 옵션 (가격/최신/면적/세대수 정밀 정렬)
         is_households_sort = sort_by_val in [SortBy.HOUSEHOLDS_DESC, "households_desc", SortBy.HOUSEHOLDS_ASC, "households_asc"]

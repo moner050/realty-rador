@@ -29,93 +29,99 @@
             <input type="hidden" id="filter-page" name="page" value="{{ filters.page if filters else 1 }}">
             <input type="hidden" id="filter-sort-by-input" name="sort_by" value="{{ filters.sort_by if filters and filters.sort_by else 'price_asc' }}">
             
-            <!-- 1. 대한민국 행정구역 표준 주소 표기법 계단식 선택기 & 수도권 인터랙티브 미니맵 -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 border-b border-slate-700/60 pb-6">
-                <!-- 좌측 컬럼 (lg:col-span-7): 드롭다운 선택기 + 선택지역 뱃지 + 인기지역 칩 -->
-                <div class="lg:col-span-7 flex flex-col justify-between space-y-4">
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">지역 선택</span>
-                            <!-- 선택된 세분화 지역 뱃지 -->
-                            <div class="text-xs font-semibold text-slate-300">
-                                선택 지역: <span id="current-region-text" class="text-indigo-400 font-bold">
-                                    {% set region_parts = [] %}
-                                    {% if filters.sido %}{% set _ = region_parts.append(filters.sido) %}{% endif %}
-                                    {% if filters.city %}{% set _ = region_parts.append(filters.city) %}{% endif %}
-                                    {% if filters.county %}{% set _ = region_parts.append(filters.county) %}{% endif %}
-                                    {% if filters.district %}{% set _ = region_parts.append(filters.district) %}{% endif %}
-                                    {{ region_parts | join(' ') if region_parts else (filters.region_name or '전체') }}
-                                </span>
+            <!-- 백엔드 서버 폼 전달용 매개변수 (숨김 처리) -->
+            <input type="hidden" id="filter-sido" name="sido" value="{{ filters.sido or '' }}">
+            <input type="hidden" id="filter-city" name="city" value="{{ filters.city or '' }}">
+            <input type="hidden" id="filter-county" name="county" value="{{ filters.county or '' }}">
+            <input type="hidden" id="filter-district" name="district" value="{{ filters.district or '' }}">
+            <input type="hidden" id="filter-region-name" name="region_name" value="{{ filters.region_name or '' }}">
+
+            <!-- 1. 수도권 다이내믹 인터랙티브 2컬럼 지도 탐색기 (좌측: SVG 벡터 지도 / 우측: 세부 구역 선택기) -->
+            <div class="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden border-b border-slate-700/60 pb-6">
+                
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                    
+                    <!-- 좌측 컬럼 (lg:col-span-5): 동적 SVG 벡터 지도 & 좌측 상단 뒤로가기 버튼 -->
+                    <div class="lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between relative shadow-inner">
+                        <!-- 지도 헤더: 타이틀 & 상단 우측 뱃지 -->
+                        <div class="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-2">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                                    <svg class="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                                    </svg>
+                                </div>
+                                <span class="text-xs font-bold text-white">수도권 다크 맵</span>
+                            </div>
+                            <span id="map-badge-text" class="text-[10px] text-indigo-300 font-bold bg-indigo-500/20 px-2 py-0.5 rounded-full border border-indigo-500/30">수도권 전체</span>
+                        </div>
+
+                        <!-- 좌측 SVG 지도 캔버스 래퍼 (좌측 상단 플로팅 뒤로가기 버튼 포함) -->
+                        <div class="relative w-full h-72 flex items-center justify-center my-1 select-none bg-slate-950/80 rounded-xl p-2 border border-slate-800 shadow-2xl overflow-hidden">
+                            <!-- 좌측 상단 뒤로가기 버튼 -->
+                            <button type="button" id="svg-map-back-btn" onclick="resetInteractiveMapZoom()" 
+                                    class="hidden absolute top-2.5 left-2.5 z-20 px-3 py-1 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-600/40 transition-all flex items-center space-x-1 border border-indigo-400/50">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                                </svg>
+                                <span>수도권 전체</span>
+                            </button>
+
+                            <!-- 동적 SVG 지도 렌더링 컨테이너 -->
+                            <div id="left-svg-map-container" class="w-full h-full flex items-center justify-center">
+                                <!-- JS로 Stage 1(수도권 전체) 또는 Stage 2(서울/경기/인천 전용 줌인 맵) 동적 교체 -->
                             </div>
                         </div>
 
-                        <!-- 1단계: 시/도 & 시/군/구 계단식 셀렉트 -->
-                        <div class="flex flex-wrap items-center gap-2">
-                            <select id="select-sido" onchange="onCascadingSidoChange()" class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold cursor-pointer shadow-sm">
-                                <option value="">시/도 전체</option>
-                            </select>
-
-                            <select id="select-sigun" onchange="onCascadingSigunChange()" class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold cursor-pointer shadow-sm">
-                                <option value="">시/군/구 전체</option>
-                            </select>
-
-                            <select id="select-subdistrict" onchange="onCascadingSubdistrictChange()" class="hidden bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 font-semibold cursor-pointer shadow-sm">
-                                <option value="">세부 구 전체</option>
-                            </select>
-
-                            <!-- 백엔드 서버 폼 전달용 매개변수 (숨김 처리) -->
-                            <input type="hidden" id="filter-sido" name="sido" value="{{ filters.sido or '' }}">
-                            <input type="hidden" id="filter-city" name="city" value="{{ filters.city or '' }}">
-                            <input type="hidden" id="filter-county" name="county" value="{{ filters.county or '' }}">
-                            <input type="hidden" id="filter-district" name="district" value="{{ filters.district or '' }}">
-                            <input type="hidden" id="filter-region-name" name="region_name" value="{{ filters.region_name or '' }}">
+                        <!-- 지도 하단 안내 -->
+                        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800/80">
+                            <span id="map-guide-desc">왼쪽 지도 영역을 클릭하면 해당 시/도가 선택됩니다</span>
+                            <button type="button" id="map-reset-btn" onclick="resetInteractiveMapZoom()" class="hidden text-[10px] px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all">
+                                ← 수도권 전체
+                            </button>
                         </div>
                     </div>
 
-                    <!-- 주요 지역 퀵선택 태그 칩 바 -->
-                    <div class="space-y-1.5 pt-2">
-                        <span class="text-[11px] text-slate-400 font-medium">인기지역 퀵선택:</span>
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <button type="button" onclick="setQuickRegion('')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">전체</button>
-                            <button type="button" onclick="setQuickRegion('강남구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">강남구</button>
-                            <button type="button" onclick="setQuickRegion('서초구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">서초구</button>
-                            <button type="button" onclick="setQuickRegion('마포구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">마포구</button>
-                            <button type="button" onclick="setQuickRegion('강동구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">강동구</button>
-                            <button type="button" onclick="setQuickRegion('동작구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">동작구</button>
-                            <button type="button" onclick="setQuickRegion('영등포구')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">영등포구</button>
-                            <button type="button" onclick="setQuickRegion('하남시')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">하남시</button>
-                            <button type="button" onclick="setQuickRegion('남양주시')" class="region-chip px-2.5 py-1 text-[11px] rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-white transition-all">남양주시</button>
+                    <!-- 우측 컬럼 (lg:col-span-7): 세부 구역 선택 칩 리스트 -->
+                    <div class="lg:col-span-7 flex flex-col justify-between space-y-3">
+                        
+                        <!-- 우측 헤더: 선택 지역 뱃지 & 인기지역 칩 -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+                            <div>
+                                <span id="map-header-title" class="text-sm font-bold text-white">세부 구역 선택</span>
+                                <div class="text-xs text-slate-400 mt-0.5">
+                                    선택 지역: <span id="current-region-text" class="text-indigo-400 font-bold">
+                                        {% set region_parts = [] %}
+                                        {% if filters.sido %}{% set _ = region_parts.append(filters.sido) %}{% endif %}
+                                        {% if filters.city %}{% set _ = region_parts.append(filters.city) %}{% endif %}
+                                        {% if filters.county %}{% set _ = region_parts.append(filters.county) %}{% endif %}
+                                        {% if filters.district %}{% set _ = region_parts.append(filters.district) %}{% endif %}
+                                        {{ region_parts | join(' ') if region_parts else (filters.region_name or '전체') }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-1">
+                                <span class="text-[11px] text-slate-400 font-medium mr-1 hidden sm:inline">인기지역:</span>
+                                <button type="button" onclick="setQuickRegion('')" class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700">전체</button>
+                                <button type="button" onclick="setQuickRegion('강남구')" class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700">강남구</button>
+                                <button type="button" onclick="setQuickRegion('서초구')" class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700">서초구</button>
+                                <button type="button" onclick="setQuickRegion('마포구')" class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700">마포구</button>
+                                <button type="button" onclick="setQuickRegion('하남시')" class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700">하남시</button>
+                            </div>
+                        </div>
+
+                        <!-- 세부 자치구 칩 렌더링 캔버스 -->
+                        <div id="interactive-map-canvas" class="w-full min-h-[160px] relative flex items-center justify-center">
+                            <!-- JS로 첫 번째 '전체' 칩과 함께 세부 자치구 칩 동적 렌더링 -->
+                        </div>
+
+                        <div class="text-[11px] text-slate-500 text-right">
+                            * 원하는 세부 자치구를 클릭하면 실시간 자동 조회가 실행됩니다.
                         </div>
                     </div>
                 </div>
 
-                <!-- 우측 컬럼 (lg:col-span-5): 수도권 인터랙티브 2단계 줌 미니맵 위젯 -->
-                <div class="lg:col-span-5 bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 shadow-xl relative flex flex-col justify-between overflow-hidden">
-                    <!-- 미니맵 헤더 & Reset 줌 버튼 -->
-                    <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-                        <div class="flex items-center space-x-1.5">
-                            <svg class="w-4 h-4 text-indigo-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            </svg>
-                            <span id="map-header-title" class="text-xs font-bold text-slate-200">수도권 빠른 지도 탐색</span>
-                        </div>
-                        <button type="button" id="map-reset-btn" onclick="resetInteractiveMapZoom()" class="hidden text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 font-semibold transition-all flex items-center space-x-1 shadow-sm">
-                            <span>← 수도권 전체</span>
-                        </button>
-                    </div>
-
-                    <!-- 미니맵 동적 캔버스 영역 -->
-                    <div id="interactive-map-canvas" class="w-full h-44 my-1.5 relative flex items-center justify-center">
-                        <!-- JS로 수도권 광역 / 시군구 줌인 노드가 동적 렌더링됨 -->
-                    </div>
-
-                    <!-- 미니맵 하단 가이드 바 -->
-                    <div class="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800">
-                        <span id="map-guide-desc" class="text-slate-400">지도를 클릭하면 해당 구역이 확대됩니다</span>
-                        <span id="map-badge-text" class="text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">수도권 뷰</span>
-                    </div>
-                </div>
             </div>
             
             <!-- 2. 상단 거래 유형 수평 세그먼트 태그 바 -->
@@ -315,6 +321,43 @@
                             <option value="3" {% if filters.recent_days == 3 %}selected{% endif %}>최근 3일 이내</option>
                             <option value="7" {% if filters.recent_days == 7 %}selected{% endif %}>최근 7일 이내</option>
                         </select>
+                    </div>
+
+                    <!-- 매물 방향 선택 칩 태그 바 (다중 복수 선택 지원) -->
+                    <div class="space-y-1.5 md:col-span-2 pt-2.5 border-t border-slate-700/50">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-semibold text-slate-400">🧭 매물 방향 다중 선택 필터 (복수 동시 선택 가능)</label>
+                            <span id="direction-count-badge" class="text-[11px] font-bold text-indigo-400 bg-indigo-950/80 px-2 py-0.5 rounded-full border border-indigo-700/50 hidden">0개 선택됨</span>
+                        </div>
+                        <input type="hidden" id="filter-direction" name="direction" value="{{ filters.direction or '' }}">
+                        <div class="flex flex-wrap items-center gap-1.5" id="direction-chips-container">
+                            <button type="button" onclick="toggleDirectionFilter('')" data-dir="" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-indigo-600 border-indigo-400 text-white font-bold shadow-md shadow-indigo-600/30">전체</button>
+                            <button type="button" onclick="toggleDirectionFilter('남향')" data-dir="남향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">🧭 남향</button>
+                            <button type="button" onclick="toggleDirectionFilter('남동향')" data-dir="남동향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">남동향</button>
+                            <button type="button" onclick="toggleDirectionFilter('남서향')" data-dir="남서향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">남서향</button>
+                            <button type="button" onclick="toggleDirectionFilter('동향')" data-dir="동향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">동향</button>
+                            <button type="button" onclick="toggleDirectionFilter('서향')" data-dir="서향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">서향</button>
+                            <button type="button" onclick="toggleDirectionFilter('북향')" data-dir="북향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">북향</button>
+                            <button type="button" onclick="toggleDirectionFilter('북동향')" data-dir="북동향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">북동향</button>
+                            <button type="button" onclick="toggleDirectionFilter('북서향')" data-dir="북서향" class="dir-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-white">북서향</button>
+                        </div>
+                    </div>
+                    <!-- 층수 선택 칩 태그 바 (다중 복수 선택 지원) -->
+                    <div class="space-y-1.5 md:col-span-2 pt-2.5 border-t border-slate-700/50">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-semibold text-slate-400">🏢 층수 다중 선택 필터 (복수 동시 선택 가능)</label>
+                            <span id="floor-count-badge" class="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-700/50 hidden">0개 선택됨</span>
+                        </div>
+                        <input type="hidden" id="filter-floor" name="floor" value="{{ filters.floor or '' }}">
+                        <div class="flex flex-wrap items-center gap-1.5" id="floor-chips-container">
+                            <button type="button" onclick="toggleFloorFilter('')" data-floor="" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-indigo-600 border-indigo-400 text-white font-bold shadow-md shadow-indigo-600/30">전체</button>
+                            <button type="button" onclick="toggleFloorFilter('저층')" data-floor="저층" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-white">🏢 저층 (1~3층)</button>
+                            <button type="button" onclick="toggleFloorFilter('중층')" data-floor="중층" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-white">🏢 중층 (4~10층)</button>
+                            <button type="button" onclick="toggleFloorFilter('고층')" data-floor="고층" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-white">🏢 고층 (11층 이상)</button>
+                            <button type="button" onclick="toggleFloorFilter('탑층')" data-floor="탑층" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-white">👑 탑층 / 최상층</button>
+                            <button type="button" onclick="toggleFloorFilter('반지하')" data-floor="반지하" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-slate-900 border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-white">🔻 반지하 / 지하</button>
+                            <button type="button" onclick="toggleFloorFilter('1층제외')" data-floor="1층제외" class="floor-chip px-3 py-1 text-xs rounded-lg border transition-all font-medium bg-rose-950/60 border-rose-700/60 text-rose-300 hover:border-rose-500 hover:text-white">🚫 1층 제외 (2층 이상)</button>
+                        </div>
                     </div>
                 </div>
 
@@ -854,10 +897,127 @@
         }
     }
 
-    function setTransactionType(val) {
+    function setDirectionFilterUI(valStr) {
+        const inputVal = valStr || '';
+        const selectedArr = inputVal ? inputVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+        
+        const container = document.getElementById('direction-chips-container');
+        if (!container) return;
+
+        const chips = container.querySelectorAll('.dir-chip');
+        const countBadge = document.getElementById('direction-count-badge');
+
+        if (countBadge) {
+            if (selectedArr.length > 0) {
+                countBadge.innerText = `${selectedArr.length}개 선택됨`;
+                countBadge.classList.remove('hidden');
+            } else {
+                countBadge.classList.add('hidden');
+            }
+        }
+
+        chips.forEach(chip => {
+            const dirVal = chip.getAttribute('data-dir');
+            const isAllChip = (dirVal === '');
+            const isSelected = isAllChip ? (selectedArr.length === 0) : selectedArr.includes(dirVal);
+
+            chip.classList.remove('bg-indigo-600', 'border-indigo-400', 'text-white', 'font-bold', 'shadow-md', 'shadow-indigo-600/30', 'scale-105', 'bg-slate-900', 'border-slate-700', 'text-slate-300');
+
+            if (isSelected) {
+                chip.classList.add('bg-indigo-600', 'border-indigo-400', 'text-white', 'font-bold', 'shadow-md', 'shadow-indigo-600/30', 'scale-105');
+            } else {
+                chip.classList.add('bg-slate-900', 'border-slate-700', 'text-slate-300');
+            }
+        });
+    }
+
+    function toggleDirectionFilter(val) {
         document.getElementById('filter-page').value = 1;
-        document.getElementById('filter-transaction-type').value = val;
-        setTransactionTypeUI(val);
+        const hiddenInput = document.getElementById('filter-direction');
+        let currentValStr = hiddenInput.value || '';
+        let currentArr = currentValStr ? currentValStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        if (val === '') {
+            // '전체' 클릭 시 다중 선택 초기화
+            currentArr = [];
+        } else {
+            // 복수 방향 선택 토글
+            const idx = currentArr.indexOf(val);
+            if (idx >= 0) {
+                currentArr.splice(idx, 1);
+            } else {
+                currentArr.push(val);
+            }
+        }
+
+        const newValStr = currentArr.join(',');
+        hiddenInput.value = newValStr;
+        setDirectionFilterUI(newValStr);
+        updateFilterSummaryText();
+        triggerFormSubmit();
+    }
+
+    function setDirectionFilter(val) {
+        toggleDirectionFilter(val);
+    }
+
+    function setFloorFilterUI(valStr) {
+        const inputVal = valStr || '';
+        const selectedArr = inputVal ? inputVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+        
+        const container = document.getElementById('floor-chips-container');
+        if (!container) return;
+
+        const chips = container.querySelectorAll('.floor-chip');
+        const countBadge = document.getElementById('floor-count-badge');
+
+        if (countBadge) {
+            if (selectedArr.length > 0) {
+                countBadge.innerText = `${selectedArr.length}개 선택됨`;
+                countBadge.classList.remove('hidden');
+            } else {
+                countBadge.classList.add('hidden');
+            }
+        }
+
+        chips.forEach(chip => {
+            const flVal = chip.getAttribute('data-floor');
+            const isAllChip = (flVal === '');
+            const isSelected = isAllChip ? (selectedArr.length === 0) : selectedArr.includes(flVal);
+
+            chip.classList.remove('bg-emerald-600', 'border-emerald-400', 'text-white', 'font-bold', 'shadow-md', 'shadow-emerald-600/30', 'scale-105', 'bg-slate-900', 'border-slate-700', 'text-slate-300');
+
+            if (isSelected) {
+                chip.classList.add('bg-emerald-600', 'border-emerald-400', 'text-white', 'font-bold', 'shadow-md', 'shadow-emerald-600/30', 'scale-105');
+            } else {
+                chip.classList.add('bg-slate-900', 'border-slate-700', 'text-slate-300');
+            }
+        });
+    }
+
+    function toggleFloorFilter(val) {
+        document.getElementById('filter-page').value = 1;
+        const hiddenInput = document.getElementById('filter-floor');
+        let currentValStr = hiddenInput.value || '';
+        let currentArr = currentValStr ? currentValStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        if (val === '') {
+            // '전체' 클릭 시 다중 선택 초기화
+            currentArr = [];
+        } else {
+            // 복수 층수 선택 토글
+            const idx = currentArr.indexOf(val);
+            if (idx >= 0) {
+                currentArr.splice(idx, 1);
+            } else {
+                currentArr.push(val);
+            }
+        }
+
+        const newValStr = currentArr.join(',');
+        hiddenInput.value = newValStr;
+        setFloorFilterUI(newValStr);
+        updateFilterSummaryText();
         triggerFormSubmit();
     }
 
@@ -969,8 +1129,7 @@
         document.getElementById('filter-district').value = '';
         document.getElementById('filter-region-name').value = '';
         
-        document.getElementById('select-sido').value = '';
-        onCascadingSidoChange();
+        resetInteractiveMapZoom();
 
         document.getElementById('filter-max-price-range').value = 2000000000;
         updatePriceLabel(2000000000);
@@ -1028,6 +1187,15 @@
     let currentMapStage = 1; // 1: 수도권 광역 뷰, 2: 시/군/구 확대 뷰
     let currentMapSido = ''; // '서울특별시', '경기도', '인천광역시'
 
+    const CITY_SUB_DISTRICTS = {
+        '성남시': ['분당구', '수정구', '중원구'],
+        '수원시': ['영통구', '팔달구', '장안구', '권선구'],
+        '고양시': ['일산동구', '일산서구', '덕양구'],
+        '용인시': ['수지구', '기흥구', '처인구'],
+        '안양시': ['동안구', '만안구'],
+        '안산시': ['단원구', '상록구']
+    };
+
     const MAP_SUBDISTRICTS = {
         '서울특별시': [
             '강남구', '서초구', '송파구', '마포구', '용산구', '성동구', '강동구', '영등포구',
@@ -1035,8 +1203,9 @@
             '노원구', '양천구', '강서구', '구로구', '금천구', '관악구', '광진구', '중랑구', '동대문구'
         ],
         '경기도': [
-            '하남시', '남양주시', '성남시 분당구', '성남시 수정구', '수원시', '고양시', '용인시',
-            '화성시', '평택시', '부천시', '안양시', '파주시', '김포시', '광명시', '의정부시', '시흥시'
+            '성남시', '수원시', '고양시', '용인시', '하남시', '남양주시', '화성시', '평택시', 
+            '부천시', '안양시', '파주시', '김포시', '광명시', '의정부시', '시흥시', '안산시', 
+            '광주시', '이천시', '양평군', '여주시', '양주시', '포천시', '동두천시', '가평군', '연천군', '구리시', '과천시'
         ],
         '인천광역시': [
             '연수구', '남동구', '부평구', '미추홀구', '서구', '중구', '계양구', '강화군'
@@ -1054,53 +1223,99 @@
         }
     }
 
+    function highlightSvgNode(sidoName) {
+        const nodeSeoul = document.getElementById('svg-node-seoul');
+        const nodeGyeonggi = document.getElementById('svg-node-gyeonggi');
+        const nodeIncheon = document.getElementById('svg-node-incheon');
+
+        [nodeSeoul, nodeGyeonggi, nodeIncheon].forEach(n => {
+            if (n) {
+                n.classList.remove('stroke-4', 'ring-2', 'filter', 'drop-shadow-lg');
+                n.style.fillOpacity = '';
+            }
+        });
+
+        if (sidoName === '서울특별시' && nodeSeoul) {
+            nodeSeoul.style.fillOpacity = '0.9';
+        } else if (sidoName === '경기도' && nodeGyeonggi) {
+            nodeGyeonggi.style.fillOpacity = '0.9';
+        } else if (sidoName === '인천광역시' && nodeIncheon) {
+            nodeIncheon.style.fillOpacity = '0.9';
+        }
+    }
+
     function renderMapStage1() {
         currentMapStage = 1;
         currentMapSido = '';
 
-        document.getElementById('map-header-title').innerText = '수도권 빠른 지도 탐색';
-        document.getElementById('map-reset-btn').classList.add('hidden');
-        document.getElementById('map-guide-desc').innerText = '원하시는 광역 지역을 클릭하여 확대해보세요';
-        document.getElementById('map-badge-text').innerText = '수도권 뷰';
+        document.getElementById('map-header-title').innerText = '수도권 다크 맵 탐색';
+        document.getElementById('map-guide-desc').innerText = '원하시는 광역 시/도 글자를 마우스로 가리키면 확대되며 클릭 시 해당 지도로 확대됩니다';
+        document.getElementById('map-badge-text').innerText = '수도권 전체';
 
+        // 좌측 상단 뒤로가기 버튼 숨김
+        const backBtn = document.getElementById('svg-map-back-btn');
+        if (backBtn) backBtn.classList.add('hidden');
+
+        // 수도권 전체 다크맵 이미지(seoul_incheon_gyeongkey.png) 오버레이 렌더링
+        const leftContainer = document.getElementById('left-svg-map-container');
+        if (leftContainer) {
+            leftContainer.innerHTML = `
+                <div class="relative w-full h-full flex items-center justify-center p-1 select-none">
+                    <img src="/images/seoul_incheon_gyeongkey.png" 
+                         alt="수도권 전체 지도" 
+                         class="max-h-full max-w-full object-contain filter drop-shadow-xl rounded-lg">
+                    
+                    <!-- 수도권 광역 시/도 호버 글자 줌인 & 클릭 인터랙티브 오버레이 -->
+                    <div class="absolute inset-0">
+                        <!-- 서울특별시 라벨 노드 (우측 이동 캘리브레이션) -->
+                        <button type="button" 
+                                onclick="zoomToSidoFromMap('서울특별시')" 
+                                style="top: 46.5%; left: 51.5%;" 
+                                class="absolute transform -translate-x-1/2 -translate-y-1/2 px-2.5 py-0.5 text-xs rounded-lg border border-indigo-400/80 bg-slate-950/95 text-indigo-200 font-black hover:scale-125 hover:z-50 hover:bg-indigo-600 hover:text-white hover:border-indigo-300 hover:shadow-2xl transition-all duration-200 cursor-pointer shadow-xl">
+                            서울특별시
+                        </button>
+                        
+                        <!-- 경기도 라벨 노드 (우측 이동 캘리브레이션) -->
+                        <button type="button" 
+                                onclick="zoomToSidoFromMap('경기도')" 
+                                style="top: 61%; left: 56.5%;" 
+                                class="absolute transform -translate-x-1/2 -translate-y-1/2 px-2.5 py-0.5 text-xs rounded-lg border border-emerald-400/80 bg-slate-950/95 text-emerald-200 font-black hover:scale-125 hover:z-50 hover:bg-emerald-600 hover:text-white hover:border-emerald-300 hover:shadow-2xl transition-all duration-200 cursor-pointer shadow-xl">
+                            경기도
+                        </button>
+                        
+                        <!-- 인천광역시 라벨 노드 (지도 원본 '인천' 글자 100% 정밀 덮음) -->
+                        <button type="button" 
+                                onclick="zoomToSidoFromMap('인천광역시')" 
+                                style="top: 53.5%; left: 29%;" 
+                                class="absolute transform -translate-x-1/2 -translate-y-1/2 px-2.5 py-0.5 text-xs rounded-lg border border-cyan-400/80 bg-slate-950/95 text-cyan-200 font-black hover:scale-125 hover:z-50 hover:bg-cyan-600 hover:text-white hover:border-cyan-300 hover:shadow-2xl transition-all duration-200 cursor-pointer shadow-xl">
+                            인천광역시
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 우측 세부 자치구 칩 캔버스 초기화
         const canvas = document.getElementById('interactive-map-canvas');
         if (!canvas) return;
 
+        const defaultDistricts = ['전체', '강남구', '서초구', '송파구', '마포구', '용산구', '성동구', '하남시', '남양주시', '분당구', '연수구', '부평구'];
+        
+        let chipsHtml = defaultDistricts.map(d => {
+            const isAll = (d === '전체');
+            const onclickAttr = isAll ? `resetInteractiveMapZoom()` : `selectSigunFromMap('${d}')`;
+            return `
+                <button type="button" 
+                        onclick="${onclickAttr}" 
+                        class="px-3 py-1.5 text-xs rounded-xl border transition-all duration-200 cursor-pointer text-center font-medium shadow-sm truncate bg-slate-800/90 border-slate-700/80 text-slate-300 hover:border-indigo-500 hover:text-white ${isAll ? 'bg-indigo-600 border-indigo-400 text-white font-bold' : ''}">
+                    ${d}
+                </button>
+            `;
+        }).join('');
+
         canvas.innerHTML = `
-            <div class="w-full h-full grid grid-cols-3 gap-2 p-1">
-                <!-- 서울특별시 노드 -->
-                <button type="button" onclick="zoomToSidoFromMap('서울특별시')" class="group relative flex flex-col items-center justify-center p-2 rounded-xl bg-slate-800/90 border border-slate-700/80 hover:border-indigo-500 hover:bg-indigo-600/20 transition-all duration-300 shadow-md hover:shadow-indigo-500/20">
-                    <div class="w-9 h-9 rounded-full bg-indigo-500/20 group-hover:bg-indigo-500/40 border border-indigo-500/40 flex items-center justify-center text-indigo-400 group-hover:text-white transition-all group-hover:scale-110 mb-1">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11m0 0h4m-4 0H9m4 0V7m0 0h4m-4 0H9"/>
-                        </svg>
-                    </div>
-                    <span class="text-xs font-bold text-slate-100 group-hover:text-indigo-300">서울특별시</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">25개 자치구</span>
-                    <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
-                </button>
-
-                <!-- 경기도 노드 -->
-                <button type="button" onclick="zoomToSidoFromMap('경기도')" class="group relative flex flex-col items-center justify-center p-2 rounded-xl bg-slate-800/90 border border-slate-700/80 hover:border-emerald-500 hover:bg-emerald-600/20 transition-all duration-300 shadow-md hover:shadow-emerald-500/20">
-                    <div class="w-9 h-9 rounded-full bg-emerald-500/20 group-hover:bg-emerald-500/40 border border-emerald-500/40 flex items-center justify-center text-emerald-400 group-hover:text-white transition-all group-hover:scale-110 mb-1">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                        </svg>
-                    </div>
-                    <span class="text-xs font-bold text-slate-100 group-hover:text-emerald-300">경기도</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">주요 31개 시/군</span>
-                </button>
-
-                <!-- 인천광역시 노드 -->
-                <button type="button" onclick="zoomToSidoFromMap('인천광역시')" class="group relative flex flex-col items-center justify-center p-2 rounded-xl bg-slate-800/90 border border-slate-700/80 hover:border-cyan-500 hover:bg-cyan-600/20 transition-all duration-300 shadow-md hover:shadow-cyan-500/20">
-                    <div class="w-9 h-9 rounded-full bg-cyan-500/20 group-hover:bg-cyan-500/40 border border-cyan-500/40 flex items-center justify-center text-cyan-400 group-hover:text-white transition-all group-hover:scale-110 mb-1">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                        </svg>
-                    </div>
-                    <span class="text-xs font-bold text-slate-100 group-hover:text-cyan-300">인천광역시</span>
-                    <span class="text-[10px] text-slate-400 mt-0.5">10개 자치구</span>
-                </button>
+            <div class="w-full max-h-56 overflow-y-auto p-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 custom-scrollbar">
+                ${chipsHtml}
             </div>
         `;
     }
@@ -1110,108 +1325,319 @@
         currentMapSido = sidoName;
 
         document.getElementById('map-header-title').innerText = `${sidoName} 세부 구역 선택`;
-        document.getElementById('map-reset-btn').classList.remove('hidden');
-        document.getElementById('map-guide-desc').innerText = '구역을 클릭하여 정밀 필터 검색을 수행하세요';
+        document.getElementById('map-guide-desc').innerText = '지도의 구역 글자를 마우스로 가리키면 확대되며 클릭 시 매물이 자동 조회됩니다';
         document.getElementById('map-badge-text').innerText = `${sidoName} 줌인`;
 
+        // 좌측 상단 플로팅 뒤로가기 버튼 보이기
+        const backBtn = document.getElementById('svg-map-back-btn');
+        if (backBtn) backBtn.classList.remove('hidden');
+
+        // 선택 시/도에 따라 원본 지도 이미지 표출 (seoul.png / gyeongkey.png / incheon.png)
+        let imgSrc = '/images/seoul.png';
+        if (sidoName === '경기도') imgSrc = '/images/gyeongkey.png';
+        else if (sidoName === '인천광역시') imgSrc = '/images/incheon.png';
+
+        const leftContainer = document.getElementById('left-svg-map-container');
+        if (leftContainer) {
+            let districtOverlayHtml = '';
+
+            if (sidoName === '서울특별시') {
+                // 서울 25개 자치구 지도 원본 글자 100% Exact Matching 캘리브레이션 (캡처 2번 기준)
+                const seoulDistricts = [
+                    { name: '종로구', style: 'top: 39%; left: 49%;' },
+                    { name: '중구', style: 'top: 48%; left: 51%;' },
+                    { name: '용산구', style: 'top: 58%; left: 48%;' },
+                    { name: '마포구', style: 'top: 49%; left: 37%;' },
+                    { name: '서대문구', style: 'top: 43%; left: 43%;' },
+                    { name: '은평구', style: 'top: 31%; left: 41%;' },
+                    { name: '강서구', style: 'top: 49%; left: 24%;' },
+                    { name: '양천구', style: 'top: 62%; left: 28%;' },
+                    { name: '구로구', style: 'top: 71%; left: 26%;' },
+                    { name: '금천구', style: 'top: 81%; left: 36%;' },
+                    { name: '영등포구', style: 'top: 62%; left: 38%;' },
+                    { name: '동작구', style: 'top: 69%; left: 44%;' },
+                    { name: '관악구', style: 'top: 78%; left: 46%;' },
+                    { name: '서초구', style: 'top: 72%; left: 55%;' },
+                    { name: '강남구', style: 'top: 71%; left: 65%;' },
+                    { name: '성동구', style: 'top: 52%; left: 61%;' },
+                    { name: '동대문구', style: 'top: 41%; left: 63%;' },
+                    { name: '성북구', style: 'top: 35%; left: 57%;' },
+                    { name: '강북구', style: 'top: 25%; left: 54%;' },
+                    { name: '도봉구', style: 'top: 17%; left: 61%;' },
+                    { name: '노원구', style: 'top: 22%; left: 67%;' },
+                    { name: '중랑구', style: 'top: 39%; left: 72%;' },
+                    { name: '광진구', style: 'top: 52%; left: 71%;' },
+                    { name: '송파구', style: 'top: 67%; left: 76%;' },
+                    { name: '강동구', style: 'top: 47%; left: 81%;' }
+                ];
+
+                districtOverlayHtml = seoulDistricts.map(d => {
+                    const isActive = activeSigun && (d.name.includes(activeSigun) || activeSigun.includes(d.name));
+                    const activeClasses = isActive 
+                        ? 'scale-120 z-40 bg-indigo-600 text-white font-black border-indigo-300 shadow-xl ring-2 ring-indigo-400' 
+                        : 'bg-slate-950/95 text-slate-100 border-slate-700/80 hover:scale-120 hover:z-50 hover:bg-indigo-600 hover:text-white hover:border-indigo-300 hover:shadow-2xl';
+
+                    return `
+                        <button type="button" 
+                                onclick="selectSigunFromMap('${d.name}')" 
+                                style="${d.style}" 
+                                class="absolute transform -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] rounded-md border transition-all duration-150 cursor-pointer font-bold shadow-md select-none truncate ${activeClasses}">
+                            ${d.name}
+                        </button>
+                    `;
+                }).join('');
+            } else if (sidoName === '경기도') {
+                // 경기도 지도 겹침 0% 독립 시/군 오버레이 캘리브레이션
+                const gyeonggiDistricts = [
+                    { name: '연천군', style: 'top: 17%; left: 51%;' },
+                    { name: '동두천시', style: 'top: 21%; left: 56%;' },
+                    { name: '포천시', style: 'top: 21%; left: 64%;' },
+                    { name: '양주시', style: 'top: 29%; left: 53%;' },
+                    { name: '의정부시', style: 'top: 35%; left: 55%;' },
+                    { name: '파주시', style: 'top: 28%; left: 39%;' },
+                    { name: '김포시', style: 'top: 38%; left: 30%;' },
+                    { name: '고양시', style: 'top: 39%; left: 43%;' },
+                    { name: '부천시', style: 'top: 50%; left: 41%;' },
+                    { name: '남양주시', style: 'top: 39%; left: 66%;' },
+                    { name: '구리시', style: 'top: 43%; left: 58%;' },
+                    { name: '하남시', style: 'top: 48%; left: 64%;' },
+                    { name: '가평군', style: 'top: 33%; left: 76%;' },
+                    { name: '양평군', style: 'top: 52%; left: 79%;' },
+                    { name: '광주시', style: 'top: 57%; left: 68%;' },
+                    { name: '여주시', style: 'top: 61%; left: 82%;' },
+                    { name: '이천시', style: 'top: 66%; left: 74%;' },
+                    { name: '성남시', style: 'top: 55%; left: 58%;' },
+                    { name: '용인시', style: 'top: 66%; left: 63%;' },
+                    { name: '수원시', style: 'top: 64%; left: 50%;' },
+                    { name: '과천시', style: 'top: 54%; left: 50%;' },
+                    { name: '안양시', style: 'top: 57%; left: 46%;' },
+                    { name: '시흥시', style: 'top: 59%; left: 39%;' },
+                    { name: '안산시', style: 'top: 65%; left: 39%;' },
+                    { name: '화성시', style: 'top: 73%; left: 44%;' },
+                    { name: '오산시', style: 'top: 73%; left: 52%;' },
+                    { name: '평택시', style: 'top: 83%; left: 50%;' },
+                    { name: '안성시', style: 'top: 81%; left: 65%;' }
+                ];
+
+                districtOverlayHtml = gyeonggiDistricts.map(d => {
+                    const isActive = activeSigun && (d.name.includes(activeSigun) || activeSigun.includes(d.name));
+                    const activeClasses = isActive 
+                        ? 'scale-120 z-40 bg-emerald-600 text-white font-black border-emerald-300 shadow-xl ring-2 ring-emerald-400' 
+                        : 'bg-slate-950/95 text-slate-100 border-slate-700/80 hover:scale-120 hover:z-50 hover:bg-emerald-600 hover:text-white hover:border-emerald-300 hover:shadow-2xl';
+
+                    return `
+                        <button type="button" 
+                                onclick="selectSigunFromMap('${d.name}')" 
+                                style="${d.style}" 
+                                class="absolute transform -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] rounded-md border transition-all duration-150 cursor-pointer font-bold shadow-md select-none truncate ${activeClasses}">
+                            ${d.name}
+                        </button>
+                    `;
+                }).join('');
+            } else if (sidoName === '인천광역시') {
+                // 인천광역시 지도 원본 글자 100% Exact Matching 캘리브레이션 (캡처 이미지 기준)
+                const incheonDistricts = [
+                    { name: '강화군', style: 'top: 38%; left: 44%;' },
+                    { name: '서구', style: 'top: 25%; left: 52%;' },
+                    { name: '계양구', style: 'top: 42%; left: 72%;' },
+                    { name: '부평구', style: 'top: 52%; left: 72%;' },
+                    { name: '남동구', style: 'top: 73%; left: 72%;' },
+                    { name: '연수구', style: 'top: 73%; left: 60%;' },
+                    { name: '미추홀구', style: 'top: 64%; left: 63%;' },
+                    { name: '중구', style: 'top: 67%; left: 45%;' },
+                    { name: '동구', style: 'top: 51%; left: 56%;' },
+                    { name: '옹진군', style: 'top: 78%; left: 41%;' }
+                ];
+
+                districtOverlayHtml = incheonDistricts.map(d => {
+                    const isActive = activeSigun && (d.name.includes(activeSigun) || activeSigun.includes(d.name));
+                    const activeClasses = isActive 
+                        ? 'scale-120 z-40 bg-cyan-600 text-white font-black border-cyan-300 shadow-xl ring-2 ring-cyan-400' 
+                        : 'bg-slate-950/95 text-slate-100 border-slate-700/80 hover:scale-120 hover:z-50 hover:bg-cyan-600 hover:text-white hover:border-cyan-300 hover:shadow-2xl';
+
+                    return `
+                        <button type="button" 
+                                onclick="selectSigunFromMap('${d.name}')" 
+                                style="${d.style}" 
+                                class="absolute transform -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] rounded-md border transition-all duration-150 cursor-pointer font-bold shadow-md select-none truncate ${activeClasses}">
+                            ${d.name}
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            leftContainer.innerHTML = `
+                <div class="relative inline-block max-w-full max-h-full select-none shadow-2xl rounded-lg overflow-hidden">
+                    <img src="${imgSrc}" 
+                         alt="${sidoName} 지도" 
+                         class="block max-h-72 w-auto object-contain filter drop-shadow-2xl rounded-lg">
+                    
+                    <!-- 개별 구/시 호버 글자 줌인 확대 & 클릭 매물 조회 연동 인터랙티브 레이어 -->
+                    <div class="absolute inset-0">
+                        ${districtOverlayHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        // 우측 세부 자치구 칩 렌더링 (하위 자치구가 있는 대도시 지원)
         const canvas = document.getElementById('interactive-map-canvas');
         if (!canvas) return;
 
-        const districts = MAP_SUBDISTRICTS[sidoName] || [];
+        let displayDistricts = MAP_SUBDISTRICTS[sidoName] || [];
         
-        let chipsHtml = districts.map(d => {
-            const isActive = activeSigun && (d.includes(activeSigun) || activeSigun.includes(d));
-            const activeClasses = isActive 
-                ? 'bg-indigo-600 border-indigo-400 text-white font-bold shadow-md shadow-indigo-500/40 scale-105 ring-2 ring-indigo-400/50' 
-                : 'bg-slate-800/90 border-slate-700/80 text-slate-300 hover:border-indigo-500 hover:text-white hover:bg-slate-700/90';
+        // activeSigun이 하위 구를 가진 시(예: '성남시')이거나, 그 하위 구(예: '분당구')인 경우 서브 구 칩 리스트 표출
+        let activeParentCity = '';
+        if (activeSigun && CITY_SUB_DISTRICTS[activeSigun]) {
+            activeParentCity = activeSigun;
+        } else if (activeSigun) {
+            for (const [parentCity, subList] of Object.entries(CITY_SUB_DISTRICTS)) {
+                if (subList.includes(activeSigun)) {
+                    activeParentCity = parentCity;
+                    break;
+                }
+            }
+        }
 
-            return `
-                <button type="button" 
-                        onclick="selectSigunFromMap('${d}')" 
-                        class="px-2 py-1 text-[11px] rounded-lg border transition-all duration-200 cursor-pointer truncate ${activeClasses}">
-                    ${d}
-                </button>
-            `;
-        }).join('');
+        let chipsHtml = '';
+        if (activeParentCity) {
+            // 하위 자치구 서브 칩 리스트 렌더링 (예: 성남시 -> [성남시 전체, 분당구, 수정구, 중원구])
+            const subList = ['전체', ...CITY_SUB_DISTRICTS[activeParentCity]];
+            chipsHtml = `
+                <div class="col-span-full mb-1 flex items-center justify-between bg-slate-900/80 px-3 py-1.5 rounded-lg border border-indigo-500/40">
+                    <span class="text-xs font-bold text-indigo-300">📍 ${activeParentCity} 하위 구 선택:</span>
+                    <button type="button" onclick="renderMapStage2('${sidoName}')" class="text-[11px] text-slate-400 hover:text-white underline cursor-pointer">
+                        ← ${sidoName} 목록으로 돌아가기
+                    </button>
+                </div>
+            ` + subList.map(d => {
+                const isAll = (d === '전체');
+                const targetSigun = isAll ? activeParentCity : d;
+                const isActive = isAll ? (activeSigun === activeParentCity) : (activeSigun === d);
+                const activeClasses = isActive 
+                    ? 'bg-indigo-600 border-indigo-400 text-white font-bold shadow-lg shadow-indigo-600/40 scale-105 ring-2 ring-indigo-400/50' 
+                    : 'bg-slate-800/90 border-slate-700/80 text-slate-300 hover:border-indigo-500 hover:text-white hover:bg-slate-700/90';
+
+                return `
+                    <button type="button" 
+                            onclick="selectSigunFromMap('${targetSigun}')" 
+                            class="px-3 py-1.5 text-xs rounded-xl border transition-all duration-200 cursor-pointer text-center font-medium shadow-sm truncate ${activeClasses}">
+                        ${isAll ? activeParentCity + ' 전체' : d}
+                    </button>
+                `;
+            }).join('');
+        } else {
+            // 기본 시/군/구 칩 리스트 렌더링
+            const districts = ['전체', ...displayDistricts];
+            chipsHtml = districts.map(d => {
+                const isAll = (d === '전체');
+                const isActive = isAll ? !activeSigun : (activeSigun && (d.includes(activeSigun) || activeSigun.includes(d)));
+                const activeClasses = isActive 
+                    ? 'bg-indigo-600 border-indigo-400 text-white font-bold shadow-lg shadow-indigo-600/40 scale-105 ring-2 ring-indigo-400/50' 
+                    : 'bg-slate-800/90 border-slate-700/80 text-slate-300 hover:border-indigo-500 hover:text-white hover:bg-slate-700/90';
+
+                const onclickAttr = isAll ? `selectSigunFromMap('')` : `selectSigunFromMap('${d}')`;
+
+                return `
+                    <button type="button" 
+                            onclick="${onclickAttr}" 
+                            class="px-3 py-1.5 text-xs rounded-xl border transition-all duration-200 cursor-pointer text-center font-medium shadow-sm truncate ${activeClasses}">
+                        ${d}
+                    </button>
+                `;
+            }).join('');
+        }
 
         canvas.innerHTML = `
-            <div class="w-full h-full overflow-y-auto pr-1 flex flex-wrap content-start gap-1.5 custom-scrollbar">
+            <div class="w-full max-h-56 overflow-y-auto p-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 custom-scrollbar">
                 ${chipsHtml}
             </div>
         `;
     }
 
     function zoomToSidoFromMap(sidoName) {
-        // 지도를 통해 시/도 선택 시 드롭다운 100% 동기화
-        const sidoSelect = document.getElementById('select-sido');
-        if (sidoSelect) {
-            sidoSelect.value = sidoName;
-            onCascadingSidoChange();
-        }
+        document.getElementById('filter-sido').value = sidoName;
+        document.getElementById('filter-city').value = '';
+        document.getElementById('filter-county').value = '';
+        document.getElementById('filter-district').value = '';
+        document.getElementById('filter-region-name').value = '';
+        document.getElementById('filter-page').value = 1;
+
+        updateRegionDisplayText(sidoName);
         renderMapStage2(sidoName);
+        triggerFormSubmit();
     }
 
     function selectSigunFromMap(sigunName) {
-        // 지도를 통해 세부 구역 클릭 시 계단식 셀렉트 동기화 & HTMX 서브밋
-        setQuickRegion(sigunName);
-        if (currentMapSido) {
-            renderMapStage2(currentMapSido, sigunName);
+        document.getElementById('filter-page').value = 1;
+        document.getElementById('filter-city').value = sigunName;
+        document.getElementById('filter-district').value = sigunName;
+        document.getElementById('filter-region-name').value = sigunName;
+
+        const currentSido = currentMapSido || document.getElementById('filter-sido').value || '';
+        const fullRegionStr = currentSido ? `${currentSido} ${sigunName}` : sigunName;
+        updateRegionDisplayText(fullRegionStr);
+
+        if (currentSido) {
+            renderMapStage2(currentSido, sigunName);
+        }
+        triggerFormSubmit();
+    }
+
+    function updateRegionDisplayText(text) {
+        const el = document.getElementById('current-region-text');
+        if (el) {
+            el.innerText = text || '전체';
         }
     }
 
     function resetInteractiveMapZoom() {
-        setQuickRegion('');
+        document.getElementById('filter-sido').value = '';
+        document.getElementById('filter-city').value = '';
+        document.getElementById('filter-county').value = '';
+        document.getElementById('filter-district').value = '';
+        document.getElementById('filter-region-name').value = '';
+        document.getElementById('filter-page').value = 1;
+
+        updateRegionDisplayText('전체');
         renderMapStage1();
+        triggerFormSubmit();
     }
 
-    function updateMapFromCascadingDropdowns() {
-        const sidoVal = document.getElementById('filter-sido').value || document.getElementById('select-sido').value || '';
-        const sigunVal = document.getElementById('filter-city').value || document.getElementById('filter-district').value || document.getElementById('select-sigun').value || '';
+    function setQuickRegion(regionName) {
+        document.getElementById('filter-page').value = 1;
+        if (!regionName) {
+            resetInteractiveMapZoom();
+            return;
+        }
 
-        if (sidoVal && MAP_SUBDISTRICTS[sidoVal]) {
-            renderMapStage2(sidoVal, sigunVal);
-        } else if (sigunVal) {
-            // 시/도 없이 구(예: 강남구)만 있는 경우 서울/경기 자동 추정
-            for (const [sName, dList] of Object.entries(MAP_SUBDISTRICTS)) {
-                if (dList.some(d => d.includes(sigunVal) || sigunVal.includes(d))) {
-                    renderMapStage2(sName, sigunVal);
-                    return;
-                }
+        document.getElementById('filter-city').value = regionName;
+        document.getElementById('filter-district').value = regionName;
+        document.getElementById('filter-region-name').value = regionName;
+
+        // 시/도 추정
+        let matchedSido = '';
+        for (const [sName, dList] of Object.entries(MAP_SUBDISTRICTS)) {
+            if (dList.some(d => d.includes(regionName) || regionName.includes(d))) {
+                matchedSido = sName;
+                document.getElementById('filter-sido').value = sName;
+                break;
             }
-            renderMapStage1();
+        }
+
+        const dispText = matchedSido ? `${matchedSido} ${regionName}` : regionName;
+        updateRegionDisplayText(dispText);
+
+        if (matchedSido) {
+            renderMapStage2(matchedSido, regionName);
         } else {
             renderMapStage1();
         }
+        triggerFormSubmit();
     }
-
-    // 기존 드롭다운 연동 함수 오버라이드/확장 바인딩
-    const origOnCascadingSidoChange = window.onCascadingSidoChange;
-    window.onCascadingSidoChange = function() {
-        if (typeof origOnCascadingSidoChange === 'function') {
-            origOnCascadingSidoChange();
-        }
-        updateMapFromCascadingDropdowns();
-    };
-
-    const origOnCascadingSigunChange = window.onCascadingSigunChange;
-    window.onCascadingSigunChange = function() {
-        if (typeof origOnCascadingSigunChange === 'function') {
-            origOnCascadingSigunChange();
-        }
-        updateMapFromCascadingDropdowns();
-    };
-
-    const origSetQuickRegion = window.setQuickRegion;
-    window.setQuickRegion = function(regionName) {
-        if (typeof origSetQuickRegion === 'function') {
-            origSetQuickRegion(regionName);
-        }
-        updateMapFromCascadingDropdowns();
-    };
 
     document.addEventListener('DOMContentLoaded', function() {
         const restored = loadFiltersFromLocalStorage();
-        initRegionCascadingSelects();
         syncAllSliderUI();
         initInteractiveMap();
 

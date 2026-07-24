@@ -285,6 +285,7 @@ class SiteANormalizer:
         sido, sigungu = self.parse_address_components(addr_clean)
         c_year = payload.get("construction_year") or payload.get("constructionYear")
         tot_hh = payload.get("total_households") or payload.get("totalHouseholds")
+        direction_val = (payload.get("direction") or "").strip() or None
 
         return NormalizedListing(
             source_code=raw.source_code,
@@ -302,6 +303,7 @@ class SiteANormalizer:
             total_floor=total_fl,
             floor_raw=raw.floor_raw,
             floor_info=raw.floor_raw,
+            direction=direction_val,
             address_raw=addr_clean,
             sido=sido,
             sigungu=sigungu,

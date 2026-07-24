@@ -39,6 +39,11 @@ static_dir = Path("src/realty_radar/web/static")
 static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# 사용자 지도 이미지 디렉토리 마운트
+images_dir = Path("images")
+images_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(images_dir)), name="images")
+
 # 라우터 등록
 app.include_router(home_router)
 app.include_router(auth_router)

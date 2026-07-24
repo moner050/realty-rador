@@ -20,11 +20,14 @@ templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
 
 
+_GLOBAL_LOAN_EVALUATOR = LoanRuleEvaluator()
+
+
 def _enrich_listings_with_loans(result: Any, db: Session, applicant: Any = None) -> None:
     """매물 목록에 대해 인메모리 대출 평가 결과 바인딩."""
     if not result or not getattr(result, "items", None):
         return
-    evaluator = LoanRuleEvaluator()
+    evaluator = _GLOBAL_LOAN_EVALUATOR
     for item in result.items:
         try:
             tx_type = item.transaction_type
@@ -114,6 +117,11 @@ def parse_search_filter(
     only_eligible_loans: bool = Query(False),
     exclude_short_term: bool = Query(True),
     group_by_complex: bool = Query(False),
+    direction: str | None = Query(None),
+    directions: list[str] | None = Query(None),
+    floor: str | None = Query(None),
+    floors: list[str] | None = Query(None),
+    exclude_first_floor: bool = Query(False),
 ) -> ListingSearchFilter:
     """쿼리 파라미터로부터 ListingSearchFilter DTO 객체 안전 파싱 (기본 정렬: 가격 낮은순)."""
     trans_enum = TransactionType(transaction_type) if transaction_type and transaction_type != "" else None
@@ -152,6 +160,11 @@ def parse_search_filter(
         page=page,
         page_size=page_size,
         only_eligible_loans=only_eligible_loans,
+        direction=direction if direction and direction != "" else None,
+        directions=directions,
+        floor=floor if floor and floor != "" else None,
+        floors=floors,
+        exclude_first_floor=exclude_first_floor,
         exclude_short_term=exclude_short_term,
         group_by_complex=group_by_complex,
     )

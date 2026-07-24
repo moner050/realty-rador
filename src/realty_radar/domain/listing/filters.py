@@ -38,12 +38,49 @@ class ListingSearchFilter:
     source_code: str | None = None
 
     only_eligible_loans: bool = False
+    direction: str | None = None
+    directions: list[str] | None = None
+    floor: str | None = None
+    floors: list[str] | None = None
+    exclude_first_floor: bool = False
     exclude_short_term: bool = True
     group_by_complex: bool = False
 
     sort_by: str = "recent"  # recent (최신순), price_asc (가격낮은순), price_desc (가격높은순), area_desc (면적넓은순)
     page: int = 1
     page_size: int = 20
+
+    @property
+    def parsed_directions(self) -> list[str]:
+        """다중 방향 파라미터를 안전하게 파싱하여 리스트 반환."""
+        res: set[str] = set()
+        if self.directions:
+            for item in self.directions:
+                if item and item.strip():
+                    for part in item.split(','):
+                        if part.strip():
+                            res.add(part.strip())
+        if self.direction and self.direction.strip():
+            for part in self.direction.split(','):
+                if part.strip():
+                    res.add(part.strip())
+        return list(res)
+
+    @property
+    def parsed_floors(self) -> list[str]:
+        """다중 층수 파라미터를 안전하게 파싱하여 리스트 반환."""
+        res: set[str] = set()
+        if self.floors:
+            for item in self.floors:
+                if item and item.strip():
+                    for part in item.split(','):
+                        if part.strip():
+                            res.add(part.strip())
+        if self.floor and self.floor.strip():
+            for part in self.floor.split(','):
+                if part.strip():
+                    res.add(part.strip())
+        return list(res)
 
     @property
     def offset(self) -> int:
@@ -75,6 +112,11 @@ class ListingSearchFilter:
             "recent_days": self.recent_days,
             "source_code": self.source_code,
             "only_eligible_loans": self.only_eligible_loans,
+            "direction": self.direction,
+            "directions": self.directions,
+            "floor": self.floor,
+            "floors": self.floors,
+            "exclude_first_floor": self.exclude_first_floor,
             "exclude_short_term": self.exclude_short_term,
             "group_by_complex": self.group_by_complex,
             "sort_by": self.sort_by,
@@ -113,6 +155,11 @@ class ListingSearchFilter:
             recent_days=data.get("recent_days"),
             source_code=data.get("source_code"),
             only_eligible_loans=data.get("only_eligible_loans", False),
+            direction=data.get("direction"),
+            directions=data.get("directions"),
+            floor=data.get("floor"),
+            floors=data.get("floors"),
+            exclude_first_floor=data.get("exclude_first_floor", False),
             exclude_short_term=data.get("exclude_short_term", True),
             group_by_complex=data.get("group_by_complex", False),
             sort_by=data.get("sort_by", "price_asc"),

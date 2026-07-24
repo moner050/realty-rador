@@ -184,8 +184,7 @@ class SiteAParser:
 
         desc_text = article_detail.get("articleFeatureDescription") or ""
         direction = article_detail.get("directionStandard") or article_detail.get("direction") or ""
-        desc_parts = [p for p in [desc_text, direction] if p]
-        description_raw = ", ".join(desc_parts) if desc_parts else None
+        description_raw = desc_text.strip() if desc_text.strip() else None
 
         verification_info = info.get("verificationInfo") or {}
         confirm_date_str = verification_info.get("articleConfirmDate") or ""
@@ -213,6 +212,7 @@ class SiteAParser:
             "brokerInfo": info.get("brokerInfo") or {},
             "dongName": dong_name,
             "floorInfo": floor_raw,
+            "direction": direction,
             "total_households": total_households,
             "construction_year": parsed_const_year,
         }
