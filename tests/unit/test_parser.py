@@ -1,3 +1,5 @@
+import pytest
+
 from realty_radar.crawler.adapters.site_a.parser import SiteAArticleParser, SiteAComplexData
 
 
@@ -36,3 +38,49 @@ def test_site_a_parser_rejects_missing_or_mismatched_authoritative_ids():
     complex_data = SiteAComplexData(1001, 1150010200, "테스트", "테스트", "서울")
     assert parser.parse({"articleNo": None}, complex_data) is None
     assert parser.parse({"articleNo": 1, "complexNo": 9999}, complex_data) is None
+
+
+@pytest.mark.parametrize(
+    ("direct_trade", "safe_lessor_hug", "expected_direct_trade", "expected_safe_lessor_hug"),
+    [
+        (True, "true", True, True),
+        ("0", 1, False, True),
+        ("N", "no", False, False),
+    ],
+)
+def test_site_a_parser_normalizes_list_level_boolean_flags(
+    direct_trade, safe_lessor_hug, expected_direct_trade, expected_safe_lessor_hug
+):
+    listing = SiteAArticleParser().parse(
+        {
+            "articleNo": 2001,
+            "complexNo": 1001,
+            "cortarNo": 1150010200,
+            "tradeTypeCode": "A1",
+            "isDirectTrade": direct_trade,
+            "isSafeLessorOfHug": safe_lessor_hug,
+        },
+        SiteAComplexData(1001, 1150010200, "테스트", "테스트", "서울"),
+    )
+
+    assert listing is not None
+    assert listing.is_direct_trade is expected_direct_trade
+    assert listing.is_safe_lessor_hug is expected_safe_lessor_hug
+
+
+def test_site_a_parser_keeps_missing_or_malformed_list_level_boolean_flags_unknown():
+    listing = SiteAArticleParser().parse(
+        {
+            "articleNo": 2001,
+            "complexNo": 1001,
+            "cortarNo": 1150010200,
+            "tradeTypeCode": "A1",
+            "isDirectTrade": "sometimes",
+            "isSafeLessorOfHug": {"value": True},
+        },
+        SiteAComplexData(1001, 1150010200, "테스트", "테스트", "서울"),
+    )
+
+    assert listing is not None
+    assert listing.is_direct_trade is None
+    assert listing.is_safe_lessor_hug is None

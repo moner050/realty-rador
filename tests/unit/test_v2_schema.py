@@ -104,3 +104,34 @@ def test_current_rows_use_authoritative_ids_and_generated_region_codes():
     assert listing.sido_code == 11
     assert listing.sigungu_code == 11500
     assert listing.complex_id == 1001
+
+
+def test_listing_current_declares_detail_columns_and_only_the_planned_range_indexes():
+    column_names = set(ListingCurrent.__table__.columns.keys())
+    assert {
+        "is_direct_trade",
+        "is_safe_lessor_hug",
+        "parking_possible",
+        "room_count",
+        "bathroom_count",
+        "parking_per_household_x100",
+        "monthly_management_cost",
+        "move_in_available_on",
+        "nearest_subway_walk_minutes",
+        "detail_checked_at",
+    }.issubset(column_names)
+    indexes = {index.name: tuple(column.name for column in index.columns) for index in ListingCurrent.__table__.indexes}
+    assert indexes["ix_listing_move_in"] == ("lifecycle", "is_short_term", "move_in_available_on", "article_id")
+    assert indexes["ix_listing_subway_walk"] == (
+        "lifecycle",
+        "is_short_term",
+        "nearest_subway_walk_minutes",
+        "article_id",
+    )
+    assert indexes["ix_listing_management_cost"] == (
+        "lifecycle",
+        "is_short_term",
+        "monthly_management_cost",
+        "article_id",
+    )
+    assert indexes["ix_listing_detail_pending"] == ("detail_checked_at", "article_id")

@@ -65,6 +65,8 @@ class IncomingListing:
     mortgage_code: int = 0
     is_top_floor: bool = False
     is_short_term: bool = False
+    is_direct_trade: bool | None = None
+    is_safe_lessor_hug: bool | None = None
     building_name: str | None = None
     description: str | None = None
     construction_year: int = 0
@@ -91,6 +93,8 @@ class IncomingListing:
             self.mortgage_code,
             self.is_top_floor,
             self.is_short_term,
+            self.is_direct_trade,
+            self.is_safe_lessor_hug,
             self.building_name,
             self.description,
         )
@@ -136,6 +140,8 @@ class IncomingListing:
             "mortgage_code": self.mortgage_code,
             "is_top_floor": self.is_top_floor,
             "is_short_term": self.is_short_term,
+            "is_direct_trade": self.is_direct_trade,
+            "is_safe_lessor_hug": self.is_safe_lessor_hug,
             "building_name": self.building_name,
             "description": self.description,
             "lifecycle": LIFECYCLE_ACTIVE,
@@ -303,6 +309,8 @@ class ListingBatchWriter:
                 "direction_code",
                 "is_top_floor",
                 "is_short_term",
+                "is_direct_trade",
+                "is_safe_lessor_hug",
                 "building_name",
                 "description",
                 "state_hash",
@@ -344,12 +352,14 @@ class ListingBatchWriter:
                     address, construction_year, household_count, trade_type, primary_price,
                     monthly_rent, exclusive_area_x100, supply_area_x100, floor_no, total_floor,
                     floor_band, direction_code, mortgage_code, is_top_floor, is_short_term,
+                    is_direct_trade, is_safe_lessor_hug,
                     building_name, description, listing_state_hash, complex_state_hash, observed_at
                 ) VALUES (
                     :article_id, :complex_id, :region_code, :complex_name, :normalized_complex_name,
                     :address, :construction_year, :household_count, :trade_type, :primary_price,
                     :monthly_rent, :exclusive_area_x100, :supply_area_x100, :floor_no, :total_floor,
                     :floor_band, :direction_code, :mortgage_code, :is_top_floor, :is_short_term,
+                    :is_direct_trade, :is_safe_lessor_hug,
                     :building_name, :description, :listing_state_hash, :complex_state_hash, :observed_at
                 )
                 """
@@ -462,14 +472,16 @@ class ListingBatchWriter:
                     article_id, complex_id, region_code, complex_name, address, construction_year,
                     household_count, trade_type, primary_price, monthly_rent, exclusive_area_x100,
                     supply_area_x100, floor_no, total_floor, floor_band, direction_code, mortgage_code,
-                    is_top_floor, is_short_term, building_name, description, lifecycle, miss_count,
+                    is_top_floor, is_short_term, is_direct_trade, is_safe_lessor_hug,
+                    building_name, description, lifecycle, miss_count,
                     state_hash, last_seen_job_id, first_seen_at, last_seen_at, last_changed_at, removed_at
                 )
                 SELECT
                     article_id, complex_id, region_code, complex_name, address, construction_year,
                     household_count, trade_type, primary_price, monthly_rent, exclusive_area_x100,
                     supply_area_x100, floor_no, total_floor, floor_band, direction_code, mortgage_code,
-                    is_top_floor, is_short_term, building_name, description, :active, 0,
+                    is_top_floor, is_short_term, is_direct_trade, is_safe_lessor_hug,
+                    building_name, description, :active, 0,
                     listing_state_hash, :job_id, observed_at, observed_at, observed_at, NULL
                 FROM incoming_listing
                 ON DUPLICATE KEY UPDATE
@@ -492,6 +504,8 @@ class ListingBatchWriter:
                     direction_code = VALUES(direction_code),
                     is_top_floor = VALUES(is_top_floor),
                     is_short_term = VALUES(is_short_term),
+                    is_direct_trade = VALUES(is_direct_trade),
+                    is_safe_lessor_hug = VALUES(is_safe_lessor_hug),
                     building_name = VALUES(building_name),
                     description = VALUES(description),
                     lifecycle = :active,
@@ -598,6 +612,8 @@ class ListingBatchWriter:
                     mortgage_code TINYINT UNSIGNED NOT NULL,
                     is_top_floor BOOLEAN NOT NULL,
                     is_short_term BOOLEAN NOT NULL,
+                    is_direct_trade BOOLEAN NULL,
+                    is_safe_lessor_hug BOOLEAN NULL,
                     building_name VARCHAR(40) NULL,
                     description VARCHAR(1000) NULL,
                     listing_state_hash BINARY(16) NOT NULL,

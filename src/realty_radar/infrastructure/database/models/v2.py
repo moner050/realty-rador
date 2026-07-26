@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     Computed,
+    Date,
     ForeignKey,
     Index,
     Integer,
@@ -103,6 +104,10 @@ class ListingCurrent(Base):
         Index("ix_listing_complex", "complex_id", "lifecycle", "is_short_term", "primary_price", "article_id"),
         Index("ix_listing_presence", "region_code", "last_seen_job_id", "lifecycle", "article_id"),
         Index("ix_listing_mortgage_pending", "mortgage_checked_at", "article_id"),
+        Index("ix_listing_move_in", "lifecycle", "is_short_term", "move_in_available_on", "article_id"),
+        Index("ix_listing_subway_walk", "lifecycle", "is_short_term", "nearest_subway_walk_minutes", "article_id"),
+        Index("ix_listing_management_cost", "lifecycle", "is_short_term", "monthly_management_cost", "article_id"),
+        Index("ix_listing_detail_pending", "detail_checked_at", "article_id"),
         {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
     )
 
@@ -140,6 +145,16 @@ class ListingCurrent(Base):
     mortgage_checked_at = Column(DateTime6, nullable=True)
     is_top_floor = Column(Boolean, nullable=False, server_default=text("0"))
     is_short_term = Column(Boolean, nullable=False, server_default=text("0"))
+    is_direct_trade = Column(Boolean, nullable=True)
+    is_safe_lessor_hug = Column(Boolean, nullable=True)
+    room_count = Column(UnsignedTinyInt, nullable=True)
+    bathroom_count = Column(UnsignedTinyInt, nullable=True)
+    parking_possible = Column(Boolean, nullable=True)
+    parking_per_household_x100 = Column(UnsignedInteger, nullable=True)
+    monthly_management_cost = Column(UnsignedInteger, nullable=True)
+    move_in_available_on = Column(Date, nullable=True)
+    nearest_subway_walk_minutes = Column(UnsignedSmallInt, nullable=True)
+    detail_checked_at = Column(DateTime6, nullable=True)
     building_name = Column(String(40), nullable=True)
     description = Column(String(1000), nullable=True)
     lifecycle = Column(UnsignedTinyInt, nullable=False, server_default=text("1"))

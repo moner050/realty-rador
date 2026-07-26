@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, func, select
@@ -54,6 +55,14 @@ def _incoming(article_id: int, price: int = 500_000_000) -> IncomingListing:
     )
 
 
+def _incoming_with_list_flags(article_id: int, *, direct_trade: bool | None, safe_lessor_hug: bool | None) -> IncomingListing:
+    return replace(
+        _incoming(article_id),
+        is_direct_trade=direct_trade,
+        is_safe_lessor_hug=safe_lessor_hug,
+    )
+
+
 def test_500_row_replay_does_not_duplicate_current_or_history():
     session = _session()
     session.add_all([_job(1, "dong:1150010200:1"), _job(2, "dong:1150010200:2")])
@@ -105,3 +114,23 @@ def test_listing_recrawl_preserves_completed_mortgage_enrichment():
     assert history is not None
     assert history.mortgage_code == 1
     assert history.change_mask & 16 == 0
+
+
+def test_listing_recrawl_updates_list_flags_without_overwriting_detail_enrichment():
+    session = _session()
+    session.add_all([_job(1, "dong:1150010200:1"), _job(2, "dong:1150010200:2")])
+    session.commit()
+    writer = ListingBatchWriter(session)
+    writer.commit_batch(job_id=1, rows=[_incoming_with_list_flags(10_000, direct_trade=False, safe_lessor_hug=None)])
+    listing = session.get(ListingCurrent, 10_000)
+    listing.room_count = 3
+    listing.detail_checked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.commit()
+
+    writer.commit_batch(job_id=2, rows=[_incoming_with_list_flags(10_000, direct_trade=True, safe_lessor_hug=True)])
+
+    refreshed = session.get(ListingCurrent, 10_000)
+    assert refreshed.is_direct_trade is True
+    assert refreshed.is_safe_lessor_hug is True
+    assert refreshed.room_count == 3
+    assert refreshed.detail_checked_at is not None

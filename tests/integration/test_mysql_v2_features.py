@@ -49,6 +49,37 @@ def test_mysql_v2_schema_supports_generated_fulltext_temp_and_skip_locked():
             text("SHOW INDEX FROM listing_current WHERE Key_name = 'ix_listing_mortgage_pending'")
         )
         assert mortgage_index is not None
+        expected_columns = {
+            "is_direct_trade",
+            "is_safe_lessor_hug",
+            "parking_possible",
+            "room_count",
+            "bathroom_count",
+            "parking_per_household_x100",
+            "monthly_management_cost",
+            "move_in_available_on",
+            "nearest_subway_walk_minutes",
+            "detail_checked_at",
+        }
+        columns = {
+            row[0]
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_schema = DATABASE() AND table_name = 'listing_current'
+                    """
+                )
+            )
+        }
+        assert expected_columns.issubset(columns)
+        for name in (
+            "ix_listing_move_in",
+            "ix_listing_subway_walk",
+            "ix_listing_management_cost",
+            "ix_listing_detail_pending",
+        ):
+            assert connection.scalar(text(f"SHOW INDEX FROM listing_current WHERE Key_name = '{name}'")) is not None
         fulltext = connection.scalar(text("SHOW INDEX FROM complex_current WHERE Key_name = 'ft_complex_name'"))
         assert fulltext is not None
         connection.execute(text("CREATE TEMPORARY TABLE incoming_listing_probe (article_id BIGINT UNSIGNED PRIMARY KEY)"))

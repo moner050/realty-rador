@@ -55,6 +55,20 @@ def parse_area_x100(value: object) -> int:
         return 0
 
 
+def parse_nullable_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "t", "yes", "y"}:
+            return True
+        if normalized in {"0", "false", "f", "no", "n"}:
+            return False
+    return None
+
+
 def parse_korean_money(value: object) -> int:
     """SITE_A의 억/만 단위 가격을 원 단위 unsigned integer로 바꾼다."""
     if value is None:
@@ -163,6 +177,8 @@ class SiteAArticleParser:
             mortgage_code=0,
             is_top_floor=is_top_floor,
             is_short_term=trade_type == 4,
+            is_direct_trade=parse_nullable_bool(article.get("isDirectTrade")),
+            is_safe_lessor_hug=parse_nullable_bool(article.get("isSafeLessorOfHug")),
             building_name=building_name[:40] if building_name else None,
             description=description[:1000] if description else None,
         )
