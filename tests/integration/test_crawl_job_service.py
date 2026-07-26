@@ -93,6 +93,28 @@ def test_latest_metro_batch_progress_groups_sigungu_status_and_counts():
     )
 
 
+def test_latest_metro_batch_progress_exposes_retry_and_failed_sigungu():
+    session = _session()
+    service = CrawlJobService(session)
+    jobs = service.enqueue_metro_batch()
+    jobs[0].status = JOB_RETRY_WAIT
+    jobs[0].error_code = "HTTP_429"
+    jobs[1].status = JOB_FAILED
+    jobs[1].error_message = "retry exhausted"
+    session.commit()
+
+    progress = service.get_latest_metro_batch_progress()
+
+    assert progress["pending_count"] == len(jobs) - 1
+    assert progress["retry_count"] == 1
+    assert progress["failed_count"] == 1
+    assert any(
+        item["error_code"] == "HTTP_429"
+        for region in progress["regions"]
+        for item in region["items"]
+    )
+
+
 def test_only_complete_scope_advances_stale_then_removed():
     session = _session()
     service = CrawlJobService(session)
