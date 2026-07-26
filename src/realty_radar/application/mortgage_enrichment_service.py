@@ -120,8 +120,13 @@ def _date_value(value: Any) -> date | None:
         return value
     if not isinstance(value, str):
         return None
+    normalized = value.strip()
+    if re.fullmatch(r"\d{8}", normalized):
+        normalized = f"{normalized[:4]}-{normalized[4:6]}-{normalized[6:]}"
+    elif not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
+        return None
     try:
-        return date.fromisoformat(value.strip())
+        return date.fromisoformat(normalized)
     except ValueError:
         return None
 

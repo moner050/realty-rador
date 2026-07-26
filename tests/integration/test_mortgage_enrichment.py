@@ -215,7 +215,7 @@ def test_article_detail_parser_accepts_site_a_detail_field_spellings():
         {
             "articleDetail": {
                 "parkingPossibleYN": "Y",
-                "moveInPossibleYmd": "2026-08-15",
+                "moveInPossibleYmd": "20260815",
                 "walkingTimeToNearSubway": "7",
             }
         }
@@ -242,7 +242,7 @@ def test_combined_enrichment_updates_detail_once_and_retries_transport_failures(
                 "parkingPossibleYN": "Y",
                 "parkingPerHousehold": 1.2,
                 "monthlyManagementCost": 180000,
-                "moveInPossibleYmd": "2026-09-01",
+                "moveInPossibleYmd": "20260901",
                 "walkingTimeToNearSubway": 4,
             }
         }
