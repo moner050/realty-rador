@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from realty_radar.application.listing_batch_writer import CHANGE_MORTGAGE, HISTORY_UPDATED, utc_now
+from realty_radar.application.listing_batch_writer import CHANGE_MORTGAGE, HISTORY_MORTGAGE_ENRICHED, utc_now
 from realty_radar.infrastructure.database.models import ListingCurrent, ListingHistory
 
 
 MORTGAGE_UNKNOWN = 0
 MORTGAGE_EXPLICIT_NONE = 1
 MORTGAGE_EXPLICIT_EXISTS = 2
+LIFECYCLE_ACTIVE = 1
 
 _NONE_PHRASES = ("융자금 없음", "융자 없음", "융자없음", "근저당 없음", "대출 없음")
 _EXISTS_PHRASES = ("융자금 있음", "융자 있음", "융자있음", "근저당 있음", "대출 있음")
@@ -31,6 +33,12 @@ def classify_mortgage_text(value: str) -> int:
 
 
 DetailFetcher = Callable[[int, int], Any]
+
+
+@dataclass(frozen=True, slots=True)
+class EnrichmentBatch:
+    checked_count: int
+    last_candidate_id: int | None
 
 
 class MortgageEnrichmentRunner:
@@ -52,18 +60,40 @@ class MortgageEnrichmentRunner:
         self._concurrency = concurrency
 
     async def run_once(self, *, batch_size: int = 100) -> int:
+        """Run the first pending batch; callers needing a full sweep use ``run_until_idle``."""
+        return (await self._run_batch(batch_size=batch_size, after_article_id=None)).checked_count
+
+    async def run_until_idle(self, *, batch_size: int = 100, max_batches: int = 100) -> int:
+        """Sweep pending active rows with a keyset cursor so one bad row cannot starve later rows."""
+        if max_batches < 1:
+            raise ValueError("max_batches must be positive")
+        after_article_id: int | None = None
+        checked = 0
+        for _ in range(max_batches):
+            batch = await self._run_batch(batch_size=batch_size, after_article_id=after_article_id)
+            checked += batch.checked_count
+            if batch.last_candidate_id is None:
+                break
+            after_article_id = batch.last_candidate_id
+        return checked
+
+    async def _run_batch(self, *, batch_size: int, after_article_id: int | None) -> EnrichmentBatch:
         if not 1 <= batch_size <= 500:
             raise ValueError("batch_size must be between 1 and 500")
         with self._session_factory() as db:
+            statement = (
+                select(ListingCurrent.article_id, ListingCurrent.complex_id)
+                .where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE, ListingCurrent.mortgage_checked_at.is_(None))
+                .order_by(ListingCurrent.article_id)
+                .limit(batch_size)
+            )
+            if after_article_id is not None:
+                statement = statement.where(ListingCurrent.article_id > after_article_id)
             candidates = [
                 (row.article_id, row.complex_id)
-                for row in db.execute(
-                    select(ListingCurrent.article_id, ListingCurrent.complex_id)
-                    .where(ListingCurrent.mortgage_checked_at.is_(None))
-                    .order_by(ListingCurrent.article_id)
-                    .limit(batch_size)
-                ).all()
+                for row in db.execute(statement).all()
             ]
+        last_candidate_id = candidates[-1][0] if candidates else None
         semaphore = asyncio.Semaphore(self._concurrency)
 
         async def fetch(candidate: tuple[int, int]) -> tuple[int, int] | None:
@@ -86,7 +116,7 @@ class MortgageEnrichmentRunner:
         responses = await asyncio.gather(*(fetch(candidate) for candidate in candidates))
         resolved = [item for item in responses if item is not None]
         if not resolved:
-            return 0
+            return EnrichmentBatch(checked_count=0, last_candidate_id=last_candidate_id)
         now = utc_now()
         with self._session_factory() as db:
             updates: list[dict[str, Any]] = []
@@ -110,7 +140,7 @@ class MortgageEnrichmentRunner:
                             article_id=listing.article_id,
                             complex_id=listing.complex_id,
                             job_id=self._job_id,
-                            event_type=HISTORY_UPDATED,
+                            event_type=HISTORY_MORTGAGE_ENRICHED,
                             change_mask=CHANGE_MORTGAGE,
                             primary_price=listing.primary_price,
                             monthly_rent=listing.monthly_rent,
@@ -128,11 +158,12 @@ class MortgageEnrichmentRunner:
             if history:
                 db.add_all(history)
             db.commit()
-        return len(updates)
+        return EnrichmentBatch(checked_count=len(updates), last_candidate_id=last_candidate_id)
 
 
 async def run_site_a_mortgage_enrichment(
-    session_factory: Callable[[], Session], *, job_id: int, batch_size: int = 100, concurrency: int = 2
+    session_factory: Callable[[], Session], *, job_id: int, batch_size: int = 100, concurrency: int = 2,
+    max_batches: int = 100,
 ) -> int:
     """One explicit scheduler/CLI entrypoint using the existing bootstrap+httpx path."""
     from realty_radar.crawler.adapters.site_a.adapter import NEW_LAND_BASE
@@ -152,7 +183,7 @@ async def run_site_a_mortgage_enrichment(
     try:
         return await MortgageEnrichmentRunner(
             session_factory, detail_fetcher=fetch, job_id=job_id, concurrency=concurrency
-        ).run_once(batch_size=batch_size)
+        ).run_until_idle(batch_size=batch_size, max_batches=max_batches)
     finally:
         await client.aclose()
         await browser.close()

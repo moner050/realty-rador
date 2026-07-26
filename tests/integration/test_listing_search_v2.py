@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.domain.loan.entities import ApplicantProfile
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
 
 
@@ -167,6 +168,41 @@ def test_saved_legacy_transaction_name_is_migrated_to_numeric_codes():
     assert filters.trade_types == [2]
 
 
+def test_saved_v1_filter_names_migrate_transaction_mortgage_direction_floor_and_region():
+    filters = ListingSearchFilter.from_dict(
+        {
+            "transaction_type": "JEONSE",
+            "mortgage_status": "EXPLICIT_NONE",
+            "direction": "남동향",
+            "floor": "고층",
+            "sido": "서울특별시",
+            "district": "강서구",
+            "source": "SITE_B",
+        }
+    )
+
+    assert filters.trade_types == [2]
+    assert filters.mortgage_codes == [1]
+    assert filters.direction_codes == [2]
+    assert filters.floor_bands == [3]
+    assert filters.sido_code == 11
+    assert filters.sigungu_code == 11500
+
+
+def test_eligible_cursor_rejects_a_different_applicant_profile():
+    session = _session()
+    _seed(session)
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(only_eligible_loans=True, page_size=1)
+    first = service.search_listings(filters, applicant=ApplicantProfile(annual_income=40_000_000))
+
+    with pytest.raises(ValueError, match="cursor"):
+        service.search_listings(
+            ListingSearchFilter(only_eligible_loans=True, page_size=1, cursor=first.next_cursor),
+            applicant=ApplicantProfile(annual_income=80_000_000),
+        )
+
+
 def test_eligible_loan_filter_scans_past_ineligible_rows_without_cursor_duplicates():
     session = _session()
     _seed(session)
@@ -204,3 +240,20 @@ def test_grouped_eligible_loan_filter_exposes_only_eligible_listings():
 
     assert [group.complex_id for group in result.grouped_items] == [1001]
     assert [item.article_id for item in result.grouped_items[0].listings] == [2001]
+
+
+def test_grouped_eligible_loan_filter_advances_by_group_keyset_cursor():
+    session = _session()
+    _seed(session)
+    service = ListingSearchService(session, cursor_secret="test-secret")
+
+    first = service.search_listings(ListingSearchFilter(only_eligible_loans=True, group_by_complex=True, page_size=1))
+    second = service.search_listings(
+        ListingSearchFilter(
+            only_eligible_loans=True, group_by_complex=True, page_size=1, cursor=first.next_cursor
+        )
+    )
+
+    assert [group.complex_id for group in first.grouped_items + second.grouped_items] == [1001, 1002]
+    assert first.has_more is True
+    assert second.has_more is False

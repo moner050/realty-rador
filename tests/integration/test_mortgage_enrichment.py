@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.mortgage_enrichment_service import MortgageEnrichmentRunner, classify_mortgage_text
+from realty_radar.application.listing_batch_writer import HISTORY_MORTGAGE_ENRICHED, HISTORY_UPDATED
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent, ListingHistory
 
 
@@ -77,3 +78,48 @@ def test_enrichment_updates_codes_once_and_never_persists_detail_text():
         assert all("융자" not in (row.description or "") for row in rows.values())
         history = list(session.scalars(select(ListingHistory).order_by(ListingHistory.article_id)).all())
         assert [item.article_id for item in history] == [10, 11]
+
+
+def test_enrichment_history_does_not_collide_with_collection_updated_event():
+    factory = _session_factory()
+    with factory() as session:
+        listing = session.get(ListingCurrent, 10)
+        session.add(
+            ListingHistory(
+                article_id=10,
+                complex_id=listing.complex_id,
+                job_id=9001,
+                event_type=HISTORY_UPDATED,
+                state_hash=listing.state_hash,
+                occurred_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+        )
+        session.commit()
+
+    async def detail(article_id: int, complex_id: int):
+        return {"detailDescription": "융자금 없음"}
+
+    runner = MortgageEnrichmentRunner(factory, detail_fetcher=detail, job_id=9001)
+    assert asyncio.run(runner.run_once(batch_size=1)) == 1
+
+    with factory() as session:
+        assert session.get(ListingCurrent, 10).mortgage_code == 1
+        events = list(session.scalars(select(ListingHistory.event_type).where(ListingHistory.article_id == 10)).all())
+        assert sorted(events) == [HISTORY_UPDATED, HISTORY_MORTGAGE_ENRICHED]
+
+
+def test_run_until_idle_skips_a_failing_pending_article_and_processes_later_rows():
+    factory = _session_factory()
+
+    async def detail(article_id: int, complex_id: int):
+        if article_id == 10:
+            raise RuntimeError("permanent detail failure")
+        return {"detailDescription": "융자금 있음"}
+
+    runner = MortgageEnrichmentRunner(factory, detail_fetcher=detail, job_id=9002, concurrency=2)
+    assert asyncio.run(runner.run_until_idle(batch_size=1)) == 2
+
+    with factory() as session:
+        assert session.get(ListingCurrent, 10).mortgage_checked_at is None
+        assert session.get(ListingCurrent, 11).mortgage_checked_at is not None
+        assert session.get(ListingCurrent, 12).mortgage_checked_at is not None

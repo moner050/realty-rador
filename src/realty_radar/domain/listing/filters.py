@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Iterable
 
+from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, resolve_cortarno
+
 
 _DIRECTION_CODES = {
     "남": 1,
@@ -35,7 +37,26 @@ _FLOOR_BANDS = {
     "탑층": 4,
     "지하": 5,
 }
-_TRADE_TYPE_CODES = {"SALE": 1, "JEONSE": 2, "MONTHLY_RENT": 3, "SHORT_TERM": 4}
+_TRADE_TYPE_CODES = {
+    "SALE": 1,
+    "매매": 1,
+    "JEONSE": 2,
+    "전세": 2,
+    "MONTHLY_RENT": 3,
+    "월세": 3,
+    "SHORT_TERM": 4,
+    "단기임대": 4,
+}
+_MORTGAGE_CODES = {
+    "UNKNOWN": 0,
+    "정보미상": 0,
+    "EXPLICIT_NONE": 1,
+    "융자없음": 1,
+    "융자금없음": 1,
+    "EXPLICIT_EXISTS": 2,
+    "융자있음": 2,
+    "융자금있음": 2,
+}
 
 
 @dataclass(slots=True)
@@ -88,15 +109,19 @@ class ListingSearchFilter:
         # v1 saved preferences used strings and included source-specific keys.
         # The v2 hot table uses the numeric parser codes and is SITE_A-only.
         copied["direction_codes"] = cls._code_values(
-            copied.get("direction_codes", copied.get("directions")), _DIRECTION_CODES
+            cls._legacy_value(copied, "direction_codes", "directions", "direction"), _DIRECTION_CODES
         )
         copied["floor_bands"] = cls._code_values(
-            copied.get("floor_bands", copied.get("floor_types", copied.get("floors"))), _FLOOR_BANDS
+            cls._legacy_value(copied, "floor_bands", "floor_types", "floors", "floor"), _FLOOR_BANDS
         )
-        trade_values = copied.get("trade_types") or copied.get("trade_type")
+        copied["mortgage_codes"] = cls._code_values(
+            cls._legacy_value(copied, "mortgage_codes", "mortgage_status"), _MORTGAGE_CODES
+        )
+        trade_values = cls._legacy_value(copied, "trade_types", "trade_type", "transaction_type")
         copied["trade_types"] = cls._code_values(trade_values, _TRADE_TYPE_CODES)
         if isinstance(copied.get("trade_type"), str):
             copied["trade_type"] = None
+        cls._migrate_region(copied)
         if copied.get("min_price") is None:
             copied["min_price"] = copied.get("min_deposit")
         if copied.get("max_price") is None:
@@ -125,6 +150,41 @@ class ListingSearchFilter:
             elif (code := names.get(str(item).replace(" ", "").strip())) is not None:
                 codes.append(code)
         return list(dict.fromkeys(codes)) or None
+
+    @staticmethod
+    def _legacy_value(values: dict[str, object], *keys: str) -> object:
+        for key in keys:
+            value = values.get(key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    @staticmethod
+    def _migrate_region(values: dict[str, object]) -> None:
+        if any(values.get(key) not in (None, "") for key in ("region_code", "sido_code", "sigungu_code")):
+            return
+        sido = str(values.get("sido") or "").strip()
+        city = str(values.get("city") or "").strip()
+        county = str(values.get("county") or "").strip()
+        district = str(values.get("district") or "").strip()
+        region_name = str(values.get("region_name") or values.get("region") or "").strip()
+        names = [
+            " ".join(part for part in (sido, city, district or county) if part),
+            " ".join(part for part in (sido, city or district or county) if part),
+            region_name,
+            district or county or city or sido,
+        ]
+        for name in names:
+            code = resolve_cortarno(name) if name else None
+            if not code or code == "ALL_METRO":
+                continue
+            numeric = int(code)
+            if code in SIDO_CODES.values():
+                values["sido_code"] = numeric // 100_000_000
+            else:
+                values["sigungu_code"] = numeric // 100_000
+                values["sido_code"] = numeric // 100_000_000
+            return
 
     @property
     def min_area_x100(self) -> int | None:

@@ -101,3 +101,7 @@ def test_listing_recrawl_preserves_completed_mortgage_enrichment():
     refreshed = session.get(ListingCurrent, 10_000)
     assert refreshed.mortgage_code == 1
     assert refreshed.mortgage_checked_at is not None
+    history = session.scalar(select(ListingHistory).where(ListingHistory.article_id == 10_000))
+    assert history is not None
+    assert history.mortgage_code == 1
+    assert history.change_mask & 16 == 0

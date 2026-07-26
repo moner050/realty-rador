@@ -35,6 +35,20 @@ def test_mysql_v2_schema_supports_generated_fulltext_temp_and_skip_locked():
             )
         )
         assert "GENERATED" in str(generated).upper()
+        mortgage_column = connection.scalar(
+            text(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'listing_current'
+                  AND column_name = 'mortgage_checked_at'
+                """
+            )
+        )
+        assert mortgage_column == "mortgage_checked_at"
+        mortgage_index = connection.scalar(
+            text("SHOW INDEX FROM listing_current WHERE Key_name = 'ix_listing_mortgage_pending'")
+        )
+        assert mortgage_index is not None
         fulltext = connection.scalar(text("SHOW INDEX FROM complex_current WHERE Key_name = 'ft_complex_name'"))
         assert fulltext is not None
         connection.execute(text("CREATE TEMPORARY TABLE incoming_listing_probe (article_id BIGINT UNSIGNED PRIMARY KEY)"))
