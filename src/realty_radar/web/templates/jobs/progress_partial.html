@@ -1,4 +1,17 @@
 <section id="metro-progress" class="space-y-4" hx-get="/api/crawl-jobs/progress" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 sm:p-5">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-white">수도권 전체 수동 수집</h2>
+        <p class="mt-1 text-sm text-slate-300">서울·경기·인천의 모든 시/군/구를 각각 수집 job으로 등록합니다.</p>
+      </div>
+      <form action="/api/crawl-jobs/metro" method="post" hx-post="/api/crawl-jobs/metro" hx-target="#metro-progress" hx-swap="outerHTML">
+        <button type="submit" class="min-h-11 rounded-lg bg-indigo-600 px-5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-600" {% if metro_progress.is_active %}disabled aria-disabled="true"{% endif %}>
+          {% if metro_progress.is_active %}수도권 수집 진행 중{% else %}수도권 전체 수동 수집 시작{% endif %}
+        </button>
+      </form>
+    </div>
+  </div>
   <div class="rounded-xl border border-slate-700 bg-slate-800 p-4 text-sm text-slate-300">
     <p>전체 job: {{ summary.total_jobs }} · 대기: {{ summary.pending_jobs }} · 수집 중: {{ summary.running_jobs }} · 완료: {{ summary.completed_jobs }} · 실패: {{ summary.failed_jobs }}</p>
   </div>
