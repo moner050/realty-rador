@@ -412,12 +412,15 @@ def test_search_filter_converts_eok_price_inputs_without_overriding_canonical_pr
         min_price_eok="5.25",
         max_price_eok="12",
     )
+    empty_canonical_filters = parse_search_filter(min_price="", max_price="not-a-number", min_price_eok="5.25", max_price_eok="12")
     invalid_filters = parse_search_filter(min_price_eok="five", max_price_eok="")
 
     assert eok_filters.min_price == 525_000_000
     assert eok_filters.max_price == 1_200_000_000
     assert canonical_filters.min_price == 610_000_000
     assert canonical_filters.max_price == 990_000_000
+    assert empty_canonical_filters.min_price is None
+    assert empty_canonical_filters.max_price is None
     assert invalid_filters.min_price is None
     assert invalid_filters.max_price is None
 
@@ -470,6 +473,7 @@ def test_home_renders_mobile_filter_groups_and_dynamic_region_controls():
     assert "sigungu.replaceChildren" in response.text
     assert "sigungu.dataset.selected = \"\"" in response.text
     assert '<option value="11680"' not in response.text
+    assert 'hx-trigger="submit, change delay:400ms, keyup changed delay:400ms"' in response.text
 
 
 def test_listing_card_shows_populated_detail_fields_without_absent_detail_placeholders():
@@ -508,7 +512,7 @@ def test_listing_card_shows_populated_detail_fields_without_absent_detail_placeh
                     exclusive_area_x100=8400,
                     room_count=3,
                     bathroom_count=2,
-                    parking_possible=True,
+                    parking_possible=False,
                     parking_per_household_x100=125,
                     monthly_management_cost=180000,
                     move_in_available_on=date(2026, 8, 1),
@@ -550,6 +554,7 @@ def test_listing_card_shows_populated_detail_fields_without_absent_detail_placeh
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    for text in ("방 3", "욕실 2", "주차 가능", "1.25대/세대", "관리비 180,000원", "입주 2026-08-01", "역 도보 7분"):
+    for text in ("방 3", "욕실 2", "주차 불가", "1.25대/세대", "관리비 180,000원", "입주 2026-08-01", "역 도보 7분"):
         assert text in response.text
+    assert response.text.index("5억 원") < response.text.index("상세 단지")
     assert "방 -" not in response.text

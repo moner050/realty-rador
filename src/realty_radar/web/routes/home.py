@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
+from fastapi.params import Param
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -60,6 +61,10 @@ def _optional_eok_price(value: str | None) -> int | None:
     if amount is None or not amount.is_finite() or amount < 0:
         return None
     return int(amount * Decimal(100_000_000))
+
+
+def _query_value_was_provided(value: object) -> bool:
+    return value is not None and not isinstance(value, Param)
 
 
 def _optional_date(value: str | None) -> date | None:
@@ -194,14 +199,14 @@ def parse_search_filter(
         trade_types=trades,
         min_price=(
             parsed_min_price
-            if parsed_min_price is not None
+            if _query_value_was_provided(min_price)
             else parsed_min_eok
             if parsed_min_eok is not None
             else _optional_int(min_deposit)
         ),
         max_price=(
             parsed_max_price
-            if parsed_max_price is not None
+            if _query_value_was_provided(max_price)
             else parsed_max_eok
             if parsed_max_eok is not None
             else _optional_int(max_deposit)
