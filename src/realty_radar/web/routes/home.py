@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, SIGUNGU_CODES
-from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.auth import SESSION_COOKIE_NAME, is_authenticated, verify_session_token
@@ -217,6 +217,7 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
     _enrich_listings_with_loans(result, applicant)
     next_url = str(request.url.include_query_params(cursor=result.next_cursor, append="1")) if result.next_cursor else None
+    sido_labels, sigungu_labels = _region_labels()
     return templates.TemplateResponse(
         request,
         template_name,
@@ -229,13 +230,13 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "is_authenticated": is_authenticated(request),
             "region_options": _region_options(),
             "sort_options": SORT_OPTIONS,
-            "sido_labels": _region_labels()[0],
-            "sigungu_labels": _region_labels()[1],
+            "sido_labels": sido_labels,
+            "sigungu_labels": sigungu_labels,
         },
     )
 
 
-def _render_search_error(request: Request, filters: ListingSearchFilter, template_name: str):
+def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_htmx: bool):
     sido_labels, sigungu_labels = _region_labels()
     context = {
         "filters": filters,
@@ -246,19 +247,30 @@ def _render_search_error(request: Request, filters: ListingSearchFilter, templat
         "is_authenticated": is_authenticated(request),
         "search_error": True,
     }
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request,
-        "listings/index.html" if template_name == "listings/index.html" else "listings/search_error.html",
+        "listings/search_error.html" if is_htmx else "listings/index.html",
         context=context,
-        status_code=400,
+        status_code=200 if is_htmx else 400,
     )
+    if is_htmx:
+        response.headers["HX-Retarget"] = "#search-results"
+        response.headers["HX-Reswap"] = "outerHTML"
+    return response
 
 
-def _render_or_client_error(request: Request, db: Session, filters: ListingSearchFilter, template_name: str):
+def _render_or_client_error(
+    request: Request,
+    db: Session,
+    filters: ListingSearchFilter,
+    template_name: str,
+    *,
+    is_htmx: bool,
+):
     try:
         return _render_result(request, db, filters, template_name)
-    except ValueError:
-        return _render_search_error(request, filters, template_name)
+    except ListingSearchValidationError:
+        return _render_search_error(request, filters, is_htmx=is_htmx)
 
 
 @router.get("/", response_class=HTMLResponse, name="home")
@@ -267,7 +279,7 @@ def index(
     db: Annotated[Session, Depends(get_db)],
     filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
 ):
-    return _render_or_client_error(request, db, filters, "listings/index.html")
+    return _render_or_client_error(request, db, filters, "listings/index.html", is_htmx=False)
 
 
 @router.get("/listings/search", response_class=HTMLResponse, name="search_listings")
@@ -285,4 +297,4 @@ def search_listings(
         if is_htmx
         else "listings/index.html"
     )
-    return _render_or_client_error(request, db, filters, template_name)
+    return _render_or_client_error(request, db, filters, template_name, is_htmx=is_htmx)

@@ -191,9 +191,37 @@ def test_invalid_search_queries_render_a_client_error_instead_of_a_server_error(
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
-    assert htmx_response.status_code == 400
+    assert htmx_response.status_code == 200
     assert "검색 조건을 확인" in response.text
+    assert 'id="listing-search-form"' in response.text
     assert 'id="search-results"' in htmx_response.text
+    assert htmx_response.headers["HX-Retarget"] == "#search-results"
+    assert htmx_response.headers["HX-Reswap"] == "outerHTML"
+
+
+def test_unrelated_value_errors_are_not_converted_to_client_filter_errors(monkeypatch):
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    def raise_unrelated_value_error(*args, **kwargs):
+        raise ValueError("unexpected application failure")
+
+    app.dependency_overrides[get_db] = override_db
+    monkeypatch.setattr(ListingSearchService, "search_listings", raise_unrelated_value_error)
+    try:
+        with pytest.raises(ValueError, match="unexpected application failure"):
+            TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_active_region_chips_use_human_readable_sido_and_sigungu_names():

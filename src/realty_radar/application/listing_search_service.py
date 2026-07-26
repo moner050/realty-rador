@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from realty_radar.config import settings
 from realty_radar.constants import TransactionType
-from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.listing.models import ComplexGroupItem, SearchResult
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.models import ComplexCurrent, ListingCurrent
@@ -456,7 +456,7 @@ class ListingSearchService:
         try:
             return SORT_SPECS[filters.sort_by]
         except KeyError as error:
-            raise ValueError("unsupported sort") from error
+            raise ListingSearchValidationError("unsupported sort") from error
 
     @staticmethod
     def _apply_keyset(statement, sort_column, id_column, descending: bool, anchor: tuple[Any, int]):
@@ -498,15 +498,15 @@ class ListingSearchService:
             expected = hmac.new(self._cursor_secret, raw, hashlib.sha256).digest()
             payload = json.loads(raw)
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as error:
-            raise ValueError("invalid cursor") from error
+            raise ListingSearchValidationError("invalid cursor") from error
         if not hmac.compare_digest(signature, expected):
-            raise ValueError("invalid cursor signature")
+            raise ListingSearchValidationError("invalid cursor signature")
         if payload.get("fp") != self._filter_fingerprint(filters, applicant) or payload.get("grouped") is not grouped:
-            raise ValueError("cursor does not match filters")
+            raise ListingSearchValidationError("cursor does not match filters")
         try:
             return self._deserialize_value(payload["sort"], sort.value_kind), int(payload["id"])
         except (KeyError, TypeError, ValueError) as error:
-            raise ValueError("invalid cursor") from error
+            raise ListingSearchValidationError("invalid cursor") from error
 
     @staticmethod
     def _serialize_value(value: Any) -> str | int:
@@ -548,6 +548,6 @@ class ListingSearchService:
     @staticmethod
     def _validate(filters: ListingSearchFilter) -> None:
         if not 1 <= filters.page_size <= 100:
-            raise ValueError("page_size must be between 1 and 100")
+            raise ListingSearchValidationError("page_size must be between 1 and 100")
         if filters.complex_keyword and len("".join(filters.complex_keyword.split())) < 2:
-            raise ValueError("complex keyword must be at least two characters")
+            raise ListingSearchValidationError("complex keyword must be at least two characters")

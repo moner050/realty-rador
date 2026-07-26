@@ -8,6 +8,10 @@ from typing import Iterable
 from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, resolve_cortarno
 
 
+class ListingSearchValidationError(ValueError):
+    """Raised when a listing search input cannot be safely evaluated."""
+
+
 _DIRECTION_CODES = {
     "남": 1,
     "남향": 1,
