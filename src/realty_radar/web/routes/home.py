@@ -138,9 +138,12 @@ def parse_search_filter(
     )
     parsed_min_price = _optional_int(min_price)
     parsed_max_price = _optional_int(max_price)
-    parsed_recent_days = _optional_int(recent_days_custom)
+    parsed_recent_days = _optional_int(recent_days)
     if parsed_recent_days is None:
-        parsed_recent_days = _optional_int(recent_days)
+        parsed_recent_days = _optional_int(recent_days_custom)
+    parsed_exclude_short_term = _request_bool(exclude_short_term, True)
+    if trades and 4 in trades:
+        parsed_exclude_short_term = False
     return ListingSearchFilter(
         region_code=_optional_int(region_code),
         sido_code=_optional_int(sido_code),
@@ -163,7 +166,7 @@ def parse_search_filter(
         sort_by=_request_string(sort_by) or "price_asc",
         page_size=page_size if isinstance(page_size, int) else 20,
         cursor=_request_string(cursor),
-        exclude_short_term=_request_bool(exclude_short_term, True),
+        exclude_short_term=parsed_exclude_short_term,
         exclude_first_floor=_request_bool(exclude_first_floor, False),
         group_by_complex=_request_bool(group_by_complex, False),
         only_eligible_loans=_request_bool(only_eligible_loans, False),

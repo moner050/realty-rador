@@ -1,13 +1,32 @@
 {% import "listings/_listing_cards.html" as cards %}
+{% set trade_labels = {1: '매매', 2: '전세', 3: '월세', 4: '단기임대'} %}
+{% set mortgage_labels = {0: '융자 정보 미상', 1: '융자 없음', 2: '융자 있음'} %}
+{% set direction_labels = {1: '남', 2: '남동', 3: '동', 4: '북동', 5: '북', 6: '북서', 7: '서', 8: '남서'} %}
+{% set floor_labels = {1: '저층', 2: '중층', 3: '고층', 4: '탑층', 5: '지하'} %}
+{% set sort_labels = {'price_asc': '가격 낮은순', 'price_desc': '가격 높은순', 'recent': '최신 등록순', 'area_asc': '전용면적 좁은순', 'area_desc': '전용면적 넓은순', 'households_asc': '세대수 적은순', 'households_desc': '세대수 많은순'} %}
 <div id="search-status" hx-swap-oob="true" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
     <p class="text-sm text-slate-400">검색 결과{% if result.is_grouped %} · 단지별 묶음{% endif %}</p>
     <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 text-xs whitespace-nowrap">
         {% if filters.sido_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시도 {{ filters.sido_code }}</span>{% endif %}
         {% if filters.sigungu_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시군구 {{ filters.sigungu_code }}</span>{% endif %}
+        {% if filters.region_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">동 {{ filters.region_code }}</span>{% endif %}
         {% if filters.complex_keyword %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.complex_keyword }}</span>{% endif %}
+        {% if filters.trade_types %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">거래 {% for code in filters.trade_types %}{{ trade_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
         {% if filters.min_price or filters.max_price %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">가격 {{ filters.min_price or '전체' }} ~ {{ filters.max_price or '전체' }}</span>{% endif %}
+        {% if filters.max_monthly_rent is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">월세 상한 {{ filters.max_monthly_rent }}</span>{% endif %}
+        {% if filters.min_exclusive_area or filters.max_exclusive_area %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">전용 {{ filters.min_exclusive_area or '전체' }}㎡ ~ {{ filters.max_exclusive_area or '전체' }}㎡</span>{% endif %}
+        {% if filters.min_construction_year %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">준공 {{ filters.min_construction_year }}년 이후</span>{% endif %}
+        {% if filters.min_households %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.min_households }}세대 이상</span>{% endif %}
         {% if filters.recent_days %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">최근 {{ filters.recent_days }}일</span>{% endif %}
+        {% if filters.mortgage_codes %}{% for code in filters.mortgage_codes %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ mortgage_labels[code] }}</span>{% endfor %}{% endif %}
+        {% if filters.exclude_unknown_mortgage %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">융자 정보 미상 제외</span>{% endif %}
+        {% if filters.direction_codes %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">방향 {% for code in filters.direction_codes %}{{ direction_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
+        {% if filters.floor_bands %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">층 {% for code in filters.floor_bands %}{{ floor_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
+        {% if filters.exclude_first_floor %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">1층 제외</span>{% endif %}
+        <span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">단기임대 {{ '제외' if filters.exclude_short_term else '포함' }}</span>
+        {% if filters.group_by_complex %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">단지별 묶기</span>{% endif %}
         {% if filters.only_eligible_loans %}<span class="rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200">대출 적격</span>{% endif %}
+        <span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ sort_labels[filters.sort_by] }}</span>
     </div>
 </div>
 <div id="search-results" class="space-y-3">

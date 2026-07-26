@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
 from realty_radar.infrastructure.database.session import get_db
+from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.web.main import app
 from realty_radar.web.routes.home import parse_search_filter
 
@@ -27,7 +28,7 @@ def test_search_filter_parses_all_apartment_search_controls_and_legacy_deposit_a
         max_exclusive_area="84.99",
         min_construction_year="2010",
         min_households="500",
-        recent_days="7",
+        recent_days="",
         recent_days_custom="12",
         mortgage_codes=["0", "1", "2"],
         exclude_unknown_mortgage=True,
@@ -64,6 +65,107 @@ def test_search_filter_parses_all_apartment_search_controls_and_legacy_deposit_a
     assert filters.only_eligible_loans is True
     assert filters.sort_by == "households_asc"
     assert filters.page_size == 40
+
+
+def test_recent_preset_wins_when_a_no_javascript_form_submits_both_values():
+    filters = parse_search_filter(recent_days="7", recent_days_custom="12")
+
+    assert filters.recent_days == 7
+
+
+def test_short_term_trade_selection_includes_short_term_rows_despite_default_exclusion():
+    filters = parse_search_filter(trade_types=["SHORT_TERM"], exclude_short_term=True)
+
+    assert filters.exclude_short_term is False
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    seen_at = datetime(2026, 7, 26, tzinfo=timezone.utc)
+    session.add(
+        ComplexCurrent(
+            complex_id=30,
+            region_code=1150010200,
+            name="단기 단지",
+            normalized_name="단기단지",
+            address="서울시 테스트로 1",
+            state_hash=b"c" * 16,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+            updated_at=seen_at,
+        )
+    )
+    session.add(
+        ListingCurrent(
+            article_id=31,
+            complex_id=30,
+            region_code=1150010200,
+            complex_name="단기 단지",
+            address="서울시 테스트로 1",
+            trade_type=4,
+            primary_price=100_000_000,
+            is_short_term=True,
+            state_hash=b"l" * 16,
+            last_seen_job_id=1,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+            last_changed_at=seen_at,
+        )
+    )
+    session.commit()
+
+    result = ListingSearchService(session).search_listings(filters)
+
+    assert [item.article_id for item in result.items] == [31]
+
+
+def test_active_filter_chips_describe_every_applied_search_condition():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get(
+            "/?trade_types=SALE&trade_types=MONTHLY_RENT&min_price=500&max_monthly_rent=100&"
+            "min_exclusive_area=59&max_exclusive_area=84&min_construction_year=2010&min_households=500&"
+            "recent_days=7&mortgage_codes=1&direction_codes=1&floor_bands=3&exclude_first_floor=true&"
+            "exclude_short_term=false&group_by_complex=true&only_eligible_loans=true&sort_by=area_desc"
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    for label in (
+        "거래 매매·월세",
+        "가격 500 ~ 전체",
+        "월세 상한 100",
+        "전용 59㎡ ~ 84㎡",
+        "준공 2010년 이후",
+        "500세대 이상",
+        "최근 7일",
+        "융자 없음",
+        "방향 남",
+        "층 고층",
+        "1층 제외",
+        "단기임대 포함",
+        "단지별 묶기",
+        "대출 적격",
+        "전용면적 넓은순",
+    ):
+        assert label in response.text
 
 
 def test_search_filter_prefers_primary_price_and_accepts_singular_legacy_trade():
