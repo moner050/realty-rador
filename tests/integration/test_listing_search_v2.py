@@ -311,3 +311,87 @@ def test_grouped_eligible_sort_and_cursor_use_only_eligible_listing_values(sort_
 
     assert [group.complex_id for group in first.grouped_items + second.grouped_items] == expected_complexes
     assert first.grouped_items[0].listing_count == 1
+
+
+def test_grouped_eligible_price_cursor_scans_past_raw_batch_until_global_order_is_safe():
+    session = _session()
+    _seed(session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for listing in session.query(ListingCurrent).all():
+        listing.trade_type = 99
+    for offset in range(51):
+        complex_id = 3000 + offset
+        session.add(
+            ComplexCurrent(
+                complex_id=complex_id,
+                region_code=1150010200,
+                name=f"테스트 {complex_id}",
+                normalized_name=f"테스트{complex_id}",
+                address="서울특별시 강서구 테스트로 1",
+                household_count=1000,
+                state_hash=bytes([offset]) * 16,
+                first_seen_at=now,
+                last_seen_at=now,
+                updated_at=now,
+            )
+        )
+        # The raw minimum is ineligible and appears in the first 50-group
+        # SQL batch. The final group has the best eligible price.
+        session.add_all(
+            [
+                ListingCurrent(
+                    article_id=10_000 + offset * 2,
+                    complex_id=complex_id,
+                    region_code=1150010200,
+                    complex_name=f"테스트 {complex_id}",
+                    address="서울특별시 강서구 테스트로 1",
+                    household_count=1000,
+                    trade_type=99,
+                    primary_price=offset + 1,
+                    exclusive_area_x100=8000,
+                    state_hash=bytes([offset]) * 16,
+                    last_seen_job_id=1,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    last_changed_at=now,
+                ),
+                ListingCurrent(
+                    article_id=10_001 + offset * 2,
+                    complex_id=complex_id,
+                    region_code=1150010200,
+                    complex_name=f"테스트 {complex_id}",
+                    address="서울특별시 강서구 테스트로 1",
+                    household_count=1000,
+                    trade_type=1,
+                    primary_price=400_000_000 if offset == 50 else 500_000_000,
+                    exclusive_area_x100=8000,
+                    state_hash=bytes([offset + 1]) * 16,
+                    last_seen_job_id=1,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    last_changed_at=now,
+                ),
+            ]
+        )
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    cursor = None
+    seen: list[int] = []
+    while True:
+        result = service.search_listings(
+            ListingSearchFilter(
+                only_eligible_loans=True,
+                group_by_complex=True,
+                page_size=10,
+                sort_by="price_asc",
+                cursor=cursor,
+            )
+        )
+        seen.extend(group.complex_id for group in result.grouped_items)
+        if not result.has_more:
+            break
+        cursor = result.next_cursor
+
+    assert seen[0] == 3050
+    assert len(seen) == 51
+    assert len(set(seen)) == 51

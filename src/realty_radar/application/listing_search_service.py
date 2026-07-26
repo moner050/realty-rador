@@ -223,17 +223,22 @@ class ListingSearchService:
                 func.max(filtered.c.first_seen_at).label("latest_seen_at"),
                 func.min(filtered.c.exclusive_area_x100).label("min_area_x100"),
                 func.max(filtered.c.exclusive_area_x100).label("max_area_x100"),
+                func.min(filtered.c.household_count).label("min_household_count"),
                 func.max(filtered.c.household_count).label("household_count"),
             )
             .group_by(filtered.c.complex_id)
             .cte("eligible_grouped_complex")
         )
-        sort_column_name = {
-            "primary_price": "max_price" if sort.descending else "min_price",
-            "first_seen_at": "latest_seen_at",
-            "exclusive_area_x100": "max_area_x100" if sort.descending else "min_area_x100",
-            "household_count": "household_count",
-        }[sort.name]
+        sort_column_name = (
+            "min_household_count"
+            if sort.name == "household_count" and not sort.descending
+            else {
+                "primary_price": "max_price" if sort.descending else "min_price",
+                "first_seen_at": "latest_seen_at",
+                "exclusive_area_x100": "max_area_x100" if sort.descending else "min_area_x100",
+                "household_count": "household_count",
+            }[sort.name]
+        )
         sort_column = getattr(grouped.c, sort_column_name)
         anchor = self._decode_cursor(filters, sort, grouped=True, applicant=applicant)
         # The issued cursor is based on eligible aggregates, which intentionally
@@ -243,7 +248,7 @@ class ListingSearchService:
         wanted = filters.page_size + 1
         qualified: list[tuple[ComplexGroupItem, Any, int]] = []
         batch_size = max(50, filters.page_size * 4)
-        while len(qualified) < wanted:
+        while True:
             statement = select(grouped)
             if candidate_anchor is not None:
                 statement = self._apply_keyset(
@@ -284,10 +289,13 @@ class ListingSearchService:
             )
             qualified.extend(batch_qualified)
             qualified.sort(key=lambda item: (item[1], item[2]), reverse=sort.descending)
-            if len(qualified) >= wanted:
-                break
+            qualified = qualified[:wanted]
             candidate_anchor = (group_rows[-1][sort_column_name], group_rows[-1]["complex_id"])
             if len(group_rows) < batch_size:
+                break
+            if len(qualified) >= wanted and self._raw_bound_is_safe(
+                candidate_anchor, (qualified[-1][1], qualified[-1][2]), sort.descending
+            ):
                 break
         has_more = len(qualified) > filters.page_size
         page = qualified[: filters.page_size]
@@ -339,6 +347,11 @@ class ListingSearchService:
         if descending:
             return value < anchor_value or (value == anchor_value and item_id < anchor_id)
         return value > anchor_value or (value == anchor_value and item_id > anchor_id)
+
+    @staticmethod
+    def _raw_bound_is_safe(raw_bound: tuple[Any, int], worst: tuple[Any, int], descending: bool) -> bool:
+        """Whether unscanned raw aggregates cannot outrank the eligible page tail."""
+        return raw_bound <= worst if descending else raw_bound >= worst
 
     def _is_loan_eligible(self, listing: ListingCurrent, applicant: Any) -> bool:
         transaction = {
