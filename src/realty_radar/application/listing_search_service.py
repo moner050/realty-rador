@@ -236,7 +236,10 @@ class ListingSearchService:
         }[sort.name]
         sort_column = getattr(grouped.c, sort_column_name)
         anchor = self._decode_cursor(filters, sort, grouped=True, applicant=applicant)
-        candidate_anchor = anchor
+        # The issued cursor is based on eligible aggregates, which intentionally
+        # differs from the raw SQL candidate aggregate. Keep the scan keyset
+        # private to this request and apply the public cursor after evaluation.
+        candidate_anchor = None
         wanted = filters.page_size + 1
         qualified: list[tuple[ComplexGroupItem, Any, int]] = []
         batch_size = max(50, filters.page_size * 4)
@@ -268,14 +271,21 @@ class ListingSearchService:
             for listing in listing_rows:
                 if self._is_loan_eligible(listing, applicant):
                     by_complex[listing.complex_id].append(listing)
+            batch_qualified: list[tuple[ComplexGroupItem, Any, int]] = []
             for row in group_rows:
                 listings = by_complex[row["complex_id"]]
                 if listings:
-                    qualified.append(
-                        (self._make_group(row["complex_id"], listings), row[sort_column_name], row["complex_id"])
-                    )
-                    if len(qualified) >= wanted:
-                        break
+                    item = self._make_group(row["complex_id"], listings)
+                    value = self._group_sort_value(item, sort)
+                    if anchor is None or self._is_after_anchor(value, item.complex_id, sort.descending, anchor):
+                        batch_qualified.append((item, value, item.complex_id))
+            batch_qualified.sort(
+                key=lambda item: (item[1], item[2]), reverse=sort.descending
+            )
+            qualified.extend(batch_qualified)
+            qualified.sort(key=lambda item: (item[1], item[2]), reverse=sort.descending)
+            if len(qualified) >= wanted:
+                break
             candidate_anchor = (group_rows[-1][sort_column_name], group_rows[-1]["complex_id"])
             if len(group_rows) < batch_size:
                 break
@@ -311,6 +321,24 @@ class ListingSearchService:
             listing_count=len(listings),
             listings=sorted(listings, key=lambda row: (row.primary_price, row.article_id)),
         )
+
+    @staticmethod
+    def _group_sort_value(item: ComplexGroupItem, sort: _SortSpec) -> Any:
+        if sort.name == "primary_price":
+            return item.max_price if sort.descending else item.min_price
+        if sort.name == "first_seen_at":
+            return max(row.first_seen_at for row in item.listings)
+        if sort.name == "exclusive_area_x100":
+            values = [row.exclusive_area_x100 for row in item.listings]
+            return max(values) if sort.descending else min(values)
+        return max(row.household_count for row in item.listings)
+
+    @staticmethod
+    def _is_after_anchor(value: Any, item_id: int, descending: bool, anchor: tuple[Any, int]) -> bool:
+        anchor_value, anchor_id = anchor
+        if descending:
+            return value < anchor_value or (value == anchor_value and item_id < anchor_id)
+        return value > anchor_value or (value == anchor_value and item_id > anchor_id)
 
     def _is_loan_eligible(self, listing: ListingCurrent, applicant: Any) -> bool:
         transaction = {

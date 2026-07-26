@@ -57,6 +57,22 @@ def test_mortgage_classifier_prefers_explicit_none_over_generic_finance_words():
     assert classify_mortgage_text("대출 상담 가능") == 0
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("융 자 무", 1),
+        ("근저당 없음", 1),
+        ("대출없음", 1),
+        ("근저당 설정", 2),
+        ("채권최고액 3억원", 2),
+        ("융자 30%", 2),
+        ("대출있음", 2),
+    ],
+)
+def test_mortgage_classifier_handles_known_explicit_text_forms(text, expected):
+    assert classify_mortgage_text(text) == expected
+
+
 def test_enrichment_updates_codes_once_and_never_persists_detail_text():
     factory = _session_factory()
 
@@ -78,6 +94,19 @@ def test_enrichment_updates_codes_once_and_never_persists_detail_text():
         assert all("융자" not in (row.description or "") for row in rows.values())
         history = list(session.scalars(select(ListingHistory).order_by(ListingHistory.article_id)).all())
         assert [item.article_id for item in history] == [10, 11]
+
+
+def test_enrichment_classifies_nested_article_detail_payload():
+    factory = _session_factory()
+
+    async def detail(article_id: int, complex_id: int):
+        return {"articleDetail": {"detailDescription": "근저당 설정"}}
+
+    runner = MortgageEnrichmentRunner(factory, detail_fetcher=detail, job_id=9003)
+    assert asyncio.run(runner.run_once(batch_size=1)) == 1
+
+    with factory() as session:
+        assert session.get(ListingCurrent, 10).mortgage_code == 2
 
 
 def test_enrichment_history_does_not_collide_with_collection_updated_event():

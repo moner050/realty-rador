@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -18,16 +19,18 @@ MORTGAGE_EXPLICIT_NONE = 1
 MORTGAGE_EXPLICIT_EXISTS = 2
 LIFECYCLE_ACTIVE = 1
 
-_NONE_PHRASES = ("융자금 없음", "융자 없음", "융자없음", "근저당 없음", "대출 없음")
-_EXISTS_PHRASES = ("융자금 있음", "융자 있음", "융자있음", "근저당 있음", "대출 있음")
+_NONE_PHRASES = ("융자무", "융자금없음", "융자없음", "근저당없음", "대출없음")
+_EXISTS_PHRASES = ("융자금있음", "융자있음", "근저당", "채권최고액", "대출있음")
 
 
 def classify_mortgage_text(value: str) -> int:
     """Return a code without retaining the untrusted SITE_A detail text."""
-    normalized = " ".join(value.replace("\n", " ").split())
+    normalized = re.sub(r"\s+", "", value)
     if any(phrase in normalized for phrase in _NONE_PHRASES):
         return MORTGAGE_EXPLICIT_NONE
     if any(phrase in normalized for phrase in _EXISTS_PHRASES):
+        return MORTGAGE_EXPLICIT_EXISTS
+    if re.search(r"융자\d+(?:[%％]|만원|억|원)?", normalized):
         return MORTGAGE_EXPLICIT_EXISTS
     return MORTGAGE_UNKNOWN
 
@@ -103,9 +106,11 @@ class MortgageEnrichmentRunner:
                     payload = await self._detail_fetcher(article_id, complex_id)
                 if not isinstance(payload, dict):
                     return None
+                detail = payload.get("articleDetail")
+                fields = detail if isinstance(detail, dict) else payload
                 # Only these two fields enter the short-lived classifier input.
                 text = " ".join(
-                    str(payload.get(key) or "") for key in ("detailDescription", "articleFeatureDescription")
+                    str(fields.get(key) or "") for key in ("detailDescription", "articleFeatureDescription")
                 )
                 return article_id, classify_mortgage_text(text)
             except asyncio.CancelledError:

@@ -257,3 +257,57 @@ def test_grouped_eligible_loan_filter_advances_by_group_keyset_cursor():
     assert [group.complex_id for group in first.grouped_items + second.grouped_items] == [1001, 1002]
     assert first.has_more is True
     assert second.has_more is False
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "expected_complexes"),
+    [
+        ("price_asc", [1002, 1001]),
+        ("recent", [1002, 1001]),
+        ("area_asc", [1002, 1001]),
+        ("households_asc", [1001, 1002]),
+    ],
+)
+def test_grouped_eligible_sort_and_cursor_use_only_eligible_listing_values(sort_by, expected_complexes):
+    session = _session()
+    _seed(session)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    rows = {row.article_id: row for row in session.query(ListingCurrent).all()}
+    # Complex 1001 has one eligible listing and one cheaper/newer/smaller
+    # ineligible listing. Its display and cursor must ignore the latter.
+    rows[2001].primary_price = 500_000_000
+    rows[2001].exclusive_area_x100 = 8000
+    rows[2001].household_count = 100
+    rows[2001].first_seen_at = now - timedelta(days=10)
+    rows[2002].primary_price = 100_000_000 if sort_by == "price_asc" else 7_000_000_000
+    rows[2002].exclusive_area_x100 = 10000 if sort_by == "price_asc" else 10
+    rows[2002].household_count = 1200
+    rows[2002].first_seen_at = now
+    rows[2002].trade_type = 99
+    rows[2003].primary_price = 400_000_000
+    rows[2003].exclusive_area_x100 = 7000
+    rows[2003].household_count = 800
+    rows[2003].first_seen_at = now - timedelta(days=1)
+    rows[2004].primary_price = 900_000_000
+    rows[2004].exclusive_area_x100 = 10000
+    rows[2004].household_count = 800
+    rows[2004].first_seen_at = now - timedelta(days=2)
+    rows[2004].trade_type = 99
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+
+    first = service.search_listings(
+        ListingSearchFilter(only_eligible_loans=True, group_by_complex=True, page_size=1, sort_by=sort_by)
+    )
+    second = service.search_listings(
+        ListingSearchFilter(
+            only_eligible_loans=True,
+            group_by_complex=True,
+            page_size=1,
+            sort_by=sort_by,
+            cursor=first.next_cursor,
+        )
+    )
+
+    assert [group.complex_id for group in first.grouped_items + second.grouped_items] == expected_complexes
+    assert first.grouped_items[0].listing_count == 1
