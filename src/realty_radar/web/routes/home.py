@@ -1,6 +1,7 @@
 """v2 keyset listing search routes."""
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Annotated
 
@@ -51,6 +52,15 @@ def _optional_decimal(value: str | None) -> Decimal | None:
     try:
         return Decimal(value)
     except Exception:
+        return None
+
+
+def _optional_date(value: str | None) -> date | None:
+    if value in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
         return None
 
 
@@ -123,6 +133,15 @@ def parse_search_filter(
     min_deposit: str | None = Query(None),
     max_deposit: str | None = Query(None),
     max_monthly_rent: str | None = Query(None),
+    direct_trade_only: bool = Query(False),
+    safe_lessor_hug_only: bool = Query(False),
+    min_room_count: str | None = Query(None),
+    min_bathroom_count: str | None = Query(None),
+    parking_possible_only: bool = Query(False),
+    min_parking_per_household: str | None = Query(None),
+    max_monthly_management_cost: str | None = Query(None),
+    move_in_by: str | None = Query(None),
+    max_subway_walk_minutes: str | None = Query(None),
     min_exclusive_area: str | None = Query(None),
     max_exclusive_area: str | None = Query(None),
     min_construction_year: str | None = Query(None),
@@ -165,6 +184,15 @@ def parse_search_filter(
         min_price=parsed_min_price if parsed_min_price is not None else _optional_int(min_deposit),
         max_price=parsed_max_price if parsed_max_price is not None else _optional_int(max_deposit),
         max_monthly_rent=_optional_int(max_monthly_rent),
+        direct_trade_only=_request_bool(direct_trade_only, False),
+        safe_lessor_hug_only=_request_bool(safe_lessor_hug_only, False),
+        min_room_count=_optional_int(min_room_count),
+        min_bathroom_count=_optional_int(min_bathroom_count),
+        parking_possible_only=_request_bool(parking_possible_only, False),
+        min_parking_per_household=_optional_decimal(min_parking_per_household),
+        max_monthly_management_cost=_optional_int(max_monthly_management_cost),
+        move_in_by=_optional_date(move_in_by),
+        max_subway_walk_minutes=_optional_int(max_subway_walk_minutes),
         min_exclusive_area=_optional_decimal(min_exclusive_area),
         max_exclusive_area=_optional_decimal(max_exclusive_area),
         min_construction_year=_optional_int(min_construction_year),

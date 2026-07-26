@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine
@@ -86,6 +87,70 @@ def test_cursor_cannot_be_reused_with_different_filters():
         service.search_listings(
             ListingSearchFilter(trade_type=2, sort_by="price_asc", page_size=1, cursor=first.next_cursor)
         )
+
+
+def test_extended_hot_table_filters_are_applied_and_cursor_rejects_mismatch():
+    session = _session()
+    _seed(session)
+    rows = {row.article_id: row for row in session.query(ListingCurrent).all()}
+    rows[2001].is_direct_trade = True
+    rows[2001].is_safe_lessor_hug = True
+    rows[2001].room_count = 3
+    rows[2001].bathroom_count = 2
+    rows[2001].parking_possible = True
+    rows[2001].parking_per_household_x100 = 125
+    rows[2001].monthly_management_cost = 150000
+    rows[2001].move_in_available_on = datetime(2026, 8, 1).date()
+    rows[2001].nearest_subway_walk_minutes = 5
+    rows[2002].is_direct_trade = True
+    rows[2002].room_count = 2
+    rows[2002].bathroom_count = 1
+    rows[2002].parking_possible = False
+    rows[2002].parking_per_household_x100 = 80
+    rows[2002].monthly_management_cost = 250000
+    rows[2002].move_in_available_on = datetime(2026, 10, 1).date()
+    rows[2002].nearest_subway_walk_minutes = 12
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(
+        direct_trade_only=True,
+        safe_lessor_hug_only=True,
+        min_room_count=3,
+        min_bathroom_count=2,
+        parking_possible_only=True,
+        min_parking_per_household=Decimal("1.2"),
+        max_monthly_management_cost=200000,
+        move_in_by=datetime(2026, 9, 1).date(),
+        max_subway_walk_minutes=7,
+        page_size=1,
+    )
+
+    result = service.search_listings(filters)
+    assert [item.article_id for item in result.items] == [2001]
+    with pytest.raises(ValueError, match="cursor"):
+        service.search_listings(
+            ListingSearchFilter(
+                direct_trade_only=True,
+                safe_lessor_hug_only=True,
+                min_room_count=2,
+                page_size=1,
+                cursor=result.next_cursor or "not-a-real-cursor",
+            )
+        )
+
+
+def test_detail_filter_keyset_has_no_duplicate_or_gap():
+    session = _session()
+    _seed(session)
+    for row in session.query(ListingCurrent).all():
+        row.room_count = 3
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    first = service.search_listings(ListingSearchFilter(min_room_count=3, page_size=2))
+    second = service.search_listings(
+        ListingSearchFilter(min_room_count=3, page_size=2, cursor=first.next_cursor)
+    )
+    assert [row.article_id for row in first.items + second.items] == [2001, 2002, 2003, 2004]
 
 
 def test_complex_grouping_uses_group_rows_and_second_listing_query():

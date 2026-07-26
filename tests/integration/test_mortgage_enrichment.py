@@ -6,8 +6,16 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from realty_radar.application.mortgage_enrichment_service import MortgageEnrichmentRunner, classify_mortgage_text
-from realty_radar.application.listing_batch_writer import HISTORY_MORTGAGE_ENRICHED, HISTORY_UPDATED
+from realty_radar.application.mortgage_enrichment_service import (
+    MortgageEnrichmentRunner,
+    classify_mortgage_text,
+    parse_article_detail,
+)
+from realty_radar.application.listing_batch_writer import (
+    HISTORY_DETAIL_ENRICHED,
+    HISTORY_MORTGAGE_ENRICHED,
+    HISTORY_UPDATED,
+)
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent, ListingHistory
 
 
@@ -152,3 +160,92 @@ def test_run_until_idle_skips_a_failing_pending_article_and_processes_later_rows
         assert session.get(ListingCurrent, 10).mortgage_checked_at is None
         assert session.get(ListingCurrent, 11).mortgage_checked_at is not None
         assert session.get(ListingCurrent, 12).mortgage_checked_at is not None
+
+
+def test_article_detail_parser_keeps_only_typed_values_and_rejects_malformed_fields():
+    parsed = parse_article_detail(
+        {
+            "articleDetail": {
+                "detailDescription": "융자 없음",
+                "roomCount": "3",
+                "bathroomCount": 2,
+                "parkingPossible": "Y",
+                "parkingPerHousehold": "1.25",
+                "monthlyManagementCost": "150000",
+                "moveInAvailableDate": "2026-08-15",
+                "nearestSubwayWalkMinutes": "7",
+            }
+        }
+    )
+
+    assert parsed.mortgage_code == 1
+    assert parsed.room_count == 3
+    assert parsed.bathroom_count == 2
+    assert parsed.parking_possible is True
+    assert parsed.parking_per_household_x100 == 125
+    assert parsed.monthly_management_cost == 150000
+    assert str(parsed.move_in_available_on) == "2026-08-15"
+    assert parsed.nearest_subway_walk_minutes == 7
+    assert "융자" not in repr(parsed)
+
+    malformed = parse_article_detail(
+        {
+            "articleDetail": {
+                "roomCount": "three",
+                "bathroomCount": -1,
+                "parkingPossible": "unknown",
+                "parkingPerHousehold": "many",
+                "monthlyManagementCost": -1,
+                "moveInAvailableDate": "not-a-date",
+                "nearestSubwayWalkMinutes": "far",
+            }
+        }
+    )
+    assert malformed.room_count is None
+    assert malformed.bathroom_count is None
+    assert malformed.parking_possible is None
+    assert malformed.parking_per_household_x100 is None
+    assert malformed.monthly_management_cost is None
+    assert malformed.move_in_available_on is None
+    assert malformed.nearest_subway_walk_minutes is None
+
+
+def test_combined_enrichment_updates_detail_once_and_retries_transport_failures():
+    factory = _session_factory()
+    attempts: list[int] = []
+
+    async def detail(article_id: int, complex_id: int):
+        attempts.append(article_id)
+        if article_id == 10 and attempts.count(article_id) == 1:
+            raise RuntimeError("retry later")
+        return {
+            "articleDetail": {
+                "detailDescription": "융자 있음",
+                "roomCount": 3,
+                "bathroomCount": 2,
+                "parkingPossible": True,
+                "parkingPerHousehold": 1.2,
+                "monthlyManagementCost": 180000,
+                "moveInAvailableDate": "2026-09-01",
+                "nearestSubwayWalkMinutes": 4,
+            }
+        }
+
+    runner = MortgageEnrichmentRunner(factory, detail_fetcher=detail, job_id=9010)
+    assert asyncio.run(runner.run_until_idle(batch_size=1)) == 2
+    assert asyncio.run(runner.run_until_idle(batch_size=3)) == 1
+    assert asyncio.run(runner.run_until_idle(batch_size=3)) == 0
+
+    with factory() as session:
+        listing = session.get(ListingCurrent, 10)
+        assert listing.detail_checked_at is not None
+        assert listing.mortgage_checked_at is not None
+        assert listing.room_count == 3
+        assert listing.bathroom_count == 2
+        assert listing.parking_possible is True
+        assert listing.parking_per_household_x100 == 120
+        assert listing.monthly_management_cost == 180000
+        assert str(listing.move_in_available_on) == "2026-09-01"
+        assert listing.nearest_subway_walk_minutes == 4
+        events = list(session.scalars(select(ListingHistory.event_type).where(ListingHistory.article_id == 10)).all())
+        assert sorted(events) == [HISTORY_MORTGAGE_ENRICHED, HISTORY_DETAIL_ENRICHED]

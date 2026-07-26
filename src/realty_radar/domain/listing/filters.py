@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Iterable
 
@@ -76,6 +77,15 @@ class ListingSearchFilter:
     min_deposit: int | None = None
     max_deposit: int | None = None
     max_monthly_rent: int | None = None
+    direct_trade_only: bool = False
+    safe_lessor_hug_only: bool = False
+    min_room_count: int | None = None
+    min_bathroom_count: int | None = None
+    parking_possible_only: bool = False
+    min_parking_per_household: Decimal | None = None
+    max_monthly_management_cost: int | None = None
+    move_in_by: date | None = None
+    max_subway_walk_minutes: int | None = None
     min_exclusive_area: Decimal | None = None
     max_exclusive_area: Decimal | None = None
     min_construction_year: int | None = None
@@ -101,9 +111,11 @@ class ListingSearchFilter:
 
     def to_dict(self) -> dict[str, object]:
         values = asdict(self)
-        for key in ("min_exclusive_area", "max_exclusive_area"):
+        for key in ("min_exclusive_area", "max_exclusive_area", "min_parking_per_household"):
             if values[key] is not None:
                 values[key] = str(values[key])
+        if values["move_in_by"] is not None:
+            values["move_in_by"] = values["move_in_by"].isoformat()
         values["cursor"] = None
         return values
 
@@ -136,6 +148,21 @@ class ListingSearchFilter:
         copied["max_exclusive_area"] = (
             Decimal(str(copied["max_exclusive_area"])) if copied.get("max_exclusive_area") is not None else None
         )
+        copied["min_parking_per_household"] = (
+            Decimal(str(copied["min_parking_per_household"]))
+            if copied.get("min_parking_per_household") is not None
+            else None
+        )
+        copied["move_in_by"] = cls._date_value(copied.get("move_in_by"))
+        for key in (
+            "min_room_count",
+            "min_bathroom_count",
+            "max_monthly_management_cost",
+            "max_subway_walk_minutes",
+        ):
+            copied[key] = cls._int_value(copied.get(key))
+        for key in ("direct_trade_only", "safe_lessor_hug_only", "parking_possible_only"):
+            copied[key] = cls._bool_value(copied.get(key), False)
         allowed = {field_name for field_name in cls.__dataclass_fields__}
         return cls(**{key: value for key, value in copied.items() if key in allowed})
 
@@ -190,6 +217,32 @@ class ListingSearchFilter:
                 values["sido_code"] = numeric // 100_000_000
             return
 
+    @staticmethod
+    def _int_value(value: object) -> int | None:
+        try:
+            return int(str(value)) if value not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _bool_value(value: object, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return default
+
+    @staticmethod
+    def _date_value(value: object) -> date | None:
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                return None
+        return None
+
     @property
     def min_area_x100(self) -> int | None:
         return self._area_x100(self.min_exclusive_area)
@@ -197,6 +250,10 @@ class ListingSearchFilter:
     @property
     def max_area_x100(self) -> int | None:
         return self._area_x100(self.max_exclusive_area)
+
+    @property
+    def min_parking_per_household_x100(self) -> int | None:
+        return self._area_x100(self.min_parking_per_household)
 
     @staticmethod
     def _area_x100(value: Decimal | None) -> int | None:

@@ -407,6 +407,28 @@ class ListingSearchService:
             statement = statement.where(ListingCurrent.primary_price <= filters.max_deposit)
         if filters.max_monthly_rent is not None:
             statement = statement.where(ListingCurrent.monthly_rent <= filters.max_monthly_rent)
+        if filters.direct_trade_only:
+            statement = statement.where(ListingCurrent.is_direct_trade.is_(True))
+        if filters.safe_lessor_hug_only:
+            statement = statement.where(ListingCurrent.is_safe_lessor_hug.is_(True))
+        if filters.min_room_count is not None:
+            statement = statement.where(ListingCurrent.room_count >= filters.min_room_count)
+        if filters.min_bathroom_count is not None:
+            statement = statement.where(ListingCurrent.bathroom_count >= filters.min_bathroom_count)
+        if filters.parking_possible_only:
+            statement = statement.where(ListingCurrent.parking_possible.is_(True))
+        if filters.min_parking_per_household_x100 is not None:
+            statement = statement.where(
+                ListingCurrent.parking_per_household_x100 >= filters.min_parking_per_household_x100
+            )
+        if filters.max_monthly_management_cost is not None:
+            statement = statement.where(ListingCurrent.monthly_management_cost <= filters.max_monthly_management_cost)
+        if filters.move_in_by is not None:
+            statement = statement.where(ListingCurrent.move_in_available_on <= filters.move_in_by)
+        if filters.max_subway_walk_minutes is not None:
+            statement = statement.where(
+                ListingCurrent.nearest_subway_walk_minutes <= filters.max_subway_walk_minutes
+            )
         if filters.min_area_x100 is not None:
             statement = statement.where(ListingCurrent.exclusive_area_x100 >= filters.min_area_x100)
         if filters.max_area_x100 is not None:

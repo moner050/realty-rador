@@ -5,12 +5,20 @@ import asyncio
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from realty_radar.application.listing_batch_writer import CHANGE_MORTGAGE, HISTORY_MORTGAGE_ENRICHED, utc_now
+from realty_radar.application.listing_batch_writer import (
+    CHANGE_DETAIL,
+    CHANGE_MORTGAGE,
+    HISTORY_DETAIL_ENRICHED,
+    HISTORY_MORTGAGE_ENRICHED,
+    utc_now,
+)
 from realty_radar.infrastructure.database.models import ListingCurrent, ListingHistory
 
 
@@ -44,8 +52,106 @@ class EnrichmentBatch:
     last_candidate_id: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class ArticleDetail:
+    """Typed values retained from a SITE_A detail response only."""
+
+    mortgage_code: int
+    room_count: int | None
+    bathroom_count: int | None
+    parking_possible: bool | None
+    parking_per_household_x100: int | None
+    monthly_management_cost: int | None
+    move_in_available_on: date | None
+    nearest_subway_walk_minutes: int | None
+
+
+def _detail_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    detail = payload.get("articleDetail")
+    return detail if isinstance(detail, dict) else payload
+
+
+def _first_value(fields: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        if name in fields:
+            return fields[name]
+    return None
+
+
+def _unsigned_int(value: Any, *, maximum: int) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return number if 0 <= number <= maximum else None
+
+
+def _nullable_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().upper()
+        if normalized in {"Y", "YES", "TRUE", "1"}:
+            return True
+        if normalized in {"N", "NO", "FALSE", "0"}:
+            return False
+    return None
+
+
+def _per_household_x100(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        scaled = Decimal(str(value).strip()) * 100
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if scaled != scaled.to_integral_value():
+        return None
+    result = int(scaled)
+    return result if 0 <= result <= 100_000 else None
+
+
+def _date_value(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def parse_article_detail(payload: dict[str, Any]) -> ArticleDetail:
+    """Extract typed detail fields without returning API text or the payload."""
+    fields = _detail_fields(payload)
+    detail_text = " ".join(
+        str(fields.get(name) or "") for name in ("detailDescription", "articleFeatureDescription")
+    )
+    return ArticleDetail(
+        mortgage_code=classify_mortgage_text(detail_text),
+        room_count=_unsigned_int(_first_value(fields, "roomCount"), maximum=255),
+        bathroom_count=_unsigned_int(_first_value(fields, "bathroomCount"), maximum=255),
+        parking_possible=_nullable_bool(_first_value(fields, "parkingPossible", "parkingPossibleYn")),
+        parking_per_household_x100=_per_household_x100(
+            _first_value(fields, "parkingPerHousehold", "parkingPerHouseholdCount")
+        ),
+        monthly_management_cost=_unsigned_int(
+            _first_value(fields, "monthlyManagementCost", "managementCost"), maximum=4_294_967_295
+        ),
+        move_in_available_on=_date_value(_first_value(fields, "moveInAvailableDate", "moveInDate")),
+        nearest_subway_walk_minutes=_unsigned_int(
+            _first_value(fields, "nearestSubwayWalkMinutes", "subwayWalkMinutes"), maximum=65535
+        ),
+    )
+
+
 class MortgageEnrichmentRunner:
-    """Resumable detail worker; failed requests stay pending for a later run."""
+    """Resumable SITE_A detail worker; failed requests stay pending for a later run."""
 
     def __init__(
         self,
@@ -86,7 +192,7 @@ class MortgageEnrichmentRunner:
         with self._session_factory() as db:
             statement = (
                 select(ListingCurrent.article_id, ListingCurrent.complex_id)
-                .where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE, ListingCurrent.mortgage_checked_at.is_(None))
+                .where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE, ListingCurrent.detail_checked_at.is_(None))
                 .order_by(ListingCurrent.article_id)
                 .limit(batch_size)
             )
@@ -99,20 +205,14 @@ class MortgageEnrichmentRunner:
         last_candidate_id = candidates[-1][0] if candidates else None
         semaphore = asyncio.Semaphore(self._concurrency)
 
-        async def fetch(candidate: tuple[int, int]) -> tuple[int, int] | None:
+        async def fetch(candidate: tuple[int, int]) -> tuple[int, ArticleDetail] | None:
             article_id, complex_id = candidate
             try:
                 async with semaphore:
                     payload = await self._detail_fetcher(article_id, complex_id)
                 if not isinstance(payload, dict):
                     return None
-                detail = payload.get("articleDetail")
-                fields = detail if isinstance(detail, dict) else payload
-                # Only these two fields enter the short-lived classifier input.
-                text = " ".join(
-                    str(fields.get(key) or "") for key in ("detailDescription", "articleFeatureDescription")
-                )
-                return article_id, classify_mortgage_text(text)
+                return article_id, parse_article_detail(payload)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -126,20 +226,40 @@ class MortgageEnrichmentRunner:
         with self._session_factory() as db:
             updates: list[dict[str, Any]] = []
             history: list[ListingHistory] = []
-            for article_id, code in resolved:
+            for article_id, detail in resolved:
                 listing = db.get(ListingCurrent, article_id)
-                if listing is None or listing.mortgage_checked_at is not None:
+                if listing is None or listing.detail_checked_at is not None:
                     continue
-                changed = listing.mortgage_code != code
+                mortgage_changed = listing.mortgage_code != detail.mortgage_code
+                detail_changed = any(
+                    getattr(listing, name) != getattr(detail, name)
+                    for name in (
+                        "room_count",
+                        "bathroom_count",
+                        "parking_possible",
+                        "parking_per_household_x100",
+                        "monthly_management_cost",
+                        "move_in_available_on",
+                        "nearest_subway_walk_minutes",
+                    )
+                )
                 updates.append(
                     {
                         "article_id": listing.article_id,
-                        "mortgage_code": code,
+                        "mortgage_code": detail.mortgage_code,
                         "mortgage_checked_at": now,
-                        "last_changed_at": now if changed else listing.last_changed_at,
+                        "room_count": detail.room_count,
+                        "bathroom_count": detail.bathroom_count,
+                        "parking_possible": detail.parking_possible,
+                        "parking_per_household_x100": detail.parking_per_household_x100,
+                        "monthly_management_cost": detail.monthly_management_cost,
+                        "move_in_available_on": detail.move_in_available_on,
+                        "nearest_subway_walk_minutes": detail.nearest_subway_walk_minutes,
+                        "detail_checked_at": now,
+                        "last_changed_at": now if mortgage_changed or detail_changed else listing.last_changed_at,
                     }
                 )
-                if changed:
+                if mortgage_changed:
                     history.append(
                         ListingHistory(
                             article_id=listing.article_id,
@@ -150,7 +270,26 @@ class MortgageEnrichmentRunner:
                             primary_price=listing.primary_price,
                             monthly_rent=listing.monthly_rent,
                             lifecycle=listing.lifecycle,
-                            mortgage_code=code,
+                            mortgage_code=detail.mortgage_code,
+                            floor_no=listing.floor_no,
+                            total_floor=listing.total_floor,
+                            direction_code=listing.direction_code,
+                            state_hash=listing.state_hash,
+                            occurred_at=now,
+                        )
+                    )
+                if detail_changed:
+                    history.append(
+                        ListingHistory(
+                            article_id=listing.article_id,
+                            complex_id=listing.complex_id,
+                            job_id=self._job_id,
+                            event_type=HISTORY_DETAIL_ENRICHED,
+                            change_mask=CHANGE_DETAIL,
+                            primary_price=listing.primary_price,
+                            monthly_rent=listing.monthly_rent,
+                            lifecycle=listing.lifecycle,
+                            mortgage_code=detail.mortgage_code,
                             floor_no=listing.floor_no,
                             total_floor=listing.total_floor,
                             direction_code=listing.direction_code,

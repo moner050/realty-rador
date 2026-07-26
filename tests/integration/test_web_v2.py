@@ -68,6 +68,32 @@ def test_search_filter_parses_all_apartment_search_controls_and_legacy_deposit_a
     assert filters.page_size == 40
 
 
+def test_search_filter_parses_extended_listing_controls_and_saved_settings_values():
+    filters = parse_search_filter(
+        direct_trade_only=True,
+        safe_lessor_hug_only=True,
+        min_room_count="3",
+        min_bathroom_count="2",
+        parking_possible_only=True,
+        min_parking_per_household="1.25",
+        max_monthly_management_cost="180000",
+        move_in_by="2026-08-31",
+        max_subway_walk_minutes="8",
+    )
+    assert filters.direct_trade_only is True
+    assert filters.safe_lessor_hug_only is True
+    assert filters.min_room_count == 3
+    assert filters.min_bathroom_count == 2
+    assert filters.parking_possible_only is True
+    assert str(filters.min_parking_per_household) == "1.25"
+    assert filters.max_monthly_management_cost == 180000
+    assert str(filters.move_in_by) == "2026-08-31"
+    assert filters.max_subway_walk_minutes == 8
+
+    restored = type(filters).from_dict(filters.to_dict())
+    assert restored == filters
+
+
 def test_recent_preset_wins_when_a_no_javascript_form_submits_both_values():
     filters = parse_search_filter(recent_days="7", recent_days_custom="12")
 
