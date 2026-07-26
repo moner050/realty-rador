@@ -84,3 +84,35 @@ def test_site_a_parser_keeps_missing_or_malformed_list_level_boolean_flags_unkno
     assert listing is not None
     assert listing.is_direct_trade is None
     assert listing.is_safe_lessor_hug is None
+
+
+def test_site_a_parser_keeps_missing_list_level_boolean_flags_unknown():
+    listing = SiteAArticleParser().parse(
+        {
+            "articleNo": 2001,
+            "complexNo": 1001,
+            "cortarNo": 1150010200,
+            "tradeTypeCode": "A1",
+        },
+        SiteAComplexData(1001, 1150010200, "테스트", "테스트", "서울"),
+    )
+
+    assert listing is not None
+    assert listing.is_direct_trade is None
+    assert listing.is_safe_lessor_hug is None
+
+
+def test_site_a_parser_does_not_persist_detail_only_description_from_list_payload():
+    listing = SiteAArticleParser().parse(
+        {
+            "articleNo": 2001,
+            "complexNo": 1001,
+            "cortarNo": 1150010200,
+            "tradeTypeCode": "A1",
+            "detailDescription": "상세 API 전용 설명",
+        },
+        SiteAComplexData(1001, 1150010200, "테스트", "테스트", "서울"),
+    )
+
+    assert listing is not None
+    assert listing.description is None

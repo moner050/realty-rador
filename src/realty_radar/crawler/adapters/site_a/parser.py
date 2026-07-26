@@ -152,7 +152,7 @@ class SiteAArticleParser:
             return None
 
         floor_no, total_floor, floor_band, is_top_floor = parse_floor(article.get("floorInfo"))
-        description = str(article.get("detailDescription") or article.get("articleFeatureDesc") or "").strip() or None
+        description = str(article.get("articleFeatureDesc") or "").strip() or None
         building_name = str(article.get("buildingName") or "").strip() or None
         direction = article.get("direction") or article.get("directionInfo") or article.get("directionStandard")
 
