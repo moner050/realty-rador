@@ -12,9 +12,16 @@
         {% if filters.region_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">동 {{ filters.region_code }}</span>{% endif %}
         {% if filters.complex_keyword %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.complex_keyword }}</span>{% endif %}
         {% if filters.trade_types %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">거래 {% for code in filters.trade_types %}{{ trade_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
-        {% if filters.min_price or filters.max_price %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">가격 {{ filters.min_price or '전체' }} ~ {{ filters.max_price or '전체' }}</span>{% endif %}
-        {% if filters.max_monthly_rent is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">월세 상한 {{ filters.max_monthly_rent }}</span>{% endif %}
+        {% if filters.min_price or filters.max_price %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">가격 {{ filters.min_price | korean_money if filters.min_price else '전체' }} ~ {{ filters.max_price | korean_money if filters.max_price else '전체' }}</span>{% endif %}
+        {% if filters.max_monthly_rent is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">월세 상한 {{ filters.max_monthly_rent | korean_money }}</span>{% endif %}
         {% if filters.min_exclusive_area or filters.max_exclusive_area %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">전용 {{ filters.min_exclusive_area or '전체' }}㎡ ~ {{ filters.max_exclusive_area or '전체' }}㎡</span>{% endif %}
+        {% if filters.min_room_count %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">방 {{ filters.min_room_count }}개 이상</span>{% endif %}
+        {% if filters.min_bathroom_count %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">욕실 {{ filters.min_bathroom_count }}개 이상</span>{% endif %}
+        {% if filters.parking_possible_only %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">주차 가능</span>{% endif %}
+        {% if filters.min_parking_per_household %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">세대당 주차 {{ filters.min_parking_per_household }}대 이상</span>{% endif %}
+        {% if filters.max_monthly_management_cost is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">관리비 {{ filters.max_monthly_management_cost | comma_number }}원 이하</span>{% endif %}
+        {% if filters.move_in_by %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.move_in_by }}까지 입주</span>{% endif %}
+        {% if filters.max_subway_walk_minutes is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">역 도보 {{ filters.max_subway_walk_minutes }}분 이하</span>{% endif %}
         {% if filters.min_construction_year %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">준공 {{ filters.min_construction_year }}년 이후</span>{% endif %}
         {% if filters.min_households %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.min_households }}세대 이상</span>{% endif %}
         {% if filters.recent_days %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">최근 {{ filters.recent_days }}일</span>{% endif %}
@@ -26,6 +33,8 @@
         <span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">단기임대 {{ '제외' if filters.exclude_short_term else '포함' }}</span>
         {% if filters.group_by_complex %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">단지별 묶기</span>{% endif %}
         {% if filters.only_eligible_loans %}<span class="rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200">대출 적격</span>{% endif %}
+        {% if filters.direct_trade_only %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">직거래만</span>{% endif %}
+        {% if filters.safe_lessor_hug_only %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">HUG 안심임대인 표기</span>{% endif %}
         <span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ sort_labels[filters.sort_by] }}</span>
     </div>
 </div>

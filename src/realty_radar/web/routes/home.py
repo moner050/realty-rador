@@ -55,6 +55,13 @@ def _optional_decimal(value: str | None) -> Decimal | None:
         return None
 
 
+def _optional_eok_price(value: str | None) -> int | None:
+    amount = _optional_decimal(value)
+    if amount is None or not amount.is_finite() or amount < 0:
+        return None
+    return int(amount * Decimal(100_000_000))
+
+
 def _optional_date(value: str | None) -> date | None:
     if value in (None, ""):
         return None
@@ -130,6 +137,8 @@ def parse_search_filter(
     trade_types: list[str] | None = Query(None),
     min_price: str | None = Query(None),
     max_price: str | None = Query(None),
+    min_price_eok: str | None = Query(None),
+    max_price_eok: str | None = Query(None),
     min_deposit: str | None = Query(None),
     max_deposit: str | None = Query(None),
     max_monthly_rent: str | None = Query(None),
@@ -168,6 +177,8 @@ def parse_search_filter(
     )
     parsed_min_price = _optional_int(min_price)
     parsed_max_price = _optional_int(max_price)
+    parsed_min_eok = _optional_eok_price(min_price_eok)
+    parsed_max_eok = _optional_eok_price(max_price_eok)
     parsed_recent_days = _optional_int(recent_days)
     if parsed_recent_days is None:
         parsed_recent_days = _optional_int(recent_days_custom)
@@ -181,8 +192,20 @@ def parse_search_filter(
         complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
         trade_type=trades[0] if trades and len(trades) == 1 else None,
         trade_types=trades,
-        min_price=parsed_min_price if parsed_min_price is not None else _optional_int(min_deposit),
-        max_price=parsed_max_price if parsed_max_price is not None else _optional_int(max_deposit),
+        min_price=(
+            parsed_min_price
+            if parsed_min_price is not None
+            else parsed_min_eok
+            if parsed_min_eok is not None
+            else _optional_int(min_deposit)
+        ),
+        max_price=(
+            parsed_max_price
+            if parsed_max_price is not None
+            else parsed_max_eok
+            if parsed_max_eok is not None
+            else _optional_int(max_deposit)
+        ),
         max_monthly_rent=_optional_int(max_monthly_rent),
         direct_trade_only=_request_bool(direct_trade_only, False),
         safe_lessor_hug_only=_request_bool(safe_lessor_hug_only, False),

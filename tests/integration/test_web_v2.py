@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from html import unescape
 import re
 
@@ -177,8 +177,8 @@ def test_active_filter_chips_describe_every_applied_search_condition():
     assert response.status_code == 200
     for label in (
         "거래 매매·월세",
-        "가격 500 ~ 전체",
-        "월세 상한 100",
+        "가격 500원 ~ 전체",
+        "월세 상한 100원",
         "전용 59㎡ ~ 84㎡",
         "준공 2010년 이후",
         "500세대 이상",
@@ -402,3 +402,154 @@ def test_home_renders_v2_cursor_search_without_a_database_count_query():
 
     assert response.status_code == 200
     assert "cursor 조회" in response.text
+
+
+def test_search_filter_converts_eok_price_inputs_without_overriding_canonical_prices():
+    eok_filters = parse_search_filter(min_price_eok="5.25", max_price_eok="12")
+    canonical_filters = parse_search_filter(
+        min_price="610000000",
+        max_price="990000000",
+        min_price_eok="5.25",
+        max_price_eok="12",
+    )
+    invalid_filters = parse_search_filter(min_price_eok="five", max_price_eok="")
+
+    assert eok_filters.min_price == 525_000_000
+    assert eok_filters.max_price == 1_200_000_000
+    assert canonical_filters.min_price == 610_000_000
+    assert canonical_filters.max_price == 990_000_000
+    assert invalid_filters.min_price is None
+    assert invalid_filters.max_price is None
+
+
+def test_home_renders_mobile_filter_groups_and_dynamic_region_controls():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    for text in ("기본 검색", "주거 조건", "고급 조건", "아파트 매물 검색"):
+        assert text in response.text
+    for field in (
+        "min_price_eok",
+        "max_price_eok",
+        "min_exclusive_area",
+        "max_exclusive_area",
+        "direct_trade_only",
+        "safe_lessor_hug_only",
+        "min_room_count",
+        "min_bathroom_count",
+        "parking_possible_only",
+        "min_parking_per_household",
+        "max_monthly_management_cost",
+        "move_in_by",
+        "max_subway_walk_minutes",
+    ):
+        assert f'name="{field}"' in response.text
+    assert 'id="sido-select"' in response.text
+    assert 'id="sigungu-select"' in response.text
+    assert "min-h-11" in response.text
+    assert "overflow-x-auto" in response.text
+    assert "59㎡" in response.text
+    assert "84㎡" in response.text
+    assert "region?.sigungu" in response.text
+    assert "sigungu.replaceChildren" in response.text
+    assert "sigungu.dataset.selected = \"\"" in response.text
+    assert '<option value="11680"' not in response.text
+
+
+def test_listing_card_shows_populated_detail_fields_without_absent_detail_placeholders():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    seen_at = datetime(2026, 7, 26, tzinfo=timezone.utc)
+    with factory() as session:
+        session.add(
+            ComplexCurrent(
+                complex_id=40,
+                region_code=1150010200,
+                name="상세 단지",
+                normalized_name="상세단지",
+                address="서울 테스트로 1",
+                state_hash=b"c" * 16,
+                first_seen_at=seen_at,
+                last_seen_at=seen_at,
+                updated_at=seen_at,
+            )
+        )
+        session.add_all(
+            [
+                ListingCurrent(
+                    article_id=41,
+                    complex_id=40,
+                    region_code=1150010200,
+                    complex_name="상세 단지",
+                    address="서울 테스트로 1",
+                    trade_type=1,
+                    primary_price=500_000_000,
+                    exclusive_area_x100=8400,
+                    room_count=3,
+                    bathroom_count=2,
+                    parking_possible=True,
+                    parking_per_household_x100=125,
+                    monthly_management_cost=180000,
+                    move_in_available_on=date(2026, 8, 1),
+                    nearest_subway_walk_minutes=7,
+                    is_direct_trade=True,
+                    is_safe_lessor_hug=True,
+                    state_hash=b"a" * 16,
+                    last_seen_job_id=1,
+                    first_seen_at=seen_at,
+                    last_seen_at=seen_at,
+                    last_changed_at=seen_at,
+                ),
+                ListingCurrent(
+                    article_id=42,
+                    complex_id=40,
+                    region_code=1150010200,
+                    complex_name="상세 없는 단지",
+                    address="서울 테스트로 2",
+                    trade_type=1,
+                    primary_price=600_000_000,
+                    state_hash=b"b" * 16,
+                    last_seen_job_id=1,
+                    first_seen_at=seen_at,
+                    last_seen_at=seen_at,
+                    last_changed_at=seen_at,
+                ),
+            ]
+        )
+        session.commit()
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    for text in ("방 3", "욕실 2", "주차 가능", "1.25대/세대", "관리비 180,000원", "입주 2026-08-01", "역 도보 7분"):
+        assert text in response.text
+    assert "방 -" not in response.text
