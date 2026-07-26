@@ -89,52 +89,64 @@ def test_cursor_cannot_be_reused_with_different_filters():
         )
 
 
-def test_extended_hot_table_filters_are_applied_and_cursor_rejects_mismatch():
+@pytest.mark.parametrize(
+    ("filter_name", "filter_value", "matching_value", "nonmatching_value"),
+    [
+        ("direct_trade_only", True, True, False),
+        ("safe_lessor_hug_only", True, True, False),
+        ("min_room_count", 3, 3, 2),
+        ("min_bathroom_count", 2, 2, 1),
+        ("parking_possible_only", True, True, False),
+        ("min_parking_per_household", Decimal("1.2"), 125, 80),
+        ("max_monthly_management_cost", 200000, 150000, 250000),
+        ("move_in_by", datetime(2026, 9, 1).date(), datetime(2026, 8, 1).date(), datetime(2026, 10, 1).date()),
+        ("max_subway_walk_minutes", 7, 5, 12),
+    ],
+)
+def test_each_extended_hot_table_filter_excludes_nonmatching_and_null_values(
+    filter_name, filter_value, matching_value, nonmatching_value
+):
     session = _session()
     _seed(session)
     rows = {row.article_id: row for row in session.query(ListingCurrent).all()}
-    rows[2001].is_direct_trade = True
-    rows[2001].is_safe_lessor_hug = True
-    rows[2001].room_count = 3
-    rows[2001].bathroom_count = 2
-    rows[2001].parking_possible = True
-    rows[2001].parking_per_household_x100 = 125
-    rows[2001].monthly_management_cost = 150000
-    rows[2001].move_in_available_on = datetime(2026, 8, 1).date()
-    rows[2001].nearest_subway_walk_minutes = 5
-    rows[2002].is_direct_trade = True
-    rows[2002].room_count = 2
-    rows[2002].bathroom_count = 1
-    rows[2002].parking_possible = False
-    rows[2002].parking_per_household_x100 = 80
-    rows[2002].monthly_management_cost = 250000
-    rows[2002].move_in_available_on = datetime(2026, 10, 1).date()
-    rows[2002].nearest_subway_walk_minutes = 12
+    column_name = {
+        "direct_trade_only": "is_direct_trade",
+        "safe_lessor_hug_only": "is_safe_lessor_hug",
+        "min_room_count": "room_count",
+        "min_bathroom_count": "bathroom_count",
+        "parking_possible_only": "parking_possible",
+        "min_parking_per_household": "parking_per_household_x100",
+        "max_monthly_management_cost": "monthly_management_cost",
+        "move_in_by": "move_in_available_on",
+        "max_subway_walk_minutes": "nearest_subway_walk_minutes",
+    }[filter_name]
+    setattr(rows[2001], column_name, matching_value)
+    setattr(rows[2002], column_name, nonmatching_value)
+    setattr(rows[2003], column_name, None)
     session.commit()
     service = ListingSearchService(session, cursor_secret="test-secret")
-    filters = ListingSearchFilter(
-        direct_trade_only=True,
-        safe_lessor_hug_only=True,
-        min_room_count=3,
-        min_bathroom_count=2,
-        parking_possible_only=True,
-        min_parking_per_household=Decimal("1.2"),
-        max_monthly_management_cost=200000,
-        move_in_by=datetime(2026, 9, 1).date(),
-        max_subway_walk_minutes=7,
-        page_size=1,
-    )
-
-    result = service.search_listings(filters)
+    result = service.search_listings(ListingSearchFilter(**{filter_name: filter_value}))
     assert [item.article_id for item in result.items] == [2001]
+
+
+def test_detail_filter_cursor_rejects_a_change_to_one_extended_filter():
+    session = _session()
+    _seed(session)
+    rows = {row.article_id: row for row in session.query(ListingCurrent).all()}
+    rows[2001].room_count = 3
+    rows[2002].room_count = 3
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    first = service.search_listings(ListingSearchFilter(min_room_count=3, page_size=1))
+    assert first.next_cursor is not None
+
     with pytest.raises(ValueError, match="cursor"):
         service.search_listings(
             ListingSearchFilter(
-                direct_trade_only=True,
-                safe_lessor_hug_only=True,
-                min_room_count=2,
+                min_room_count=3,
+                max_subway_walk_minutes=10,
                 page_size=1,
-                cursor=result.next_cursor or "not-a-real-cursor",
+                cursor=first.next_cursor,
             )
         )
 
