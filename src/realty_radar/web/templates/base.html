@@ -13,6 +13,8 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         [x-cloak] { display: none !important; }
+        .htmx-indicator { opacity: 0; transition: opacity 160ms ease-in; }
+        .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
         /* 새로고침 시 Tailwind 스크립트 로딩 전 FOUC(CSS 순간 깨짐) 방지 사전 로딩 스타일 */
         html, body {
             background-color: #0f172a !important;

@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from realty_radar.application.listing_search_service import ListingSearchService
+from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, SIGUNGU_CODES
 from realty_radar.domain.listing.filters import ListingSearchFilter
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.session import get_db
@@ -24,6 +25,15 @@ register_jinja_filters(templates)
 _LOAN_EVALUATOR = LoanRuleEvaluator()
 
 TRADE_TYPE_CODES = {"SALE": 1, "JEONSE": 2, "MONTHLY_RENT": 3, "SHORT_TERM": 4}
+SORT_OPTIONS = (
+    ("price_asc", "가격 낮은순"),
+    ("price_desc", "가격 높은순"),
+    ("recent", "최신 등록순"),
+    ("area_asc", "전용면적 좁은순"),
+    ("area_desc", "전용면적 넓은순"),
+    ("households_asc", "세대수 적은순"),
+    ("households_desc", "세대수 많은순"),
+)
 
 
 def _optional_int(value: str | int | None) -> int | None:
@@ -45,8 +55,48 @@ def _optional_decimal(value: str | None) -> Decimal | None:
 
 
 def _code_list(values: list[str] | None) -> list[int] | None:
-    parsed = [int(token) for value in values or [] for token in value.split(",") if token.strip().isdigit()]
-    return parsed or None
+    parsed = [
+        int(token)
+        for value in (values if isinstance(values, list) else [])
+        for token in value.split(",")
+        if token.strip().isdigit()
+    ]
+    return list(dict.fromkeys(parsed)) or None
+
+
+def _trade_codes(values: list[str] | None) -> list[int] | None:
+    codes = [
+        TRADE_TYPE_CODES[token.strip().upper()]
+        for token in (values if isinstance(values, list) else [])
+        if token.strip().upper() in TRADE_TYPE_CODES
+    ]
+    return list(dict.fromkeys(codes)) or None
+
+
+def _request_list(value: object) -> list[str] | None:
+    return value if isinstance(value, list) else None
+
+
+def _request_string(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _request_bool(value: object, default: bool) -> bool:
+    return value if isinstance(value, bool) else default
+
+
+def _region_options() -> list[dict[str, object]]:
+    return [
+        {
+            "name": sido_name,
+            "code": int(sido_code) // 100_000_000,
+            "sigungu": [
+                {"name": sigungu_name, "code": int(sigungu_code) // 100_000}
+                for sigungu_name, sigungu_code in SIGUNGU_CODES[sido_name].items()
+            ],
+        }
+        for sido_name, sido_code in SIDO_CODES.items()
+    ]
 
 
 def parse_search_filter(
@@ -55,13 +105,21 @@ def parse_search_filter(
     sigungu_code: str | None = Query(None),
     complex_keyword: str | None = Query(None),
     transaction_type: str | None = Query(None),
+    transaction_types: list[str] | None = Query(None),
+    trade_types: list[str] | None = Query(None),
     min_price: str | None = Query(None),
     max_price: str | None = Query(None),
+    min_deposit: str | None = Query(None),
+    max_deposit: str | None = Query(None),
     max_monthly_rent: str | None = Query(None),
     min_exclusive_area: str | None = Query(None),
     max_exclusive_area: str | None = Query(None),
     min_construction_year: str | None = Query(None),
     min_households: str | None = Query(None),
+    recent_days: str | None = Query(None),
+    recent_days_custom: str | None = Query(None),
+    mortgage_codes: list[str] | None = Query(None),
+    exclude_unknown_mortgage: bool = Query(False),
     direction_codes: list[str] | None = Query(None),
     floor_bands: list[str] | None = Query(None),
     sort_by: str = Query("price_asc"),
@@ -72,29 +130,43 @@ def parse_search_filter(
     group_by_complex: bool = Query(False),
     only_eligible_loans: bool = Query(False),
 ) -> ListingSearchFilter:
-    transaction = TRADE_TYPE_CODES.get((transaction_type or "").upper())
+    transaction = _request_string(transaction_type)
+    trades = _trade_codes(
+        _request_list(trade_types)
+        or _request_list(transaction_types)
+        or ([transaction] if transaction else None)
+    )
+    parsed_min_price = _optional_int(min_price)
+    parsed_max_price = _optional_int(max_price)
+    parsed_recent_days = _optional_int(recent_days_custom)
+    if parsed_recent_days is None:
+        parsed_recent_days = _optional_int(recent_days)
     return ListingSearchFilter(
         region_code=_optional_int(region_code),
         sido_code=_optional_int(sido_code),
         sigungu_code=_optional_int(sigungu_code),
-        complex_keyword=complex_keyword.strip() if complex_keyword and complex_keyword.strip() else None,
-        trade_type=transaction,
-        min_price=_optional_int(min_price),
-        max_price=_optional_int(max_price),
+        complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
+        trade_type=trades[0] if trades and len(trades) == 1 else None,
+        trade_types=trades,
+        min_price=parsed_min_price if parsed_min_price is not None else _optional_int(min_deposit),
+        max_price=parsed_max_price if parsed_max_price is not None else _optional_int(max_deposit),
         max_monthly_rent=_optional_int(max_monthly_rent),
         min_exclusive_area=_optional_decimal(min_exclusive_area),
         max_exclusive_area=_optional_decimal(max_exclusive_area),
         min_construction_year=_optional_int(min_construction_year),
         min_households=_optional_int(min_households),
-        direction_codes=_code_list(direction_codes),
-        floor_bands=_code_list(floor_bands),
-        sort_by=sort_by,
-        page_size=page_size,
-        cursor=cursor,
-        exclude_short_term=exclude_short_term,
-        exclude_first_floor=exclude_first_floor,
-        group_by_complex=group_by_complex,
-        only_eligible_loans=only_eligible_loans,
+        recent_days=parsed_recent_days,
+        mortgage_codes=_code_list(_request_list(mortgage_codes)),
+        exclude_unknown_mortgage=_request_bool(exclude_unknown_mortgage, False),
+        direction_codes=_code_list(_request_list(direction_codes)),
+        floor_bands=_code_list(_request_list(floor_bands)),
+        sort_by=_request_string(sort_by) or "price_asc",
+        page_size=page_size if isinstance(page_size, int) else 20,
+        cursor=_request_string(cursor),
+        exclude_short_term=_request_bool(exclude_short_term, True),
+        exclude_first_floor=_request_bool(exclude_first_floor, False),
+        group_by_complex=_request_bool(group_by_complex, False),
+        only_eligible_loans=_request_bool(only_eligible_loans, False),
     )
 
 
@@ -130,7 +202,7 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
     applicant = get_request_user_profile(request)
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
     _enrich_listings_with_loans(result, applicant)
-    next_url = str(request.url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
+    next_url = str(request.url.include_query_params(cursor=result.next_cursor, append="1")) if result.next_cursor else None
     return templates.TemplateResponse(
         request,
         template_name,
@@ -141,6 +213,8 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "next_url": next_url,
             "applicant": applicant,
             "is_authenticated": is_authenticated(request),
+            "region_options": _region_options(),
+            "sort_options": SORT_OPTIONS,
         },
     )
 
@@ -159,6 +233,14 @@ def search_listings(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
+    append: bool = Query(False),
 ):
-    template_name = "listings/list_partial.html" if request.headers.get("HX-Request") == "true" else "listings/index.html"
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template_name = (
+        "listings/list_append.html"
+        if is_htmx and append
+        else "listings/list_partial.html"
+        if is_htmx
+        else "listings/index.html"
+    )
     return _render_result(request, db, filters, template_name)

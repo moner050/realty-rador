@@ -1,35 +1,132 @@
 {% extends "base.html" %}
 
-{% block title %}SITE_A 매물 검색{% endblock %}
+{% block title %}아파트 매물 검색{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-bold text-white">SITE_A 매물 검색</h1>
-        <p class="mt-1 text-sm text-slate-400">전체 건수와 페이지 번호 대신 빠른 cursor 조회를 사용합니다.</p>
+{% set selected_trades = filters.trade_types or ([filters.trade_type] if filters.trade_type else []) %}
+{% set selected_directions = filters.direction_codes or [] %}
+{% set selected_floors = filters.floor_bands or [] %}
+<div class="space-y-5">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">아파트 매물 검색</h1>
+            <p class="mt-1 text-sm text-slate-400">조건을 바꾸면 자동으로 새 검색을 시작합니다. 전체 건수 대신 빠른 cursor 조회를 사용합니다.</p>
+        </div>
+        <a href="/" class="inline-flex items-center justify-center rounded-lg border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 hover:border-slate-400 hover:text-white">전체 초기화</a>
     </div>
 
-    <form class="grid grid-cols-1 gap-3 rounded-xl border border-slate-700 bg-slate-800 p-4 md:grid-cols-4"
-          action="/listings/search" method="get" hx-get="/listings/search" hx-target="#listings-container" hx-push-url="true">
-        <input name="sigungu_code" value="{{ filters.sigungu_code or '' }}" placeholder="시군구 코드 (예: 11500)"
-               class="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-        <input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" placeholder="단지명 (2글자 이상)"
-               class="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-        <input name="max_price" value="{{ filters.max_price or '' }}" placeholder="최대 가격(원)"
-               class="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-        <select name="sort_by" class="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-            {% for value, label in [('price_asc','가격 낮은순'), ('price_desc','가격 높은순'), ('recent','최신순'), ('area_desc','면적 넓은순'), ('households_desc','세대수 많은순')] %}
-            <option value="{{ value }}" {% if filters.sort_by == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <label class="text-sm text-slate-300"><input type="checkbox" name="group_by_complex" value="true" {% if filters.group_by_complex %}checked{% endif %}> 단지로 묶기</label>
-        <label class="text-sm text-slate-300"><input type="checkbox" name="exclude_short_term" value="true" {% if filters.exclude_short_term %}checked{% endif %}> 단기임대 제외</label>
+    <form id="listing-search-form"
+          class="rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-sm"
+          action="/listings/search"
+          method="get"
+          hx-get="/listings/search"
+          hx-target="#search-results"
+          hx-swap="outerHTML"
+          hx-trigger="change delay:400ms, keyup changed delay:400ms"
+          hx-sync="this:replace"
+          hx-indicator="#search-loading"
+          hx-push-url="true">
         <input type="hidden" name="page_size" value="{{ filters.page_size }}">
-        <button class="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">검색</button>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <label class="space-y-1 text-sm text-slate-300">
+                <span>시도</span>
+                <select id="sido-select" name="sido_code" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white">
+                    <option value="">전체</option>
+                    {% for region in region_options %}
+                    <option value="{{ region.code }}" {% if filters.sido_code == region.code %}selected{% endif %}>{{ region.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="space-y-1 text-sm text-slate-300">
+                <span>시군구</span>
+                <select id="sigungu-select" name="sigungu_code" data-selected="{{ filters.sigungu_code or '' }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white">
+                    <option value="">전체</option>
+                </select>
+            </label>
+            <label class="space-y-1 text-sm text-slate-300 md:col-span-2 xl:col-span-1">
+                <span>단지명·주소</span>
+                <input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="예: 래미안, 강남구" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white placeholder:text-slate-500">
+            </label>
+            <label class="space-y-1 text-sm text-slate-300">
+                <span>정렬</span>
+                <select name="sort_by" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white">
+                    {% for value, label in sort_options %}
+                    <option value="{{ value }}" {% if filters.sort_by == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+
+        <fieldset class="mt-4">
+            <legend class="text-sm font-medium text-slate-200">거래</legend>
+            <div class="mt-2 flex flex-wrap gap-2">
+                {% for code, label in [(1, '매매'), (2, '전세'), (3, '월세'), (4, '단기임대')] %}
+                <label class="cursor-pointer rounded-full border border-slate-600 px-3 py-1.5 text-sm text-slate-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20">
+                    <input class="sr-only" type="checkbox" name="trade_types" value="{{ ['SALE', 'JEONSE', 'MONTHLY_RENT', 'SHORT_TERM'][loop.index0] }}" {% if code in selected_trades %}checked{% endif %}>
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label class="space-y-1 text-sm text-slate-300"><span>가격·보증금 최소 (원)</span><input inputmode="numeric" name="min_price" value="{{ filters.min_price or '' }}" placeholder="0" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white"></label>
+            <label class="space-y-1 text-sm text-slate-300"><span>가격·보증금 최대 (원)</span><input inputmode="numeric" name="max_price" value="{{ filters.max_price or '' }}" placeholder="예: 1000000000" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white"></label>
+            <label class="space-y-1 text-sm text-slate-300"><span>월세 상한 (원)</span><input inputmode="numeric" name="max_monthly_rent" value="{{ filters.max_monthly_rent or '' }}" placeholder="월세 매물만 적용" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white"></label>
+        </div>
+
+        <details class="mt-4 rounded-lg border border-slate-700 bg-slate-900/40 p-3" {% if filters.min_exclusive_area or filters.max_exclusive_area or filters.min_construction_year or filters.min_households or filters.recent_days or filters.mortgage_codes or filters.exclude_unknown_mortgage or selected_directions or selected_floors or filters.exclude_first_floor or not filters.exclude_short_term or filters.group_by_complex or filters.only_eligible_loans or filters.region_code %}open{% endif %}>
+            <summary class="cursor-pointer text-sm font-semibold text-slate-200">고급 필터</summary>
+            <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label class="space-y-1 text-sm text-slate-300"><span>전용면적 최소 (㎡)</span><input inputmode="decimal" name="min_exclusive_area" value="{{ filters.min_exclusive_area or '' }}" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"></label>
+                <label class="space-y-1 text-sm text-slate-300"><span>전용면적 최대 (㎡)</span><input inputmode="decimal" name="max_exclusive_area" value="{{ filters.max_exclusive_area or '' }}" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"></label>
+                <label class="space-y-1 text-sm text-slate-300"><span>준공연도 최소</span><input inputmode="numeric" name="min_construction_year" value="{{ filters.min_construction_year or '' }}" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"></label>
+                <label class="space-y-1 text-sm text-slate-300"><span>세대수 최소</span><input inputmode="numeric" name="min_households" value="{{ filters.min_households or '' }}" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"></label>
+                <label class="space-y-1 text-sm text-slate-300"><span>최근 등록</span><select name="recent_days" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"><option value="">전체</option>{% for value, label in [(1, '1일'), (3, '3일'), (7, '7일'), (30, '30일')] %}<option value="{{ value }}" {% if filters.recent_days == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                <label class="space-y-1 text-sm text-slate-300"><span>최근 등록 직접 입력 (일)</span><input inputmode="numeric" name="recent_days_custom" value="{% if filters.recent_days not in [None, 1, 3, 7, 30] %}{{ filters.recent_days }}{% endif %}" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"></label>
+                <label class="space-y-1 text-sm text-slate-300"><span>동 코드 직접 입력</span><input inputmode="numeric" name="region_code" value="{{ filters.region_code or '' }}" placeholder="고급: cortarNo" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"></label>
+            </div>
+
+            <fieldset class="mt-4"><legend class="text-sm font-medium text-slate-200">융자 상태 (상세 확인 완료 매물만)</legend><div class="mt-2 flex flex-wrap gap-2">{% for code, label in [(0, '정보 미상'), (1, '융자 없음'), (2, '융자 있음')] %}<label class="cursor-pointer rounded-full border border-slate-600 px-3 py-1.5 text-sm text-slate-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20"><input class="sr-only" type="checkbox" name="mortgage_codes" value="{{ code }}" {% if code in (filters.mortgage_codes or []) %}checked{% endif %}>{{ label }}</label>{% endfor %}<label class="cursor-pointer rounded-full border border-slate-600 px-3 py-1.5 text-sm text-slate-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20"><input class="sr-only" type="checkbox" name="exclude_unknown_mortgage" value="true" {% if filters.exclude_unknown_mortgage %}checked{% endif %}>정보 미상 제외</label></div></fieldset>
+
+            <fieldset class="mt-4"><legend class="text-sm font-medium text-slate-200">방향</legend><div class="mt-2 flex flex-wrap gap-2">{% for code, label in [(1, '남'), (2, '남동'), (3, '동'), (4, '북동'), (5, '북'), (6, '북서'), (7, '서'), (8, '남서')] %}<label class="cursor-pointer rounded-full border border-slate-600 px-3 py-1.5 text-sm text-slate-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20"><input class="sr-only" type="checkbox" name="direction_codes" value="{{ code }}" {% if code in selected_directions %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
+
+            <fieldset class="mt-4"><legend class="text-sm font-medium text-slate-200">층</legend><div class="mt-2 flex flex-wrap gap-2">{% for code, label in [(1, '저층'), (2, '중층'), (3, '고층'), (4, '탑층'), (5, '지하')] %}<label class="cursor-pointer rounded-full border border-slate-600 px-3 py-1.5 text-sm text-slate-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20"><input class="sr-only" type="checkbox" name="floor_bands" value="{{ code }}" {% if code in selected_floors %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
+
+            <div class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <label class="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" name="exclude_first_floor" value="true" {% if filters.exclude_first_floor %}checked{% endif %}>1층 제외</label>
+                <label class="flex items-center gap-2 text-sm text-slate-200"><input type="hidden" name="exclude_short_term" value="false"><input type="checkbox" name="exclude_short_term" value="true" {% if filters.exclude_short_term %}checked{% endif %}>단기임대 제외</label>
+                <label class="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" name="group_by_complex" value="true" {% if filters.group_by_complex %}checked{% endif %}>단지별 묶기</label>
+                <label class="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" name="only_eligible_loans" value="true" {% if filters.only_eligible_loans %}checked{% endif %}>대출 적격 매물만</label>
+            </div>
+        </details>
+        <div class="mt-4 flex items-center gap-3">
+            <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">검색</button>
+            <span id="search-loading" class="htmx-indicator text-sm text-indigo-300" role="status">검색 중…</span>
+        </div>
     </form>
 
-    <div id="listings-container">
-        {% include "listings/list_partial.html" %}
-    </div>
+    {% include "listings/list_partial.html" %}
 </div>
+
+<script>
+(() => {
+    const regions = {{ region_options | tojson }};
+    const sido = document.getElementById("sido-select");
+    const sigungu = document.getElementById("sigungu-select");
+    const selected = sigungu.dataset.selected;
+    const populateSigungu = (keepSelected) => {
+        const region = regions.find((item) => String(item.code) === sido.value);
+        sigungu.replaceChildren(new Option("전체", ""));
+        for (const item of region?.sigungu ?? []) {
+            sigungu.add(new Option(item.name, item.code, false, keepSelected && String(item.code) === selected));
+        }
+    };
+    populateSigungu(true);
+    sido.addEventListener("change", () => {
+        sigungu.dataset.selected = "";
+        populateSigungu(false);
+    });
+})();
+</script>
 {% endblock %}
