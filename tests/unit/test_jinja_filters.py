@@ -27,7 +27,6 @@ def test_korean_mortgage_filter():
 def test_korean_source_filter():
     """출처 사이트 코드 한글 변환 필터 단위 테스트."""
     assert korean_source("SITE_A") == "네이버부동산"
-    assert korean_source("SITE_B") == "아실"
 
 
 def test_korean_status_filter():

@@ -1,42 +1,38 @@
-from realty_radar.crawler.adapters.site_a.parser import SiteAParser
-
-HTML_FIXTURE = """
-<div class="container">
-    <div class="listing-card" data-id="ITEM-101">
-        <a class="card-link" href="/item/101">여의도 시범아파트</a>
-        <div class="title">여의도 시범아파트 1동</div>
-        <div class="price">매매 6억 5,000</div>
-        <div class="area">공급 110㎡ / 전용 84.97㎡</div>
-        <div class="floor">중/15층</div>
-        <div class="address">서울특별시 영등포구 여의도동</div>
-        <div class="description">융자없음, 로얄층 올수리 남향 매물</div>
-    </div>
-    <div class="listing-card" data-id="ITEM-102">
-        <a class="card-link" href="/item/102">여의도 광장아파트</a>
-        <div class="title">여의도 광장아파트 3동</div>
-        <div class="price">전세 4억 2,000</div>
-        <div class="area">전용 59.9㎡</div>
-        <div class="floor">7/12층</div>
-        <div class="address">서울특별시 영등포구 여의도동</div>
-        <div class="description">근저당 2억 설정, 채권최고액 있음</div>
-    </div>
-</div>
-"""
+from realty_radar.crawler.adapters.site_a.parser import SiteAArticleParser, SiteAComplexData
 
 
-def test_site_a_parser_listing_cards():
-    """SiteAParser HTML 매물 카드 추출 단위 테스트."""
-    parser = SiteAParser()
-    items = parser.parse_listing_cards(HTML_FIXTURE)
+def test_site_a_parser_uses_numeric_authoritative_ids_and_normalizes_fields():
+    parser = SiteAArticleParser()
+    listing = parser.parse(
+        {
+            "articleNo": "2001",
+            "complexNo": "1001",
+            "cortarNo": "1150010200",
+            "tradeTypeCode": "A1",
+            "dealOrWarrantPrc": "6억 5,000",
+            "area1": "110",
+            "area2": "84.97",
+            "floorInfo": "10/20",
+            "direction": "남동향",
+        },
+        SiteAComplexData(
+            complex_id=1001,
+            region_code=1150010200,
+            name="테스트 아파트",
+            normalized_name="테스트아파트",
+            address="서울특별시 강서구 테스트로 1",
+        ),
+    )
 
-    assert len(items) == 2
+    assert listing is not None
+    assert listing.article_id == 2001
+    assert listing.primary_price == 650_000_000
+    assert listing.exclusive_area_x100 == 8497
+    assert listing.direction_code == 2
 
-    first = items[0]
-    assert first.external_listing_id == "ITEM-101"
-    assert first.complex_name_raw == "여의도 시범아파트 1동"
-    assert first.price_raw == "매매 6억 5,000"
-    assert first.description_raw == "융자없음, 로얄층 올수리 남향 매물"
 
-    second = items[1]
-    assert second.external_listing_id == "ITEM-102"
-    assert second.price_raw == "전세 4억 2,000"
+def test_site_a_parser_rejects_missing_or_mismatched_authoritative_ids():
+    parser = SiteAArticleParser()
+    complex_data = SiteAComplexData(1001, 1150010200, "테스트", "테스트", "서울")
+    assert parser.parse({"articleNo": None}, complex_data) is None
+    assert parser.parse({"articleNo": 1, "complexNo": 9999}, complex_data) is None

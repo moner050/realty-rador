@@ -1,67 +1,82 @@
-import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from realty_radar.application.crawl_job_service import CrawlJobService
-from realty_radar.constants import CrawlJobStatus, CrawlJobType
-from realty_radar.infrastructure.database.models import (
-    ApartmentComplex,
-    Base,
-    ComplexAlias,
-    CrawlJob,
-    CrawlSchedule,
-    CrawlSource,
-    Listing,
-    ListingSnapshot,
+from realty_radar.application.crawl_job_service import (
+    JOB_QUEUED,
+    JOB_RETRY_WAIT,
+    JOB_RUNNING,
+    CrawlJobService,
 )
+from realty_radar.application.listing_batch_writer import IncomingListing, ListingBatchWriter
+from realty_radar.infrastructure.database.models import Base, ListingCurrent
 
 
-@pytest.fixture(name="db_session")
-def db_session_fixture():
-    """StaticPool 인메모리 DB 픽스처."""
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    TestingSession = sessionmaker(bind=engine)
-    Base.metadata.create_all(bind=engine)
-
-    session = TestingSession()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-def test_crawl_job_lifecycle(db_session):
-    """crawl_job 등록 -> 선점 -> 성공/실패 백오프 라이프사이클 테스트."""
-    service = CrawlJobService(db_session)
-
-    # 1. 작업 생성
-    job = service.create_job(
-        source_code="SITE_A",
-        job_type=CrawlJobType.SEARCH,
-        request_data={"region_name": "여의도동"},
+def _session():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
-    assert job.status == CrawlJobStatus.PENDING.value
-    assert job.attempt_count == 0
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine)()
 
-    # 2. Worker가 작업 선점
-    fetched_job = service.fetch_next_job(worker_id="worker-test-1")
-    assert fetched_job is not None
-    assert fetched_job.id == job.id
-    assert fetched_job.status == CrawlJobStatus.RUNNING.value
-    assert fetched_job.attempt_count == 1
-    assert fetched_job.worker_id == "worker-test-1"
 
-    # 3. 1차 실패 시 백오프 예약 (RETRY_WAIT)
-    failed_job = service.mark_job_failure(
-        job_id=job.id,
-        error_type="NetworkError",
-        error_message="연결 시간 초과",
+def _listing(article_id: int) -> IncomingListing:
+    return IncomingListing(
+        article_id=article_id,
+        complex_id=1001,
+        region_code=1150010200,
+        complex_name="테스트 아파트",
+        normalized_complex_name="테스트아파트",
+        address="서울특별시 강서구 테스트로 1",
+        trade_type=1,
+        primary_price=500_000_000,
     )
-    assert failed_job.status == CrawlJobStatus.RETRY_WAIT.value
-    assert failed_job.next_retry_at is not None
 
-    # 4. 성공 처리 테스트
-    success_job = service.mark_job_success(job.id, result_data={"total_fetched": 10})
-    assert success_job.status == CrawlJobStatus.SUCCESS.value
-    assert success_job.completed_at is not None
+
+def test_job_claim_uses_lease_and_heartbeat():
+    session = _session()
+    service = CrawlJobService(session)
+    queued = service.create_job(scope_level=3, scope_code=1150010200, dedupe_key="dong:1150010200")
+    assert queued.status == JOB_QUEUED
+
+    claimed = service.claim_next_job("worker-a")
+    assert claimed is not None
+    assert claimed.status == JOB_RUNNING
+    assert claimed.lease_owner == "worker-a"
+    assert claimed.lease_token
+    assert claimed.lease_expires_at is not None
+    assert service.heartbeat(claimed.job_id, claimed.lease_token) is True
+
+    retried = service.mark_retry(claimed.job_id, claimed.lease_token, "HTTP_429", "retry later")
+    assert retried is not None
+    assert retried.status == JOB_RETRY_WAIT
+
+
+def test_only_complete_scope_advances_stale_then_removed():
+    session = _session()
+    service = CrawlJobService(session)
+
+    first = service.create_job(scope_level=3, scope_code=1150010200, dedupe_key="dong:1150010200:one")
+    ListingBatchWriter(session).commit_batch(first.job_id, [_listing(2001)])
+    service.open_scope(first.job_id, 1150010200)
+    assert service.complete_scope(first.job_id, 1150010200) == (0, 0)
+
+    incomplete = service.create_job(scope_level=3, scope_code=1150010200, dedupe_key="dong:1150010200:incomplete")
+    service.open_scope(incomplete.job_id, 1150010200)
+    service.fail_scope(incomplete.job_id, 1150010200, "PARTIAL", "page failed")
+    assert service.complete_scope(incomplete.job_id, 1150010200) == (0, 0)
+    assert session.scalar(select(ListingCurrent.lifecycle).where(ListingCurrent.article_id == 2001)) == 1
+
+    second = service.create_job(scope_level=3, scope_code=1150010200, dedupe_key="dong:1150010200:two")
+    service.open_scope(second.job_id, 1150010200)
+    assert service.complete_scope(second.job_id, 1150010200) == (1, 0)
+    assert session.scalar(select(ListingCurrent.lifecycle).where(ListingCurrent.article_id == 2001)) == 2
+    assert service.complete_scope(second.job_id, 1150010200) == (0, 0)
+    assert session.scalar(select(ListingCurrent.lifecycle).where(ListingCurrent.article_id == 2001)) == 2
+
+    third = service.create_job(scope_level=3, scope_code=1150010200, dedupe_key="dong:1150010200:three")
+    service.open_scope(third.job_id, 1150010200)
+    assert service.complete_scope(third.job_id, 1150010200) == (0, 1)
+    assert session.scalar(select(ListingCurrent.lifecycle).where(ListingCurrent.article_id == 2001)) == 3

@@ -1,70 +1,65 @@
+"""lease heartbeat을 유지하며 SITE_A 잡을 실행하는 worker."""
+from __future__ import annotations
+
 import asyncio
 import os
 import signal
-import sys
 import uuid
 
-from realty_radar.application.crawl_job_service import CrawlJobService
+from realty_radar.application.crawl_job_service import HEARTBEAT_SECONDS, CrawlJobService
+from realty_radar.crawler.adapters.site_a.adapter import SiteAAdapter
+from realty_radar.crawler.adapters.site_a.http_client import RetryWaitError
 from realty_radar.infrastructure.database.session import SessionFactory
 from realty_radar.worker.job_handler import JobHandler
 
 
 class WorkerRunner:
-    """무한 루프 기반 Worker 작업 Polling 및 안전 종료 실행기."""
-
     def __init__(self, poll_interval_seconds: int = 5):
         self.worker_id = f"worker-{os.getpid()}-{uuid.uuid4().hex[:6]}"
         self.poll_interval = poll_interval_seconds
         self.is_running = True
+        self._adapter = SiteAAdapter()
 
     def stop(self) -> None:
-        """Worker 프로세스 안전 종료 플래그 설정."""
-        print(f"[{self.worker_id}] Worker 프로세스 종료 요청 수신...")
         self.is_running = False
 
     async def run(self) -> None:
-        """Worker 루프 실행: PENDING/RETRY_WAIT 작업 선점 및 파이프라인 처리."""
-        print(f"[{self.worker_id}] Realty Radar Worker 프로세스가 시작되었습니다.")
+        try:
+            while self.is_running:
+                with SessionFactory() as db:
+                    service = CrawlJobService(db)
+                    job = service.claim_next_job(self.worker_id)
+                    if job is None:
+                        await asyncio.sleep(self.poll_interval)
+                        continue
+                    token = job.lease_token
+                    assert token is not None
+                    heartbeat = asyncio.create_task(self._heartbeat(service, job.job_id, token))
+                    try:
+                        result = await JobHandler(db, self._adapter).handle_job(job)
+                        service.mark_success(job.job_id, token, result)
+                    except RetryWaitError as error:
+                        service.mark_retry(job.job_id, token, "RETRY_WAIT", str(error))
+                    except Exception as error:
+                        service.mark_retry(job.job_id, token, type(error).__name__, str(error))
+                    finally:
+                        heartbeat.cancel()
+                        try:
+                            await heartbeat
+                        except asyncio.CancelledError:
+                            pass
+        finally:
+            await self._adapter.aclose()
 
-        while self.is_running:
-            with SessionFactory() as db:
-                job_service = CrawlJobService(db)
-                job = job_service.fetch_next_job(worker_id=self.worker_id)
-
-                if not job:
-                    # 대기 작업이 없으면 딜레이 후 폴링
-                    await asyncio.sleep(self.poll_interval)
-                    continue
-
-                print(f"[{self.worker_id}] 작업 선점 (Job ID: {job.id}, Type: {job.job_type})")
-
-                try:
-                    handler = JobHandler(db)
-                    result = await handler.handle_job(job)
-
-                    job_service.mark_job_success(job.id, result_data=result)
-                    print(f"[{self.worker_id}] 작업 완료 성공 (Job ID: {job.id})")
-
-                except Exception as e:
-                    print(f"[{self.worker_id}] 작업 실행 중 오류 발생 (Job ID: {job.id}): {e}")
-                    db.rollback()  # 롤백 처리로 세션 복구
-                    job_service.mark_job_failure(
-                        job_id=job.id,
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                    )
-
-        print(f"[{self.worker_id}] Worker 프로세스가 종료되었습니다.")
+    async def _heartbeat(self, service: CrawlJobService, job_id: int, token: str) -> None:
+        while True:
+            await asyncio.sleep(HEARTBEAT_SECONDS)
+            if not service.heartbeat(job_id, token):
+                return
 
 
-def start_worker():
-    """Worker 모듈 단독 실행 엔트리포인트."""
+def start_worker() -> None:
     runner = WorkerRunner()
-
-    def _signal_handler(sig, frame):
-        runner.stop()
-
-    signal.signal(signal.SIGINT, _signal_handler)
-    signal.signal(signal.SIGTERM, _signal_handler)
-
+    signal.signal(signal.SIGINT, lambda *_: runner.stop())
+    signal.signal(signal.SIGTERM, lambda *_: runner.stop())
     asyncio.run(runner.run())
