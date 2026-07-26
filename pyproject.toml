@@ -49,3 +49,7 @@ ignore = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "live: external SITE_A verification; requires RUN_LIVE_SITE_A_HTTPX=1",
+    "mysql: MySQL 8.4 integration verification; requires MYSQL_V2_TEST_URL",
+]

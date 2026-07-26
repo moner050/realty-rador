@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     mysql_host: str = Field(default="127.0.0.1", validation_alias="MYSQL_HOST")
     mysql_port: int = Field(default=3306, validation_alias="MYSQL_PORT")
-    mysql_database: str = Field(default="realty_radar", validation_alias="MYSQL_DATABASE")
+    mysql_database: str = Field(default="realty_radar_v2", validation_alias="MYSQL_DATABASE")
     mysql_user: str = Field(default="realty_app", validation_alias="MYSQL_USER")
     mysql_password: str = Field(default="realty_secret_pass", validation_alias="MYSQL_PASSWORD")
 

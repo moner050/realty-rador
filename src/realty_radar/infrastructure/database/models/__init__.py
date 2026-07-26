@@ -1,17 +1,17 @@
-from realty_radar.infrastructure.database.models.base import Base, TimestampMixin
-from realty_radar.infrastructure.database.models.complex import ApartmentComplex, ComplexAlias
-from realty_radar.infrastructure.database.models.crawl import CrawlJob, CrawlSchedule, CrawlSource
-from realty_radar.infrastructure.database.models.listing import Listing, ListingHistory, ListingSnapshot
+from realty_radar.infrastructure.database.models.base import Base
+from realty_radar.infrastructure.database.models.v2 import (
+    ComplexCurrent,
+    CrawlJob,
+    CrawlScope,
+    ListingCurrent,
+    ListingHistory,
+)
 
 __all__ = [
     "Base",
-    "TimestampMixin",
-    "CrawlSource",
-    "CrawlSchedule",
-    "CrawlJob",
-    "ApartmentComplex",
-    "ComplexAlias",
-    "Listing",
+    "ComplexCurrent",
+    "ListingCurrent",
     "ListingHistory",
-    "ListingSnapshot",
+    "CrawlJob",
+    "CrawlScope",
 ]

@@ -1,20 +1,16 @@
+from datetime import datetime, timezone
+
 from realty_radar.application.crawl_job_service import CrawlJobService
-from realty_radar.constants import CrawlJobType
 from realty_radar.infrastructure.database.session import SessionFactory
 
 
-def schedule_regular_search_job(source_code: str = "SITE_A", region_name: str = "ALL_METRO") -> None:
-    """주기적 정기 매물 검색 작업 등록 태스크 (기본값: 서울, 경기, 인천 전체)."""
-    print(f"[Scheduler Task] 정기 매물 수집 작업 생성 요청: {source_code} ({region_name})")
+def schedule_regular_search_job(scope_code: int = 1100000000) -> None:
+    """SITE_A 수도권 scope를 한 번 큐에 넣는다."""
+    bucket = datetime.now(timezone.utc).strftime("%Y%m%d%H")
     with SessionFactory() as db:
-        service = CrawlJobService(db)
-        job = service.create_job(
-            source_code=source_code,
-            job_type=CrawlJobType.SEARCH,
-            request_data={
-                "source_code": source_code,
-                "region_name": region_name,
-            },
+        CrawlJobService(db).create_job(
+            scope_level=1,
+            scope_code=scope_code,
+            dedupe_key=f"scheduled:{scope_code}:{bucket}",
             priority=100,
         )
-        print(f"[Scheduler Task] crawl_job 등록 완료 (Job ID: {job.id}, 수집대상: {region_name})")

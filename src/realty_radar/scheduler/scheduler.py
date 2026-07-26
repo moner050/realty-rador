@@ -24,7 +24,7 @@ class TaskScheduler:
             replace_existing=True,
             misfire_grace_time=3600,
             coalesce=True,
-            kwargs={"source_code": "SITE_A", "region_name": "ALL_METRO"},
+            kwargs={"scope_code": 1100000000},
         )
 
         self.scheduler.start()

@@ -49,13 +49,12 @@ def korean_status(val: Any) -> str:
 
 
 def korean_source(val: Any) -> str:
-    """수집 출처 코드(SITE_A, SITE_B 등)를 서비스 한글 명칭으로 변환."""
+    """SITE_A 수집 출처의 한글 표시명을 반환한다."""
     if not val:
         return "기타 출처"
     str_val = val.value if hasattr(val, "value") else str(val)
     mapping = {
         "SITE_A": "네이버부동산",
-        "SITE_B": "아실",
     }
     return mapping.get(str_val.upper(), str_val)
 
