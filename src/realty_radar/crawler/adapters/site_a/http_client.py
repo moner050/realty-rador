@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from time import monotonic
@@ -16,6 +16,17 @@ DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
+)
+
+BROWSER_HEADER_NAMES = frozenset(
+    {
+        "accept-language",
+        "referer",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "user-agent",
+    }
 )
 
 
@@ -45,6 +56,7 @@ class NaverCredentials:
 
     authorization: str
     cookies: tuple[NaverCookie, ...]
+    request_headers: Mapping[str, str] = field(default_factory=dict)
 
 
 class AdaptiveConcurrency:
@@ -208,6 +220,15 @@ class NaverHttpClient:
             if not credentials.authorization:
                 raise AuthenticationError("SITE_A bootstrap did not capture Authorization")
             self._client.headers["Authorization"] = credentials.authorization
+            for name in BROWSER_HEADER_NAMES:
+                self._client.headers.pop(name, None)
+            self._client.headers.update(
+                {
+                    name: value
+                    for name, value in credentials.request_headers.items()
+                    if name.lower() in BROWSER_HEADER_NAMES
+                }
+            )
             self._client.cookies.clear()
             for cookie in credentials.cookies:
                 self._client.cookies.set(cookie.name, cookie.value, domain=cookie.domain, path=cookie.path)

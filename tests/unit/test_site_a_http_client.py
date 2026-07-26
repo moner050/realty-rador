@@ -25,6 +25,33 @@ class Bootstrap:
 
 
 @pytest.mark.anyio
+async def test_refresh_applies_non_sensitive_browser_headers_to_httpx_requests():
+    class BrowserHeaderBootstrap:
+        async def __call__(self) -> NaverCredentials:
+            return NaverCredentials(
+                authorization="Bearer token",
+                cookies=(),
+                request_headers={
+                    "Accept-Language": "ko-KR",
+                    "Referer": "https://new.land.naver.com/complexes/1001",
+                    "Sec-CH-UA": '"Chromium";v="124"',
+                },
+            )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["accept-language"] == "ko-KR"
+        assert request.headers["referer"] == "https://new.land.naver.com/complexes/1001"
+        assert request.headers["sec-ch-ua"] == '"Chromium";v="124"'
+        return httpx.Response(200, json={"ok": True})
+
+    client = NaverHttpClient(BrowserHeaderBootstrap(), transport=httpx.MockTransport(handler), retry_backoff_seconds=0)
+    try:
+        assert await client.get_json("https://new.land.naver.com/api/test") == {"ok": True}
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.anyio
 async def test_401_refreshes_once_then_reuses_the_refreshed_session():
     bootstrap = Bootstrap()
     seen_tokens: list[str | None] = []

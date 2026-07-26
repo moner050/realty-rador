@@ -25,7 +25,9 @@ async def test_authenticated_httpx_reaches_region_complex_and_article_apis():
     # Plain httpx is intentionally observed first; its exact block status may change.
     async with httpx.AsyncClient(timeout=10) as plain:
         plain_response = await plain.get("https://new.land.naver.com/api/regions/list?cortarNo=1150000000")
-    assert plain_response.status_code in {200, 401, 403, 429}
+    # 네이버의 차단/리다이렉트 정책은 수시로 달라진다. 이 요청은 기준 상태를
+    # 기록하는 용도이므로 3xx도 허용하고, 이후 인증 httpx 경로를 검증한다.
+    assert 200 <= plain_response.status_code < 500
 
     browser = PlaywrightBrowserManager(headless=True)
     client = NaverHttpClient(NaverAuthBootstrap(browser))

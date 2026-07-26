@@ -5,7 +5,12 @@ import asyncio
 
 from playwright.async_api import Request, Route
 
-from realty_radar.crawler.adapters.site_a.http_client import AuthenticationError, NaverCookie, NaverCredentials
+from realty_radar.crawler.adapters.site_a.http_client import (
+    BROWSER_HEADER_NAMES,
+    AuthenticationError,
+    NaverCookie,
+    NaverCredentials,
+)
 from realty_radar.crawler.base.browser import PlaywrightBrowserManager
 
 
@@ -24,6 +29,7 @@ class NaverAuthBootstrap:
         context = await self._browser_manager.new_context()
         page = await context.new_page()
         authorization: str | None = None
+        request_headers: dict[str, str] = {}
         authorization_ready = asyncio.Event()
 
         async def route_resource(route: Route) -> None:
@@ -33,10 +39,15 @@ class NaverAuthBootstrap:
             await route.continue_()
 
         def capture_request(request: Request) -> None:
-            nonlocal authorization
+            nonlocal authorization, request_headers
             token = request.headers.get("authorization")
             if token and authorization is None:
                 authorization = token
+                request_headers = {
+                    name: value
+                    for name, value in request.headers.items()
+                    if name.lower() in BROWSER_HEADER_NAMES
+                }
                 authorization_ready.set()
 
         try:
@@ -56,7 +67,11 @@ class NaverAuthBootstrap:
             )
             if not authorization or not cookies:
                 raise AuthenticationError("SITE_A bootstrap did not capture both authorization and cookies")
-            return NaverCredentials(authorization=authorization, cookies=cookies)
+            return NaverCredentials(
+                authorization=authorization,
+                cookies=cookies,
+                request_headers=request_headers,
+            )
         except asyncio.TimeoutError as error:
             raise AuthenticationError("SITE_A bootstrap timed out before Authorization was observed") from error
         finally:
