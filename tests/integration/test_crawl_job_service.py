@@ -3,12 +3,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.crawl_job_service import (
+    JOB_FAILED,
     JOB_QUEUED,
     JOB_RETRY_WAIT,
     JOB_RUNNING,
+    JOB_SUCCESS,
     CrawlJobService,
 )
 from realty_radar.application.listing_batch_writer import IncomingListing, ListingBatchWriter
+from realty_radar.crawler.adapters.site_a.region_codes import SIGUNGU_CODES
 from realty_radar.infrastructure.database.models import Base, ListingCurrent
 
 
@@ -52,6 +55,42 @@ def test_job_claim_uses_lease_and_heartbeat():
     retried = service.mark_retry(claimed.job_id, claimed.lease_token, "HTTP_429", "retry later")
     assert retried is not None
     assert retried.status == JOB_RETRY_WAIT
+
+
+def test_enqueue_metro_batch_creates_one_job_per_sigungu_and_blocks_active_batch():
+    session = _session()
+    service = CrawlJobService(session)
+
+    jobs = service.enqueue_metro_batch()
+
+    assert len(jobs) == sum(len(sigungu_codes) for sigungu_codes in SIGUNGU_CODES.values())
+    assert all(job.scope_level == 2 for job in jobs)
+    assert all(job.dedupe_key.startswith("manual-metro:") for job in jobs)
+    assert service.enqueue_metro_batch() == []
+
+
+def test_latest_metro_batch_progress_groups_sigungu_status_and_counts():
+    session = _session()
+    service = CrawlJobService(session)
+    jobs = service.enqueue_metro_batch()
+    jobs[0].status = JOB_RUNNING
+    jobs[0].fetched_count = 12
+    jobs[1].status = JOB_SUCCESS
+    jobs[1].committed_count = 10
+    session.commit()
+
+    progress = service.get_latest_metro_batch_progress()
+
+    assert progress["total_sigungu"] == len(jobs)
+    assert progress["running_count"] == 1
+    assert progress["completed_count"] == 1
+    assert progress["pending_count"] == len(jobs) - 2
+    assert progress["is_active"] is True
+    assert any(
+        item["fetched_count"] == 12
+        for region in progress["regions"]
+        for item in region["items"]
+    )
 
 
 def test_only_complete_scope_advances_stale_then_removed():

@@ -16,6 +16,7 @@ from realty_radar.application.listing_batch_writer import (
     LIFECYCLE_STALE,
     utc_now,
 )
+from realty_radar.crawler.adapters.site_a.region_codes import SIGUNGU_CODES
 from realty_radar.infrastructure.database.models import CrawlJob, CrawlScope, ListingCurrent, ListingHistory
 
 
@@ -32,6 +33,23 @@ SCOPE_FAILED = 3
 
 LEASE_SECONDS = 60
 HEARTBEAT_SECONDS = 15
+METRO_BATCH_PREFIX = "manual-metro:"
+METRO_SCOPE_LEVEL = 2
+
+_SIGUNGU_BY_CODE = {
+    int(code): (sido_name, sigungu_name)
+    for sido_name, sigungu_codes in SIGUNGU_CODES.items()
+    for sigungu_name, code in sigungu_codes.items()
+}
+
+_JOB_STATUS_LABELS = {
+    JOB_QUEUED: "대기",
+    JOB_RUNNING: "수집 중",
+    JOB_SUCCESS: "완료",
+    JOB_RETRY_WAIT: "재시도 대기",
+    JOB_FAILED: "실패",
+    JOB_CANCELLED: "취소",
+}
 
 
 class CrawlJobService:
@@ -71,6 +89,123 @@ class CrawlJobService:
         self.db.commit()
         self.db.refresh(job)
         return job
+
+    def enqueue_metro_batch(self) -> list[CrawlJob]:
+        """Queue one SITE_A job for every Seoul, Gyeonggi, and Incheon sigungu."""
+        if self.get_latest_metro_batch_progress()["is_active"]:
+            return []
+
+        now = utc_now()
+        batch_id = uuid4().hex
+        jobs = [
+            CrawlJob(
+                dedupe_key=f"{METRO_BATCH_PREFIX}{batch_id}:{code}",
+                status=JOB_QUEUED,
+                priority=50,
+                available_at=now,
+                attempt=0,
+                max_attempts=3,
+                scope_level=METRO_SCOPE_LEVEL,
+                scope_code=int(code),
+                created_at=now,
+                updated_at=now,
+            )
+            for code in _SIGUNGU_BY_CODE
+        ]
+        self.db.add_all(jobs)
+        self.db.commit()
+        return jobs
+
+    def get_latest_metro_batch_progress(self) -> dict[str, object]:
+        """Return the latest manual metro batch without adding a tracking table."""
+        latest = self.db.scalar(
+            select(CrawlJob)
+            .where(CrawlJob.dedupe_key.like(f"{METRO_BATCH_PREFIX}%"))
+            .order_by(CrawlJob.created_at.desc(), CrawlJob.job_id.desc())
+            .limit(1)
+        )
+        if latest is None:
+            return self._empty_metro_batch_progress()
+
+        batch_id = self._metro_batch_id(latest.dedupe_key)
+        if batch_id is None:
+            return self._empty_metro_batch_progress()
+        jobs = list(
+            self.db.scalars(
+                select(CrawlJob)
+                .where(CrawlJob.dedupe_key.like(f"{METRO_BATCH_PREFIX}{batch_id}:%"))
+                .order_by(CrawlJob.scope_code)
+            ).all()
+        )
+        status_counts = {
+            JOB_QUEUED: 0,
+            JOB_RUNNING: 0,
+            JOB_SUCCESS: 0,
+            JOB_RETRY_WAIT: 0,
+            JOB_FAILED: 0,
+            JOB_CANCELLED: 0,
+        }
+        regions: dict[str, list[dict[str, object]]] = {sido_name: [] for sido_name in SIGUNGU_CODES}
+        for job in jobs:
+            status_counts[job.status] = status_counts.get(job.status, 0) + 1
+            sido_name, sigungu_name = _SIGUNGU_BY_CODE.get(job.scope_code, ("기타", str(job.scope_code)))
+            regions.setdefault(sido_name, []).append(
+                {
+                    "job_id": job.job_id,
+                    "sigungu_name": sigungu_name,
+                    "status": job.status,
+                    "status_label": _JOB_STATUS_LABELS.get(job.status, "알 수 없음"),
+                    "fetched_count": job.fetched_count,
+                    "committed_count": job.committed_count,
+                    "error_code": job.error_code,
+                    "error_message": job.error_message,
+                }
+            )
+
+        pending_count = status_counts[JOB_QUEUED] + status_counts[JOB_RETRY_WAIT]
+        running_count = status_counts[JOB_RUNNING]
+        failed_count = status_counts[JOB_FAILED]
+        success_count = status_counts[JOB_SUCCESS]
+        return {
+            "has_batch": True,
+            "batch_id": batch_id,
+            "total_sigungu": len(jobs),
+            "pending_count": pending_count,
+            "running_count": running_count,
+            "completed_count": success_count,
+            "failed_count": failed_count,
+            "retry_count": status_counts[JOB_RETRY_WAIT],
+            "is_active": bool(pending_count or running_count),
+            "worker_waiting": bool(status_counts[JOB_QUEUED] and not running_count),
+            "regions": [
+                {"sido_name": sido_name, "items": items}
+                for sido_name, items in regions.items()
+                if items
+            ],
+        }
+
+    @staticmethod
+    def _metro_batch_id(dedupe_key: str) -> str | None:
+        if not dedupe_key.startswith(METRO_BATCH_PREFIX):
+            return None
+        batch_id, separator, _ = dedupe_key[len(METRO_BATCH_PREFIX):].partition(":")
+        return batch_id if separator and batch_id else None
+
+    @staticmethod
+    def _empty_metro_batch_progress() -> dict[str, object]:
+        return {
+            "has_batch": False,
+            "batch_id": None,
+            "total_sigungu": 0,
+            "pending_count": 0,
+            "running_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "retry_count": 0,
+            "is_active": False,
+            "worker_waiting": False,
+            "regions": [],
+        }
 
     def claim_next_job(self, worker_id: str) -> CrawlJob | None:
         """``FOR UPDATE SKIP LOCKED``로 하나를 선점하고 60초 lease를 부여한다."""
