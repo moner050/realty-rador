@@ -22,16 +22,35 @@ templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
 
 
+def _progress_context(db: Session) -> dict[str, object]:
+    service = CrawlJobService(db)
+    return {
+        "summary": service.get_progress_summary(),
+        "metro_progress": service.get_latest_metro_batch_progress(),
+    }
+
+
+def _render_progress(request: Request, db: Session):
+    return templates.TemplateResponse(
+        request,
+        "jobs/progress_partial.html",
+        _progress_context(db),
+    )
+
+
 @router.get("/jobs", response_class=HTMLResponse, name="jobs_dashboard")
 def get_jobs_dashboard(request: Request, db: Annotated[Session, Depends(get_db)]):
     jobs = list(db.scalars(select(CrawlJob).order_by(CrawlJob.created_at.desc()).limit(50)).all())
-    summary = CrawlJobService(db).get_progress_summary()
-    return templates.TemplateResponse(request, "jobs/index.html", {"jobs": jobs, "summary": summary, "is_authenticated": True})
+    return templates.TemplateResponse(
+        request,
+        "jobs/index.html",
+        {"jobs": jobs, "is_authenticated": True, **_progress_context(db)},
+    )
 
 
 @router.get("/api/crawl-jobs/progress", response_class=HTMLResponse, name="get_crawl_progress")
 def get_crawl_progress(request: Request, db: Annotated[Session, Depends(get_db)]):
-    return templates.TemplateResponse(request, "jobs/progress_partial.html", {"summary": CrawlJobService(db).get_progress_summary()})
+    return _render_progress(request, db)
 
 
 @router.post("/api/crawl-jobs", name="create_crawl_job")
@@ -48,5 +67,16 @@ def create_crawl_job(
         priority=50,
     )
     if request.headers.get("HX-Request") == "true":
-        return templates.TemplateResponse(request, "jobs/progress_partial.html", {"summary": CrawlJobService(db).get_progress_summary()})
+        return _render_progress(request, db)
+    return RedirectResponse(url="/jobs", status_code=303)
+
+
+@router.post("/api/crawl-jobs/metro", name="create_metro_crawl_batch")
+def create_metro_crawl_batch(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+):
+    CrawlJobService(db).enqueue_metro_batch()
+    if request.headers.get("HX-Request") == "true":
+        return _render_progress(request, db)
     return RedirectResponse(url="/jobs", status_code=303)

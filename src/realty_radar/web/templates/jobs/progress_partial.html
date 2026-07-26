@@ -1,3 +1,60 @@
-<div class="rounded-xl border border-slate-700 bg-slate-800 p-4 text-sm text-slate-300" hx-get="/api/crawl-jobs/progress" hx-trigger="every 5s" hx-swap="outerHTML">
-  <span>대기 {{ summary.pending_jobs }} · 실행 {{ summary.running_jobs }} · 완료 {{ summary.completed_jobs }} · 실패 {{ summary.failed_jobs }}</span>
-</div>
+<section id="metro-progress" class="space-y-4" hx-get="/api/crawl-jobs/progress" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="rounded-xl border border-slate-700 bg-slate-800 p-4 text-sm text-slate-300">
+    <p>전체 job: {{ summary.total_jobs }} · 대기: {{ summary.pending_jobs }} · 수집 중: {{ summary.running_jobs }} · 완료: {{ summary.completed_jobs }} · 실패: {{ summary.failed_jobs }}</p>
+  </div>
+
+  <div class="rounded-xl border border-slate-700 bg-slate-800 p-4 sm:p-5">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 class="font-bold text-white">시/군/구별 진행 현황</h2>
+        {% if metro_progress.has_batch %}
+        <p class="mt-1 text-sm text-slate-400">최근 수도권 전체 수집 batch를 표시합니다.</p>
+        {% else %}
+        <p class="mt-1 text-sm text-slate-400">수도권 전체 수동 수집을 시작하면 시/군/구별 상태가 여기에 표시됩니다.</p>
+        {% endif %}
+      </div>
+      {% if metro_progress.has_batch %}
+      <div class="flex flex-wrap gap-2 text-xs">
+        <span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">총 {{ metro_progress.total_sigungu }}곳</span>
+        <span class="rounded-full bg-amber-500/20 px-2.5 py-1 text-amber-200">대기 {{ metro_progress.pending_count }}</span>
+        <span class="rounded-full bg-sky-500/20 px-2.5 py-1 text-sky-200">수집 중 {{ metro_progress.running_count }}</span>
+        <span class="rounded-full bg-emerald-500/20 px-2.5 py-1 text-emerald-200">완료 {{ metro_progress.completed_count }}</span>
+        <span class="rounded-full bg-rose-500/20 px-2.5 py-1 text-rose-200">실패 {{ metro_progress.failed_count }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if metro_progress.worker_waiting %}
+    <p class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">worker 대기 중 — worker를 시작하면 등록된 시/군/구 job이 자동으로 수집됩니다.</p>
+    {% endif %}
+
+    {% if metro_progress.has_batch %}
+    <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-700" aria-label="수도권 수집 진행률">
+      {% set completed = metro_progress.completed_count + metro_progress.failed_count %}
+      <div class="h-full bg-indigo-500 transition-all" style="width: {{ (completed * 100 / metro_progress.total_sigungu) | round(0) }}%"></div>
+    </div>
+
+    <div class="mt-5 grid gap-4 xl:grid-cols-3">
+      {% for region in metro_progress.regions %}
+      <section class="overflow-hidden rounded-lg border border-slate-700">
+        <h3 class="border-b border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-white">{{ region["sido_name"] }}</h3>
+        <ul class="divide-y divide-slate-700">
+          {% for item in region["items"] %}
+          <li class="px-3 py-2.5 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <span class="font-medium text-slate-100">{{ item.sigungu_name }}</span>
+              <span class="shrink-0 rounded-full px-2 py-0.5 text-xs {% if item.status == 3 %}bg-emerald-500/20 text-emerald-200{% elif item.status == 2 %}bg-sky-500/20 text-sky-200{% elif item.status == 5 %}bg-rose-500/20 text-rose-200{% elif item.status == 4 %}bg-amber-500/20 text-amber-200{% else %}bg-slate-700 text-slate-200{% endif %}">{{ item.status_label }}</span>
+            </div>
+            <p class="mt-1 text-xs text-slate-400">수집 {{ item.fetched_count | comma_number }}건 · 저장 {{ item.committed_count | comma_number }}건</p>
+            {% if item.error_code or item.error_message %}
+            <p class="mt-1 break-words text-xs text-rose-200">{{ item.error_code or "오류" }}{% if item.error_message %}: {{ item.error_message }}{% endif %}</p>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
