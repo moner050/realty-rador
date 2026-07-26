@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from html import unescape
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -166,6 +167,57 @@ def test_active_filter_chips_describe_every_applied_search_condition():
         "전용면적 넓은순",
     ):
         assert label in response.text
+
+
+@pytest.mark.parametrize("query", ("cursor=x", "sort_by=not-a-sort", "complex_keyword=가"))
+def test_invalid_search_queries_render_a_client_error_instead_of_a_server_error(query):
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get(f"/?{query}")
+        htmx_response = TestClient(app).get(f"/listings/search?{query}", headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert htmx_response.status_code == 400
+    assert "검색 조건을 확인" in response.text
+    assert 'id="search-results"' in htmx_response.text
+
+
+def test_active_region_chips_use_human_readable_sido_and_sigungu_names():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/?sido_code=11&sigungu_code=11680")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "시도 서울특별시" in response.text
+    assert "시군구 강남구" in response.text
 
 
 def test_search_filter_prefers_primary_price_and_accepts_singular_legacy_trade():

@@ -99,6 +99,17 @@ def _region_options() -> list[dict[str, object]]:
     ]
 
 
+def _region_labels() -> tuple[dict[int, str], dict[int, str]]:
+    return (
+        {int(code) // 100_000_000: name for name, code in SIDO_CODES.items()},
+        {
+            int(code) // 100_000: name
+            for sigungu in SIGUNGU_CODES.values()
+            for name, code in sigungu.items()
+        },
+    )
+
+
 def parse_search_filter(
     region_code: str | None = Query(None),
     sido_code: str | None = Query(None),
@@ -218,8 +229,36 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "is_authenticated": is_authenticated(request),
             "region_options": _region_options(),
             "sort_options": SORT_OPTIONS,
+            "sido_labels": _region_labels()[0],
+            "sigungu_labels": _region_labels()[1],
         },
     )
+
+
+def _render_search_error(request: Request, filters: ListingSearchFilter, template_name: str):
+    sido_labels, sigungu_labels = _region_labels()
+    context = {
+        "filters": filters,
+        "region_options": _region_options(),
+        "sort_options": SORT_OPTIONS,
+        "sido_labels": sido_labels,
+        "sigungu_labels": sigungu_labels,
+        "is_authenticated": is_authenticated(request),
+        "search_error": True,
+    }
+    return templates.TemplateResponse(
+        request,
+        "listings/index.html" if template_name == "listings/index.html" else "listings/search_error.html",
+        context=context,
+        status_code=400,
+    )
+
+
+def _render_or_client_error(request: Request, db: Session, filters: ListingSearchFilter, template_name: str):
+    try:
+        return _render_result(request, db, filters, template_name)
+    except ValueError:
+        return _render_search_error(request, filters, template_name)
 
 
 @router.get("/", response_class=HTMLResponse, name="home")
@@ -228,7 +267,7 @@ def index(
     db: Annotated[Session, Depends(get_db)],
     filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
 ):
-    return _render_result(request, db, filters, "listings/index.html")
+    return _render_or_client_error(request, db, filters, "listings/index.html")
 
 
 @router.get("/listings/search", response_class=HTMLResponse, name="search_listings")
@@ -246,4 +285,4 @@ def search_listings(
         if is_htmx
         else "listings/index.html"
     )
-    return _render_result(request, db, filters, template_name)
+    return _render_or_client_error(request, db, filters, template_name)

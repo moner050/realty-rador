@@ -7,8 +7,8 @@
 <div id="search-status" hx-swap-oob="true" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
     <p class="text-sm text-slate-400">검색 결과{% if result.is_grouped %} · 단지별 묶음{% endif %}</p>
     <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 text-xs whitespace-nowrap">
-        {% if filters.sido_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시도 {{ filters.sido_code }}</span>{% endif %}
-        {% if filters.sigungu_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시군구 {{ filters.sigungu_code }}</span>{% endif %}
+        {% if filters.sido_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시도 {{ sido_labels.get(filters.sido_code, filters.sido_code) }}</span>{% endif %}
+        {% if filters.sigungu_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시군구 {{ sigungu_labels.get(filters.sigungu_code, filters.sigungu_code) }}</span>{% endif %}
         {% if filters.region_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">동 {{ filters.region_code }}</span>{% endif %}
         {% if filters.complex_keyword %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.complex_keyword }}</span>{% endif %}
         {% if filters.trade_types %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">거래 {% for code in filters.trade_types %}{{ trade_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
