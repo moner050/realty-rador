@@ -136,16 +136,21 @@ def parse_article_detail(payload: dict[str, Any]) -> ArticleDetail:
         mortgage_code=classify_mortgage_text(detail_text),
         room_count=_unsigned_int(_first_value(fields, "roomCount"), maximum=255),
         bathroom_count=_unsigned_int(_first_value(fields, "bathroomCount"), maximum=255),
-        parking_possible=_nullable_bool(_first_value(fields, "parkingPossible", "parkingPossibleYn")),
+        parking_possible=_nullable_bool(
+            _first_value(fields, "parkingPossible", "parkingPossibleYn", "parkingPossibleYN")
+        ),
         parking_per_household_x100=_per_household_x100(
             _first_value(fields, "parkingPerHousehold", "parkingPerHouseholdCount")
         ),
         monthly_management_cost=_unsigned_int(
             _first_value(fields, "monthlyManagementCost", "managementCost"), maximum=4_294_967_295
         ),
-        move_in_available_on=_date_value(_first_value(fields, "moveInAvailableDate", "moveInDate")),
+        move_in_available_on=_date_value(
+            _first_value(fields, "moveInAvailableDate", "moveInDate", "moveInPossibleYmd")
+        ),
         nearest_subway_walk_minutes=_unsigned_int(
-            _first_value(fields, "nearestSubwayWalkMinutes", "subwayWalkMinutes"), maximum=65535
+            _first_value(fields, "nearestSubwayWalkMinutes", "subwayWalkMinutes", "walkingTimeToNearSubway"),
+            maximum=65535,
         ),
     )
 

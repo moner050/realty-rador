@@ -210,6 +210,22 @@ def test_article_detail_parser_keeps_only_typed_values_and_rejects_malformed_fie
     assert malformed.nearest_subway_walk_minutes is None
 
 
+def test_article_detail_parser_accepts_site_a_detail_field_spellings():
+    parsed = parse_article_detail(
+        {
+            "articleDetail": {
+                "parkingPossibleYN": "Y",
+                "moveInPossibleYmd": "2026-08-15",
+                "walkingTimeToNearSubway": "7",
+            }
+        }
+    )
+
+    assert parsed.parking_possible is True
+    assert str(parsed.move_in_available_on) == "2026-08-15"
+    assert parsed.nearest_subway_walk_minutes == 7
+
+
 def test_combined_enrichment_updates_detail_once_and_retries_transport_failures():
     factory = _session_factory()
     attempts: list[int] = []
@@ -223,11 +239,11 @@ def test_combined_enrichment_updates_detail_once_and_retries_transport_failures(
                 "detailDescription": "융자 있음",
                 "roomCount": 3,
                 "bathroomCount": 2,
-                "parkingPossible": True,
+                "parkingPossibleYN": "Y",
                 "parkingPerHousehold": 1.2,
                 "monthlyManagementCost": 180000,
-                "moveInAvailableDate": "2026-09-01",
-                "nearestSubwayWalkMinutes": 4,
+                "moveInPossibleYmd": "2026-09-01",
+                "walkingTimeToNearSubway": 4,
             }
         }
 
