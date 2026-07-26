@@ -22,6 +22,7 @@ HISTORY_UPDATED = 1
 HISTORY_STALE = 2
 HISTORY_REMOVED = 3
 HISTORY_REACTIVATED = 4
+HISTORY_MORTGAGE_ENRICHED = 5
 
 CHANGE_PRICE = 1
 CHANGE_MONTHLY_RENT = 2
@@ -255,11 +256,17 @@ class ListingBatchWriter:
                 "event_type": HISTORY_REACTIVATED
                 if existing[row.article_id].lifecycle != LIFECYCLE_ACTIVE
                 else HISTORY_UPDATED,
-                "change_mask": self._change_mask(existing[row.article_id], row),
+                "change_mask": self._change_mask(
+                    existing[row.article_id], row, preserve_enriched_mortgage=existing[row.article_id].mortgage_checked_at is not None
+                ),
                 "primary_price": row.primary_price,
                 "monthly_rent": row.monthly_rent,
                 "lifecycle": LIFECYCLE_ACTIVE,
-                "mortgage_code": row.mortgage_code,
+                "mortgage_code": (
+                    existing[row.article_id].mortgage_code
+                    if existing[row.article_id].mortgage_checked_at is not None
+                    else row.mortgage_code
+                ),
                 "floor_no": row.floor_no,
                 "total_floor": row.total_floor,
                 "direction_code": row.direction_code,
@@ -294,7 +301,6 @@ class ListingBatchWriter:
                 "total_floor",
                 "floor_band",
                 "direction_code",
-                "mortgage_code",
                 "is_top_floor",
                 "is_short_term",
                 "building_name",
@@ -426,9 +432,8 @@ class ListingBatchWriter:
                               OR COALESCE(current.total_floor, 0) <> COALESCE(incoming.total_floor, 0)
                            THEN :floor_mask ELSE 0 END)
                     | (CASE WHEN current.direction_code <> incoming.direction_code THEN :direction_mask ELSE 0 END)
-                    | (CASE WHEN current.mortgage_code <> incoming.mortgage_code THEN :mortgage_mask ELSE 0 END)
                     | (CASE WHEN current.lifecycle <> :active THEN :lifecycle_mask ELSE 0 END),
-                    incoming.primary_price, incoming.monthly_rent, :active, incoming.mortgage_code,
+                    incoming.primary_price, incoming.monthly_rent, :active, current.mortgage_code,
                     incoming.floor_no, incoming.total_floor, incoming.direction_code,
                     incoming.listing_state_hash, incoming.observed_at
                 FROM incoming_listing incoming
@@ -447,7 +452,6 @@ class ListingBatchWriter:
                 "rent_mask": CHANGE_MONTHLY_RENT,
                 "floor_mask": CHANGE_FLOOR,
                 "direction_mask": CHANGE_DIRECTION,
-                "mortgage_mask": CHANGE_MORTGAGE,
                 "lifecycle_mask": CHANGE_LIFECYCLE,
             },
         )
@@ -486,7 +490,6 @@ class ListingBatchWriter:
                     total_floor = VALUES(total_floor),
                     floor_band = VALUES(floor_band),
                     direction_code = VALUES(direction_code),
-                    mortgage_code = VALUES(mortgage_code),
                     is_top_floor = VALUES(is_top_floor),
                     is_short_term = VALUES(is_short_term),
                     building_name = VALUES(building_name),
@@ -528,7 +531,9 @@ class ListingBatchWriter:
         self.session.commit()
 
     @staticmethod
-    def _change_mask(current: ListingCurrent, incoming: IncomingListing) -> int:
+    def _change_mask(
+        current: ListingCurrent, incoming: IncomingListing, *, preserve_enriched_mortgage: bool = False
+    ) -> int:
         mask = 0
         if current.primary_price != incoming.primary_price:
             mask |= CHANGE_PRICE
@@ -538,7 +543,7 @@ class ListingBatchWriter:
             mask |= CHANGE_FLOOR
         if current.direction_code != incoming.direction_code:
             mask |= CHANGE_DIRECTION
-        if current.mortgage_code != incoming.mortgage_code:
+        if not preserve_enriched_mortgage and current.mortgage_code != incoming.mortgage_code:
             mask |= CHANGE_MORTGAGE
         if current.description != incoming.description:
             mask |= CHANGE_DESCRIPTION

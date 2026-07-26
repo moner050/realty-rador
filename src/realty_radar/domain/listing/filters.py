@@ -1,8 +1,66 @@
 """v2 keyset 검색에 필요한 최소 필터 계약."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from decimal import Decimal
+from typing import Iterable
+
+from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, resolve_cortarno
+
+
+class ListingSearchValidationError(ValueError):
+    """Raised when a listing search input cannot be safely evaluated."""
+
+
+_DIRECTION_CODES = {
+    "남": 1,
+    "남향": 1,
+    "남동": 2,
+    "남동향": 2,
+    "동": 3,
+    "동향": 3,
+    "북동": 4,
+    "북동향": 4,
+    "북": 5,
+    "북향": 5,
+    "북서": 6,
+    "북서향": 6,
+    "서": 7,
+    "서향": 7,
+    "남서": 8,
+    "남서향": 8,
+}
+_FLOOR_BANDS = {
+    "저": 1,
+    "저층": 1,
+    "중": 2,
+    "중층": 2,
+    "고": 3,
+    "고층": 3,
+    "탑": 4,
+    "탑층": 4,
+    "지하": 5,
+}
+_TRADE_TYPE_CODES = {
+    "SALE": 1,
+    "매매": 1,
+    "JEONSE": 2,
+    "전세": 2,
+    "MONTHLY_RENT": 3,
+    "월세": 3,
+    "SHORT_TERM": 4,
+    "단기임대": 4,
+}
+_MORTGAGE_CODES = {
+    "UNKNOWN": 0,
+    "정보미상": 0,
+    "EXPLICIT_NONE": 1,
+    "융자없음": 1,
+    "융자금없음": 1,
+    "EXPLICIT_EXISTS": 2,
+    "융자있음": 2,
+    "융자금있음": 2,
+}
 
 
 @dataclass(slots=True)
@@ -12,6 +70,7 @@ class ListingSearchFilter:
     sigungu_code: int | None = None
     complex_keyword: str | None = None
     trade_type: int | None = None
+    trade_types: list[int] | None = None
     min_price: int | None = None
     max_price: int | None = None
     min_deposit: int | None = None
@@ -21,7 +80,9 @@ class ListingSearchFilter:
     max_exclusive_area: Decimal | None = None
     min_construction_year: int | None = None
     min_households: int | None = None
+    recent_days: int | None = None
     mortgage_codes: list[int] | None = None
+    exclude_unknown_mortgage: bool = False
     direction_codes: list[int] | None = None
     floor_bands: list[int] | None = None
     exclude_first_floor: bool = False
@@ -49,6 +110,26 @@ class ListingSearchFilter:
     @classmethod
     def from_dict(cls, values: dict[str, object]) -> "ListingSearchFilter":
         copied = dict(values)
+        # v1 saved preferences used strings and included source-specific keys.
+        # The v2 hot table uses the numeric parser codes and is SITE_A-only.
+        copied["direction_codes"] = cls._code_values(
+            cls._legacy_value(copied, "direction_codes", "directions", "direction"), _DIRECTION_CODES
+        )
+        copied["floor_bands"] = cls._code_values(
+            cls._legacy_value(copied, "floor_bands", "floor_types", "floors", "floor"), _FLOOR_BANDS
+        )
+        copied["mortgage_codes"] = cls._code_values(
+            cls._legacy_value(copied, "mortgage_codes", "mortgage_status"), _MORTGAGE_CODES
+        )
+        trade_values = cls._legacy_value(copied, "trade_types", "trade_type", "transaction_type")
+        copied["trade_types"] = cls._code_values(trade_values, _TRADE_TYPE_CODES)
+        if isinstance(copied.get("trade_type"), str):
+            copied["trade_type"] = None
+        cls._migrate_region(copied)
+        if copied.get("min_price") is None:
+            copied["min_price"] = copied.get("min_deposit")
+        if copied.get("max_price") is None:
+            copied["max_price"] = copied.get("max_deposit")
         copied["min_exclusive_area"] = (
             Decimal(str(copied["min_exclusive_area"])) if copied.get("min_exclusive_area") is not None else None
         )
@@ -57,6 +138,57 @@ class ListingSearchFilter:
         )
         allowed = {field_name for field_name in cls.__dataclass_fields__}
         return cls(**{key: value for key, value in copied.items() if key in allowed})
+
+    @classmethod
+    def _code_values(cls, value: object, names: dict[str, int]) -> list[int] | None:
+        if value is None:
+            return None
+        if isinstance(value, (str, int)):
+            value = [value]
+        if not isinstance(value, Iterable):
+            return None
+        codes: list[int] = []
+        for item in value:
+            if isinstance(item, int) or str(item).strip().isdigit():
+                codes.append(int(item))
+            elif (code := names.get(str(item).replace(" ", "").strip())) is not None:
+                codes.append(code)
+        return list(dict.fromkeys(codes)) or None
+
+    @staticmethod
+    def _legacy_value(values: dict[str, object], *keys: str) -> object:
+        for key in keys:
+            value = values.get(key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    @staticmethod
+    def _migrate_region(values: dict[str, object]) -> None:
+        if any(values.get(key) not in (None, "") for key in ("region_code", "sido_code", "sigungu_code")):
+            return
+        sido = str(values.get("sido") or "").strip()
+        city = str(values.get("city") or "").strip()
+        county = str(values.get("county") or "").strip()
+        district = str(values.get("district") or "").strip()
+        region_name = str(values.get("region_name") or values.get("region") or "").strip()
+        names = [
+            " ".join(part for part in (sido, city, district or county) if part),
+            " ".join(part for part in (sido, city or district or county) if part),
+            region_name,
+            district or county or city or sido,
+        ]
+        for name in names:
+            code = resolve_cortarno(name) if name else None
+            if not code or code == "ALL_METRO":
+                continue
+            numeric = int(code)
+            if code in SIDO_CODES.values():
+                values["sido_code"] = numeric // 100_000_000
+            else:
+                values["sigungu_code"] = numeric // 100_000
+                values["sido_code"] = numeric // 100_000_000
+            return
 
     @property
     def min_area_x100(self) -> int | None:

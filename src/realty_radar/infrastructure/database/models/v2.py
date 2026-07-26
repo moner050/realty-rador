@@ -102,6 +102,7 @@ class ListingCurrent(Base):
         Index("ix_listing_households", "lifecycle", "is_short_term", "household_count", "article_id"),
         Index("ix_listing_complex", "complex_id", "lifecycle", "is_short_term", "primary_price", "article_id"),
         Index("ix_listing_presence", "region_code", "last_seen_job_id", "lifecycle", "article_id"),
+        Index("ix_listing_mortgage_pending", "mortgage_checked_at", "article_id"),
         {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
     )
 
@@ -136,6 +137,7 @@ class ListingCurrent(Base):
     floor_band = Column(UnsignedTinyInt, nullable=False, server_default=text("0"))
     direction_code = Column(UnsignedTinyInt, nullable=False, server_default=text("0"))
     mortgage_code = Column(UnsignedTinyInt, nullable=False, server_default=text("0"))
+    mortgage_checked_at = Column(DateTime6, nullable=True)
     is_top_floor = Column(Boolean, nullable=False, server_default=text("0"))
     is_short_term = Column(Boolean, nullable=False, server_default=text("0"))
     building_name = Column(String(40), nullable=True)

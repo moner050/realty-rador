@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Realty Radar",
+    title="아파트 매물 검색",
     description="SITE_A 전용 부동산 매물 수집·검색 시스템",
     version="2.0.0",
     lifespan=lifespan,

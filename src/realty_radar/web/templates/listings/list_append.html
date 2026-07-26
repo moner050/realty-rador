@@ -1,0 +1,5 @@
+{% import "listings/_listing_cards.html" as cards %}
+{{ cards.render(result, listings) }}
+<div id="listing-pager" hx-swap-oob="true" class="mt-4 text-center">
+    {{ cards.pager(result, next_url) }}
+</div>
