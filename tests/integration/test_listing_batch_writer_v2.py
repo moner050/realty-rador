@@ -83,3 +83,21 @@ def test_500_row_replay_does_not_duplicate_current_or_history():
     repeated_update = writer.commit_batch(job_id=2, rows=changed)
     assert repeated_update.updated_count == 0
     assert session.scalar(select(func.count()).select_from(ListingHistory)) == 1
+
+
+def test_listing_recrawl_preserves_completed_mortgage_enrichment():
+    session = _session()
+    session.add_all([_job(1, "dong:1150010200:1"), _job(2, "dong:1150010200:2")])
+    session.commit()
+    writer = ListingBatchWriter(session)
+    writer.commit_batch(job_id=1, rows=[_incoming(10_000)])
+    listing = session.get(ListingCurrent, 10_000)
+    listing.mortgage_code = 1
+    listing.mortgage_checked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.commit()
+
+    writer.commit_batch(job_id=2, rows=[_incoming(10_000, price=490_000_000)])
+
+    refreshed = session.get(ListingCurrent, 10_000)
+    assert refreshed.mortgage_code == 1
+    assert refreshed.mortgage_checked_at is not None

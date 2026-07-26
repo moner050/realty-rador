@@ -294,7 +294,6 @@ class ListingBatchWriter:
                 "total_floor",
                 "floor_band",
                 "direction_code",
-                "mortgage_code",
                 "is_top_floor",
                 "is_short_term",
                 "building_name",
@@ -426,9 +425,8 @@ class ListingBatchWriter:
                               OR COALESCE(current.total_floor, 0) <> COALESCE(incoming.total_floor, 0)
                            THEN :floor_mask ELSE 0 END)
                     | (CASE WHEN current.direction_code <> incoming.direction_code THEN :direction_mask ELSE 0 END)
-                    | (CASE WHEN current.mortgage_code <> incoming.mortgage_code THEN :mortgage_mask ELSE 0 END)
                     | (CASE WHEN current.lifecycle <> :active THEN :lifecycle_mask ELSE 0 END),
-                    incoming.primary_price, incoming.monthly_rent, :active, incoming.mortgage_code,
+                    incoming.primary_price, incoming.monthly_rent, :active, current.mortgage_code,
                     incoming.floor_no, incoming.total_floor, incoming.direction_code,
                     incoming.listing_state_hash, incoming.observed_at
                 FROM incoming_listing incoming
@@ -447,7 +445,6 @@ class ListingBatchWriter:
                 "rent_mask": CHANGE_MONTHLY_RENT,
                 "floor_mask": CHANGE_FLOOR,
                 "direction_mask": CHANGE_DIRECTION,
-                "mortgage_mask": CHANGE_MORTGAGE,
                 "lifecycle_mask": CHANGE_LIFECYCLE,
             },
         )
@@ -486,7 +483,6 @@ class ListingBatchWriter:
                     total_floor = VALUES(total_floor),
                     floor_band = VALUES(floor_band),
                     direction_code = VALUES(direction_code),
-                    mortgage_code = VALUES(mortgage_code),
                     is_top_floor = VALUES(is_top_floor),
                     is_short_term = VALUES(is_short_term),
                     building_name = VALUES(building_name),
