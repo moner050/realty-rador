@@ -27,6 +27,7 @@ register_jinja_filters(templates)
 _LOAN_EVALUATOR = LoanRuleEvaluator()
 
 TRADE_TYPE_CODES = {"SALE": 1, "JEONSE": 2, "MONTHLY_RENT": 3, "SHORT_TERM": 4}
+MAX_PRICE_WON = 10_000_000_000
 SORT_OPTIONS = (
     ("price_asc", "가격 낮은순"),
     ("price_desc", "가격 높은순"),
@@ -61,6 +62,10 @@ def _optional_eok_price(value: str | None) -> int | None:
     if amount is None or not amount.is_finite() or amount < 0:
         return None
     return int(amount * Decimal(100_000_000))
+
+
+def _capped_price(value: int | None) -> int | None:
+    return min(value, MAX_PRICE_WON) if value is not None else None
 
 
 def _query_value_was_provided(value: object) -> bool:
@@ -178,13 +183,7 @@ def _slider_limits(filters: ListingSearchFilter) -> dict[str, int | Decimal]:
         return max(base, int((Decimal(value) / scale).to_integral_value(rounding=ROUND_CEILING)))
 
     return {
-        "price_eok": scaled_limit(
-            max(value for value in (filters.min_price, filters.max_price) if value is not None)
-            if filters.min_price is not None or filters.max_price is not None
-            else None,
-            base=500,
-            scale=100_000_000,
-        ),
+        "price_eok": 100,
         "monthly_rent_manwon": scaled_limit(filters.max_monthly_rent, base=1_000, scale=10_000),
         "area": scaled_limit(
             max(value for value in (filters.min_exclusive_area, filters.max_exclusive_area) if value is not None)
@@ -272,14 +271,14 @@ def parse_search_filter(
         complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
         trade_type=trades[0] if trades and len(trades) == 1 else None,
         trade_types=trades,
-        min_price=(
+        min_price=_capped_price(
             parsed_min_price
             if _query_value_was_provided(min_price)
             else parsed_min_eok
             if parsed_min_eok is not None
             else _optional_int(min_deposit)
         ),
-        max_price=(
+        max_price=_capped_price(
             parsed_max_price
             if _query_value_was_provided(max_price)
             else parsed_max_eok

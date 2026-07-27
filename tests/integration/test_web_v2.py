@@ -459,7 +459,7 @@ def test_trade_specific_filters_are_collapsible_and_marked_for_dynamic_visibilit
     assert 'addEventListener("change", updateTradeFilters, true)' in response.text
 
 
-def test_slider_bounds_expand_for_saved_values_above_default_limits():
+def test_price_slider_is_capped_at_one_hundred_eok_while_other_bounds_expand():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -479,7 +479,7 @@ def test_slider_bounds_expand_for_saved_values_above_default_limits():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert 'id="min-price-eok" type="range" min="0" max="600"' in response.text
+    assert 'id="min-price-eok" type="range" min="0" max="100"' in response.text
     assert 'id="min-exclusive-area" type="range" min="0" max="620"' in response.text
     assert 'id="recent-days" type="range" min="1" max="500"' in response.text
 

@@ -90,10 +90,14 @@ class CrawlJobService:
         self.db.refresh(job)
         return job
 
-    def enqueue_metro_batch(self) -> list[CrawlJob]:
-        """Queue one SITE_A job for every Seoul, Gyeonggi, and Incheon sigungu."""
+    def enqueue_metro_batch(self, scope_codes: list[int] | None = None) -> list[CrawlJob]:
+        """Queue a manual batch for all metro sigungu or an explicitly selected subset."""
         if self.get_latest_metro_batch_progress()["is_active"]:
             return []
+
+        codes = list(dict.fromkeys(scope_codes or list(_SIGUNGU_BY_CODE)))
+        if not codes or any(code not in _SIGUNGU_BY_CODE for code in codes):
+            raise ValueError("scope_codes must be known metro sigungu codes")
 
         now = utc_now()
         batch_id = uuid4().hex
@@ -110,7 +114,7 @@ class CrawlJobService:
                 created_at=now,
                 updated_at=now,
             )
-            for code in _SIGUNGU_BY_CODE
+            for code in codes
         ]
         self.db.add_all(jobs)
         self.db.commit()

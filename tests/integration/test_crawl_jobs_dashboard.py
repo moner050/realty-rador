@@ -45,6 +45,20 @@ def test_metro_post_enqueues_batch_and_returns_progress_fragment(jobs_client: Te
     assert 'disabled aria-disabled="true"' in response.text
 
 
+def test_metro_post_enqueues_only_the_selected_municipality_jobs(jobs_client: TestClient):
+    response = jobs_client.post(
+        "/api/crawl-jobs/metro",
+        data={"sido_code": "41", "municipality": "수원시"},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    assert "총 4곳" in response.text
+    assert "수원시 장안구" in response.text
+    assert "수원시 영통구" in response.text
+    assert "성남시 분당구" not in response.text
+
+
 def test_jobs_dashboard_renders_disabled_metro_button_and_sigungu_statuses(jobs_client: TestClient):
     jobs_client.post("/api/crawl-jobs/metro")
 
@@ -52,7 +66,12 @@ def test_jobs_dashboard_renders_disabled_metro_button_and_sigungu_statuses(jobs_
 
     assert response.status_code == 200
     assert 'action="/api/crawl-jobs/metro"' in response.text
-    assert "수도권 전체 수동 수집" in response.text
+    assert "수도권 아파트 수집 현황" in response.text
+    assert "SITE_A 수집 작업" not in response.text
+    assert "수도권 아파트 수동 수집" in response.text
+    assert 'id="metro-sido-select" name="sido_code"' in response.text
+    assert 'id="metro-municipality-select" name="municipality"' in response.text
+    assert 'id="metro-district-select" name="sigungu_code"' in response.text
     assert "시/군/구별 진행 현황" in response.text
     assert "disabled" in response.text
     assert 'hx-trigger="every 5s"' in response.text
