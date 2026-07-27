@@ -644,6 +644,32 @@ def test_home_renders_mobile_filter_groups_and_dynamic_region_controls():
     assert 'hx-trigger="submit, change delay:400ms, keyup changed delay:400ms"' in response.text
 
 
+def test_result_header_owns_sort_control_and_advanced_conditions_contain_housing_controls():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/?sort_by=area_desc&min_room_count=3")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'data-result-sort form="listing-search-form" name="sort_by"' in response.text
+    assert 'id="advanced-housing-conditions"' in response.text
+    assert re.search(r'<details[^>]*>.*id="advanced-housing-conditions".*</details>', response.text, re.DOTALL)
+    assert 'addEventListener("change", (event) => {' in response.text
+
+
 def test_listing_card_shows_populated_detail_fields_without_absent_detail_placeholders():
     engine = create_engine(
         "sqlite:///:memory:",
