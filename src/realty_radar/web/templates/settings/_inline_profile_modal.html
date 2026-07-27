@@ -1,0 +1,161 @@
+<aside x-data="{ settingsOpen: false }" class="lg:sticky lg:top-20 lg:self-start">
+    <section class="rounded-2xl border border-indigo-500/40 bg-indigo-950/30 p-4 shadow-lg shadow-indigo-950/20">
+        <p class="text-xs font-semibold text-indigo-300">대출 계산에 사용 중</p>
+        <h2 class="mt-1 text-base font-bold text-white">개인 자격 및 정책대출 조건 설정</h2>
+        <dl class="mt-3 space-y-1 text-xs text-slate-300"><div class="flex justify-between gap-2"><dt>연소득</dt><dd>{{ applicant.annual_income | comma_number }}원</dd></div><div class="flex justify-between gap-2"><dt>무주택</dt><dd>{{ '예' if applicant.is_homeless else '아니오' }}</dd></div><div class="flex justify-between gap-2"><dt>신혼/신생아</dt><dd>{{ '예' if applicant.is_newlywed else '아니오' }} / {{ '예' if applicant.has_newborn else '아니오' }}</dd></div><div class="flex justify-between gap-2"><dt>차용증 활용</dt><dd>{{ '예 (' ~ applicant.promissory_note_total | comma_number ~ '원)' if applicant.use_promissory_note else '아니오' }}</dd></div></dl>
+        <button type="button" class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500" @click="settingsOpen = true">조건 설정하기</button>
+    </section>
+
+    <template x-teleport="body">
+    <div x-cloak x-show="settingsOpen" x-transition class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 p-4" @keydown.escape.window="settingsOpen = false">
+        <div class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl" @click.outside="settingsOpen = false">
+            <div class="flex items-start justify-between gap-4"><div><h2 class="text-xl font-bold text-white">개인 자격 및 정책대출 조건 설정</h2><p class="mt-1 text-xs text-slate-400">저장하면 현재 검색 조건을 유지한 채 대출 예상 결과를 다시 계산합니다.</p></div><button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="설정 모달 닫기" @click="settingsOpen = false">✕</button></div>
+            <form id="inline-profile-form" action="/settings/inline" method="post" class="mt-5 space-y-5">
+                <div class="grid gap-3 sm:grid-cols-2">
+                    {% for name, label, help, checked in [('is_homeless', '무주택 세대주', '현재 본인과 세대원 모두 무주택', applicant.is_homeless), ('is_newlywed', '신혼부부', '혼인 기간 7년 이내', applicant.is_newlywed), ('has_newborn', '2년 내 출산 가구', '신생아 특례 조건', applicant.has_newborn), ('is_first_home_buyer', '생애최초 주택구입', '세대원 모두 주택 미보유', applicant.is_first_home_buyer)] %}
+                    <label class="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3"><span><span class="block text-sm font-medium text-white">{{ label }}</span><span class="text-xs text-slate-400">{{ help }}</span></span><input type="checkbox" name="{{ name }}" value="true" {% if checked %}checked{% endif %} class="h-5 w-5 rounded accent-indigo-500"></label>
+                    {% endfor %}
+                    
+                    <label class="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:col-span-2">
+                        <span>
+                            <span class="block text-sm font-medium text-white">차용증 활용</span>
+                            <span class="text-xs text-slate-400">차용증 자금을 자기자본에 반영하여 정부대출 및 가능자본 재계산</span>
+                        </span>
+                        <input id="inline-use-promissory-note" type="checkbox" name="use_promissory_note" value="true" {% if applicant.use_promissory_note %}checked{% endif %} class="h-5 w-5 rounded accent-indigo-500">
+                    </label>
+
+                    <label class="rounded-xl border border-slate-700 bg-slate-950/60 p-3"><span class="block text-sm font-medium text-white">미성년 자녀 수</span><input type="number" name="child_count" value="{{ applicant.child_count }}" min="0" max="10" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"></label>
+                    <label class="rounded-xl border border-slate-700 bg-slate-950/60 p-3"><span class="block text-sm font-medium text-white">연소득 (원)</span><input type="text" name="annual_income" value="{{ applicant.annual_income | comma_number }}" class="money-input mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"></label>
+                    <label class="rounded-xl border border-slate-700 bg-slate-950/60 p-3"><span class="block text-sm font-medium text-white">순자산 (원)</span><input type="text" name="net_assets" value="{{ applicant.net_assets | comma_number }}" class="money-input mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"></label>
+                    
+                    <label class="rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+                        <span class="block text-sm font-medium text-white">차용증 인원 수</span>
+                        <input id="inline-promissory-person-count" type="number" name="promissory_note_person_count" value="{{ applicant.promissory_note_person_count }}" min="0" max="20" class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white">
+                    </label>
+                    
+                    <label class="rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:col-span-2">
+                        <span class="flex items-center justify-between">
+                            <span class="block text-sm font-medium text-white">차용증 총 금액 (원)</span>
+                            <span class="text-xs text-indigo-400 font-medium">인원별 합계 자동 계산</span>
+                        </span>
+                        <input id="inline-promissory-total-amount" type="text" name="promissory_note_amount" value="{{ applicant.promissory_note_total | comma_number }}" readonly class="money-input mt-2 w-full rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-sm font-bold text-indigo-300">
+                    </label>
+                </div>
+
+                <!-- 동적 인원별 차용 금액 입력 영역 -->
+                <div id="inline-promissory-entries-section" class="rounded-xl border border-indigo-900/50 bg-indigo-950/20 p-4 space-y-3" style="display: none;">
+                    <div class="flex items-center justify-between border-b border-indigo-900/40 pb-2">
+                        <h3 class="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
+                            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                            <span>인원별 차용 지원 가능 금액 지정</span>
+                        </h3>
+                        <span class="text-[11px] text-slate-400">각 인원당 차용 금액을 입력하세요</span>
+                    </div>
+                    <div id="inline-promissory-entries-list" class="grid gap-3 sm:grid-cols-2">
+                        <!-- 동적으로 입력란 생성됨 -->
+                    </div>
+                </div>
+
+                <p class="text-xs text-slate-500">상세 차용증 항목은 기존 <a href="/settings" class="text-indigo-300 underline">설정 페이지</a>에서 계속 관리할 수 있습니다.</p>
+                <div class="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                    <button type="button" class="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-slate-800" @click="settingsOpen = false">취소</button>
+                    <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">저장하고 다시 계산</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    </template>
+</aside>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("inline-profile-form");
+    if (!form) return;
+
+    const useCheckbox = document.getElementById("inline-use-promissory-note");
+    const personCountInput = document.getElementById("inline-promissory-person-count");
+    const totalAmountInput = document.getElementById("inline-promissory-total-amount");
+    const entriesSection = document.getElementById("inline-promissory-entries-section");
+    const entriesList = document.getElementById("inline-promissory-entries-list");
+
+    const existingEntries = {{ promissory_note_entries | tojson | safe }};
+
+    const formatNumber = (num) => Number(num || 0).toLocaleString("ko-KR");
+    const parseNumber = (str) => Number(String(str || "").replace(/[^0-9]/g, "")) || 0;
+
+    const updateEntriesUI = () => {
+        const isUsed = useCheckbox.checked;
+        const count = Math.max(0, parseInt(personCountInput.value) || 0);
+
+        if (!isUsed || count === 0) {
+            entriesSection.style.display = "none";
+            entriesList.innerHTML = "";
+            if (!isUsed) totalAmountInput.value = "0";
+            return;
+        }
+
+        entriesSection.style.display = "block";
+        
+        const currentInputs = entriesList.querySelectorAll("[data-entry-item]");
+        const currentCount = currentInputs.length;
+
+        if (currentCount < count) {
+            for (let i = currentCount; i < count; i++) {
+                const initData = existingEntries[i] || { name: `차용인 ${i + 1}`, amount: 0 };
+                const itemDiv = document.createElement("div");
+                itemDiv.setAttribute("data-entry-item", "true");
+                itemDiv.className = "rounded-lg border border-slate-800 bg-slate-950 p-3 space-y-1.5";
+                itemDiv.innerHTML = `
+                    <div class="flex items-center justify-between text-xs font-medium text-slate-300">
+                        <span>인원 ${i + 1}</span>
+                        <input type="text" name="promissory_note_names" value="${initData.name || '차용인 ' + (i + 1)}" placeholder="이름/관계" class="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs text-white">
+                    </div>
+                    <label class="block">
+                        <span class="text-[11px] text-slate-400">지원 가능 금액 (원)</span>
+                        <input type="text" name="promissory_note_amounts" value="${formatNumber(initData.amount)}" placeholder="0" class="money-input entry-amount-input mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-white">
+                    </label>
+                `;
+                entriesList.appendChild(itemDiv);
+            }
+        } else if (currentCount > count) {
+            for (let i = currentCount - 1; i >= count; i--) {
+                currentInputs[i].remove();
+            }
+        }
+
+        calculateTotal();
+    };
+
+    const calculateTotal = () => {
+        let total = 0;
+        entriesList.querySelectorAll(".entry-amount-input").forEach((input) => {
+            total += parseNumber(input.value);
+        });
+        totalAmountInput.value = formatNumber(total);
+    };
+
+    useCheckbox.addEventListener("change", updateEntriesUI);
+    personCountInput.addEventListener("input", updateEntriesUI);
+
+    entriesList.addEventListener("input", (event) => {
+        if (event.target.classList.contains("entry-amount-input")) {
+            const val = parseNumber(event.target.value);
+            event.target.value = formatNumber(val);
+            calculateTotal();
+        }
+    });
+
+    updateEntriesUI();
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        form.querySelectorAll(".money-input").forEach((input) => { input.value = String(parseNumber(input.value)); });
+        const data = new FormData(form);
+        const response = await fetch(form.action, { method: "POST", body: data, credentials: "same-origin" });
+        if (response.ok) {
+            localStorage.setItem("realty_radar_guest_profile", JSON.stringify(Object.fromEntries(data.entries())));
+            window.location.reload();
+        }
+    });
+});
+</script>

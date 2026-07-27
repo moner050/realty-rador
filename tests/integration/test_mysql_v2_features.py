@@ -71,7 +71,7 @@ def test_mysql_v2_schema_supports_generated_fulltext_temp_and_skip_locked():
             "detail_checked_at": ("datetime", "YES", 6, "datetime(6)"),
         }
         columns = {
-            row.column_name: (row.data_type, row.is_nullable, row.datetime_precision, row.column_type)
+            row[0]: (row[1], row[2], row[3], row[4])
             for row in connection.execute(
                 text(
                     """
@@ -84,6 +84,29 @@ def test_mysql_v2_schema_supports_generated_fulltext_temp_and_skip_locked():
         }
         assert {name: columns[name] for name in expected_columns} == expected_columns
         expected_indexes = {
+            "ix_listing_group_cover": (
+                "lifecycle",
+                "is_short_term",
+                "complex_id",
+                "primary_price",
+                "article_id",
+                "first_seen_at",
+                "exclusive_area_x100",
+                "household_count",
+                "region_code",
+                "sido_code",
+                "sigungu_code",
+                "trade_type",
+                "construction_year",
+                "monthly_rent",
+            ),
+            "ix_listing_complex": (
+                "complex_id",
+                "lifecycle",
+                "is_short_term",
+                "primary_price",
+                "article_id",
+            ),
             "ix_listing_move_in": ("lifecycle", "is_short_term", "move_in_available_on", "article_id"),
             "ix_listing_subway_walk": ("lifecycle", "is_short_term", "nearest_subway_walk_minutes", "article_id"),
             "ix_listing_management_cost": ("lifecycle", "is_short_term", "monthly_management_cost", "article_id"),
@@ -100,7 +123,7 @@ def test_mysql_v2_schema_supports_generated_fulltext_temp_and_skip_locked():
                 """
             )
         ):
-            indexes.setdefault(row.index_name, []).append(row.column_name)
+            indexes.setdefault(row[0], []).append(row[2])
         assert {name: tuple(indexes[name]) for name in expected_indexes} == expected_indexes
         fulltext = connection.scalar(text("SHOW INDEX FROM complex_current WHERE Key_name = 'ft_complex_name'"))
         assert fulltext is not None

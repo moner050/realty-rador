@@ -1,8 +1,12 @@
+import hashlib
+import hmac
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -62,6 +66,31 @@ def _seed(session):
     session.commit()
 
 
+def test_mysql_boolean_filters_compile_as_indexable_equalities():
+    session = _session()
+    statement = ListingSearchService(session)._filtered_rows(
+        ListingSearchFilter(
+            direct_trade_only=True,
+            safe_lessor_hug_only=True,
+            parking_possible_only=True,
+        )
+    )
+
+    sql = str(
+        statement.compile(
+            dialect=mysql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    ).lower()
+
+    assert "listing_current.is_short_term = false" in sql
+    assert "listing_current.is_direct_trade = true" in sql
+    assert "listing_current.is_safe_lessor_hug = true" in sql
+    assert "listing_current.parking_possible = true" in sql
+    assert " is false" not in sql
+    assert " is true" not in sql
+
+
 def test_price_keyset_cursor_has_no_duplicates_or_count_query():
     session = _session()
     _seed(session)
@@ -77,6 +106,40 @@ def test_price_keyset_cursor_has_no_duplicates_or_count_query():
     assert not hasattr(first, "total_count")
 
 
+def test_normal_search_result_reports_query_diagnostics():
+    session = _session()
+    _seed(session)
+
+    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+        ListingSearchFilter(sort_by="price_asc", page_size=2)
+    )
+
+    assert result.diagnostics.mode == "normal"
+    assert result.diagnostics.sql_count == 1
+    assert result.diagnostics.candidate_count == 0
+    assert result.diagnostics.db_time_ms > 0
+    assert result.diagnostics.loan_evaluation_time_ms == 0
+    assert result.diagnostics.total_time_ms >= result.diagnostics.db_time_ms
+
+
+def test_keyset_page_can_return_to_the_immediately_previous_page():
+    session = _session()
+    _seed(session)
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(sort_by="price_asc", page_size=1)
+
+    first = service.search_listings(filters)
+    second = service.search_listings(ListingSearchFilter(sort_by="price_asc", page_size=1, cursor=first.next_cursor))
+    third = service.search_listings(ListingSearchFilter(sort_by="price_asc", page_size=1, cursor=second.next_cursor))
+
+    assert third.has_previous is True
+    assert third.previous_cursor is not None
+    previous = service.search_listings(
+        ListingSearchFilter(sort_by="price_asc", page_size=1, cursor=third.previous_cursor)
+    )
+    assert [item.article_id for item in previous.items] == [2002]
+
+
 def test_cursor_cannot_be_reused_with_different_filters():
     session = _session()
     _seed(session)
@@ -87,6 +150,39 @@ def test_cursor_cannot_be_reused_with_different_filters():
         service.search_listings(
             ListingSearchFilter(trade_type=2, sort_by="price_asc", page_size=1, cursor=first.next_cursor)
         )
+
+
+def test_cursor_has_a_version_and_rejects_legacy_payloads():
+    session = _session()
+    _seed(session)
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(sort_by="price_asc", page_size=1)
+    first = service.search_listings(filters)
+    raw_encoded, _signature = first.next_cursor.split(".", 1)
+    payload = json.loads(service._unb64(raw_encoded))
+
+    assert payload["v"] == 2
+
+    payload.pop("v")
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    signature = hmac.new(b"test-secret", raw, hashlib.sha256).digest()
+    legacy_cursor = f"{service._b64(raw)}.{service._b64(signature)}"
+
+    with pytest.raises(ValueError, match="version"):
+        service.search_listings(
+            ListingSearchFilter(sort_by="price_asc", page_size=1, cursor=legacy_cursor)
+        )
+
+
+def test_signed_cursor_with_non_object_payload_is_rejected_as_invalid():
+    session = _session()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    raw = b"[]"
+    signature = hmac.new(b"test-secret", raw, hashlib.sha256).digest()
+    cursor = f"{service._b64(raw)}.{service._b64(signature)}"
+
+    with pytest.raises(ValueError, match="invalid cursor"):
+        service.search_listings(ListingSearchFilter(cursor=cursor))
 
 
 def test_multi_sigungu_filter_returns_each_selected_district_without_keyset_gaps():
@@ -193,18 +289,207 @@ def test_detail_filter_keyset_has_no_duplicate_or_gap():
     assert [row.article_id for row in first.items + second.items] == [2001, 2002, 2003, 2004]
 
 
-def test_complex_grouping_uses_group_rows_and_second_listing_query():
+def test_complex_grouping_returns_summaries_and_queries_only_complex_metadata():
     session = _session()
     _seed(session)
+    listings = session.query(ListingCurrent).filter(ListingCurrent.complex_id == 1001).all()
+    for listing in listings:
+        listing.complex_name = "stale listing name"
+        listing.address = "stale listing address"
+    session.commit()
     service = ListingSearchService(session, cursor_secret="test-secret")
+    statements: list[str] = []
 
-    result = service.search_listings(ListingSearchFilter(group_by_complex=True, sort_by="price_asc", page_size=1))
+    def capture_selects(_connection, _cursor, statement, _parameters, _context, _many):
+        if "listing_current" in statement or "complex_current" in statement:
+            statements.append(statement.lower())
+
+    event.listen(session.bind, "before_cursor_execute", capture_selects)
+    try:
+        result = service.search_listings(
+            ListingSearchFilter(group_by_complex=True, sort_by="price_asc", page_size=1)
+        )
+    finally:
+        event.remove(session.bind, "before_cursor_execute", capture_selects)
 
     assert result.is_grouped is True
+    assert result.items == []
     assert len(result.grouped_items) == 1
     assert result.grouped_items[0].complex_id == 1001
-    assert [item.article_id for item in result.grouped_items[0].listings] == [2001, 2002]
+    assert result.grouped_items[0].complex_name == "래미안 테스트"
+    assert result.grouped_items[0].address == "서울특별시 강서구 테스트로 1"
+    assert result.grouped_items[0].listings == []
     assert result.has_more is True
+    assert len(statements) == 2
+    assert "listing_current.description" not in statements[0]
+    assert "listing_current.complex_name" not in statements[0]
+    assert "listing_current.address" not in statements[0]
+    assert "from complex_current" in statements[1]
+
+
+def test_complex_grouping_caps_each_summary_page_at_twenty_complexes():
+    session = _session()
+    _seed(session)
+    now = datetime(2026, 7, 26, tzinfo=timezone.utc)
+    for offset in range(19):
+        complex_id = 4000 + offset
+        session.add(
+            ComplexCurrent(
+                complex_id=complex_id,
+                region_code=1150010200,
+                name=f"단지 {complex_id}",
+                normalized_name=f"단지{complex_id}",
+                address="서울특별시 강서구 테스트로 1",
+                household_count=100,
+                state_hash=bytes([offset]) * 16,
+                first_seen_at=now,
+                last_seen_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            ListingCurrent(
+                article_id=40_000 + offset,
+                complex_id=complex_id,
+                region_code=1150010200,
+                complex_name=f"단지 {complex_id}",
+                address="서울특별시 강서구 테스트로 1",
+                trade_type=1,
+                primary_price=700_000_000 + offset,
+                exclusive_area_x100=8400,
+                state_hash=bytes([offset]) * 16,
+                last_seen_job_id=1,
+                first_seen_at=now,
+                last_seen_at=now,
+                last_changed_at=now,
+            )
+        )
+    session.commit()
+
+    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+        ListingSearchFilter(group_by_complex=True, page_size=100)
+    )
+
+    assert len(result.grouped_items) == 20
+    assert result.has_more is True
+
+
+def test_complex_listing_search_pages_twenty_price_sorted_rows_and_preserves_filters():
+    session = _session()
+    _seed(session)
+    now = datetime(2026, 7, 26, tzinfo=timezone.utc)
+    for offset in range(43):
+        session.add(
+            ListingCurrent(
+                article_id=50_000 + offset,
+                complex_id=1001,
+                region_code=1150010200,
+                complex_name="래미안 테스트",
+                address="서울특별시 강서구 테스트로 1",
+                trade_type=1,
+                primary_price=700_000_000 + offset,
+                exclusive_area_x100=8400,
+                state_hash=bytes([offset]) * 16,
+                last_seen_job_id=1,
+                first_seen_at=now,
+                last_seen_at=now,
+                last_changed_at=now,
+            )
+        )
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(
+        sigungu_code=11500,
+        min_price=550_000_000,
+        group_by_complex=True,
+        sort_by="recent",
+        page_size=100,
+    )
+
+    first = service.search_complex_listings(filters, 1001)
+    select_count = 0
+
+    def count_listing_selects(_connection, _cursor, statement, _parameters, _context, _many):
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT") and "listing_current" in statement:
+            select_count += 1
+
+    event.listen(session.bind, "before_cursor_execute", count_listing_selects)
+    try:
+        second = service.search_complex_listings(
+            ListingSearchFilter(
+                sigungu_code=11500,
+                min_price=550_000_000,
+                group_by_complex=True,
+                sort_by="recent",
+                page_size=100,
+                cursor=first.next_cursor,
+            ),
+            1001,
+        )
+    finally:
+        event.remove(session.bind, "before_cursor_execute", count_listing_selects)
+
+    assert len(first.items) == 20
+    assert len(second.items) == 20
+    assert select_count == 1
+    assert second.previous_cursor is None
+    assert second.has_previous is False
+    assert all(item.complex_id == 1001 and item.primary_price >= 550_000_000 for item in first.items + second.items)
+    assert [item.primary_price for item in first.items + second.items] == sorted(
+        item.primary_price for item in first.items + second.items
+    )
+
+
+def test_complex_listing_cursor_cannot_be_reused_for_another_complex():
+    session = _session()
+    _seed(session)
+    now = datetime(2026, 7, 26, tzinfo=timezone.utc)
+    for offset in range(19):
+        session.add(
+            ListingCurrent(
+                article_id=60_000 + offset,
+                complex_id=1001,
+                region_code=1150010200,
+                complex_name="래미안 테스트",
+                address="서울특별시 강서구 테스트로 1",
+                trade_type=1,
+                primary_price=700_000_000 + offset,
+                exclusive_area_x100=8400,
+                state_hash=bytes([offset]) * 16,
+                last_seen_job_id=1,
+                first_seen_at=now,
+                last_seen_at=now,
+                last_changed_at=now,
+            )
+        )
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    first = service.search_complex_listings(ListingSearchFilter(), 1001)
+    assert first.next_cursor is not None
+
+    with pytest.raises(ValueError, match="cursor"):
+        service.search_complex_listings(
+            ListingSearchFilter(cursor=first.next_cursor),
+            1002,
+        )
+
+
+def test_complex_listing_search_applies_exact_policy_eligibility():
+    session = _session()
+    _seed(session)
+    listings = {row.article_id: row for row in session.query(ListingCurrent).all()}
+    listings[2001].primary_price = 300_000_000
+    listings[2002].primary_price = 7_000_000_000
+    session.commit()
+
+    result = ListingSearchService(session, cursor_secret="test-secret").search_complex_listings(
+        ListingSearchFilter(only_eligible_loans=True),
+        1001,
+        ApplicantProfile(),
+    )
+
+    assert [item.article_id for item in result.items] == [2001]
 
 
 def test_all_backend_filters_and_legacy_values_are_applied_to_hot_rows():
@@ -329,6 +614,155 @@ def test_eligible_loan_filter_scans_past_ineligible_rows_without_cursor_duplicat
     assert second.has_more is False
 
 
+def test_eligible_loan_filter_skips_irrelevant_transaction_streams_in_sql():
+    session = _session()
+    _seed(session)
+    now = datetime(2026, 7, 26, tzinfo=timezone.utc)
+    for offset in range(220):
+        session.add(
+            ListingCurrent(
+                article_id=30_000 + offset,
+                complex_id=1001,
+                region_code=1150010200,
+                complex_name="Rental stream",
+                address="서울특별시 강서구 테스트로 1",
+                trade_type=2,
+                primary_price=1_000_000 + offset,
+                exclusive_area_x100=8400,
+                state_hash=bytes([offset % 256]) * 16,
+                last_seen_job_id=1,
+                first_seen_at=now,
+                last_seen_at=now,
+                last_changed_at=now,
+            )
+        )
+    session.commit()
+    select_count = 0
+
+    def count_listing_selects(_connection, _cursor, statement, _parameters, _context, _many):
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT") and "listing_current" in statement:
+            select_count += 1
+
+    event.listen(session.bind, "before_cursor_execute", count_listing_selects)
+    try:
+        result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+            ListingSearchFilter(only_eligible_loans=True, page_size=1),
+            applicant=ApplicantProfile(annual_income=60_000_000),
+        )
+    finally:
+        event.remove(session.bind, "before_cursor_execute", count_listing_selects)
+
+    assert [item.article_id for item in result.items] == [2001]
+    assert result.has_more is True
+    assert select_count == 1
+    assert result.items[0].loan_evaluations
+
+
+def test_eligible_loan_filter_returns_without_query_when_applicant_has_no_possible_product():
+    session = _session()
+    _seed(session)
+    select_count = 0
+
+    def count_listing_selects(_connection, _cursor, statement, _parameters, _context, _many):
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT") and "listing_current" in statement:
+            select_count += 1
+
+    event.listen(session.bind, "before_cursor_execute", count_listing_selects)
+    try:
+        result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+            ListingSearchFilter(only_eligible_loans=True),
+            applicant=ApplicantProfile(
+                is_homeless=False,
+                annual_income=250_000_000,
+                has_newborn=False,
+            ),
+        )
+    finally:
+        event.remove(session.bind, "before_cursor_execute", count_listing_selects)
+
+    assert result.items == []
+    assert select_count == 0
+
+
+def test_grouped_empty_loan_plan_still_rejects_an_invalid_cursor():
+    session = _session()
+    _seed(session)
+
+    with pytest.raises(ValueError, match="cursor"):
+        ListingSearchService(session, cursor_secret="test-secret").search_listings(
+            ListingSearchFilter(
+                only_eligible_loans=True,
+                group_by_complex=True,
+                cursor="tampered",
+            ),
+            applicant=ApplicantProfile(
+                is_homeless=False,
+                annual_income=250_000_000,
+                has_newborn=False,
+            ),
+        )
+
+
+def test_eligible_loan_candidates_use_separate_transaction_streams():
+    session = _session()
+    _seed(session)
+    statements: list[str] = []
+
+    def capture_listing_selects(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT") and "listing_current" in statement:
+            statements.append(statement.lower())
+
+    event.listen(session.bind, "before_cursor_execute", capture_listing_selects)
+    try:
+        result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+            ListingSearchFilter(only_eligible_loans=True, page_size=1),
+            applicant=ApplicantProfile(annual_income=40_000_000),
+        )
+    finally:
+        event.remove(session.bind, "before_cursor_execute", capture_listing_selects)
+
+    assert result.items
+    assert len(statements) == 4
+    assert all("listing_current.trade_type = ?" in statement for statement in statements)
+    assert all("listing_current.trade_type in" not in statement for statement in statements)
+
+
+def test_mysql_price_candidate_stream_prefers_the_transaction_sort_index():
+    session = _session()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(only_eligible_loans=True, sort_by="price_asc")
+    stream = service._eligible_candidate_streams(
+        filters,
+        ApplicantProfile(annual_income=60_000_000),
+    )[0]
+
+    hinted = service._with_candidate_index_hint(stream, filters, service._sort(filters))
+    sql = str(hinted.compile(dialect=mysql.dialect())).lower()
+
+    assert "use index (ix_listing_price_tx)" in sql
+
+
+def test_complex_candidate_stream_keeps_the_complex_index_available():
+    session = _session()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    filters = ListingSearchFilter(
+        complex_id=1001,
+        only_eligible_loans=True,
+        sort_by="price_asc",
+    )
+    stream = service._eligible_candidate_streams(
+        filters,
+        ApplicantProfile(annual_income=60_000_000),
+    )[0]
+
+    hinted = service._with_candidate_index_hint(stream, filters, service._sort(filters))
+    sql = str(hinted.compile(dialect=mysql.dialect())).lower()
+
+    assert "use index" not in sql
+
+
 def test_grouped_eligible_loan_filter_exposes_only_eligible_listings():
     session = _session()
     _seed(session)
@@ -344,15 +778,54 @@ def test_grouped_eligible_loan_filter_exposes_only_eligible_listings():
     )
 
     assert [group.complex_id for group in result.grouped_items] == [1001]
-    assert [item.article_id for item in result.grouped_items[0].listings] == [2001]
+    assert result.items == []
+    assert result.grouped_items[0].listing_count == 1
+    assert result.grouped_items[0].min_price == 300_000_000
+    assert result.grouped_items[0].max_price == 300_000_000
+    assert result.grouped_items[0].listings == []
+
+
+def test_eligible_grouped_aggregate_cte_projects_only_group_sort_columns():
+    session = _session()
+    _seed(session)
+    statements: list[str] = []
+
+    def capture_selects(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("WITH ELIGIBLE_GROUP_CANDIDATES"):
+            statements.append(statement.lower())
+
+    event.listen(session.bind, "before_cursor_execute", capture_selects)
+    try:
+        ListingSearchService(session, cursor_secret="test-secret").search_listings(
+            ListingSearchFilter(only_eligible_loans=True, group_by_complex=True),
+            ApplicantProfile(),
+        )
+    finally:
+        event.remove(session.bind, "before_cursor_execute", capture_selects)
+
+    projection = statements[0].split("from listing_current", 1)[0]
+    assert "listing_current.complex_id as complex_id" in projection
+    assert "listing_current.primary_price as primary_price" in projection
+    assert "listing_current.description as description" not in projection
+    assert "listing_current.complex_name as complex_name" not in projection
+    assert "listing_current.address as address" not in projection
 
 
 def test_grouped_eligible_loan_filter_advances_by_group_keyset_cursor():
     session = _session()
     _seed(session)
     service = ListingSearchService(session, cursor_secret="test-secret")
+    evaluated_article_ids: list[int] = []
+    original_is_eligible = service._is_loan_eligible
+
+    def record_evaluation(listing, applicant):
+        evaluated_article_ids.append(listing.article_id)
+        return original_is_eligible(listing, applicant)
+
+    service._is_loan_eligible = record_evaluation
 
     first = service.search_listings(ListingSearchFilter(only_eligible_loans=True, group_by_complex=True, page_size=1))
+    evaluated_article_ids.clear()
     second = service.search_listings(
         ListingSearchFilter(
             only_eligible_loans=True, group_by_complex=True, page_size=1, cursor=first.next_cursor
@@ -362,6 +835,7 @@ def test_grouped_eligible_loan_filter_advances_by_group_keyset_cursor():
     assert [group.complex_id for group in first.grouped_items + second.grouped_items] == [1001, 1002]
     assert first.has_more is True
     assert second.has_more is False
+    assert set(evaluated_article_ids) == {2003, 2004}
 
 
 @pytest.mark.parametrize(

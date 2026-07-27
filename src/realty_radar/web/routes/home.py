@@ -1,9 +1,12 @@
 """v2 keyset listing search routes."""
 from __future__ import annotations
 
+import logging
 from datetime import date
 from decimal import Decimal, ROUND_CEILING
+from time import perf_counter
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
@@ -14,6 +17,7 @@ from sqlalchemy.orm import Session
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, SIGUNGU_CODES
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
+from realty_radar.domain.loan.entities import LoanEligibilityStatus
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.auth import SESSION_COOKIE_NAME, is_authenticated, verify_session_token
@@ -25,8 +29,10 @@ router = APIRouter()
 templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
 _LOAN_EVALUATOR = LoanRuleEvaluator()
+logger = logging.getLogger(__name__)
 
 TRADE_TYPE_CODES = {"SALE": 1, "JEONSE": 2, "MONTHLY_RENT": 3, "SHORT_TERM": 4}
+TRADE_TYPE_NAMES = {code: name for name, code in TRADE_TYPE_CODES.items()}
 MAX_PRICE_WON = 3_000_000_000
 SORT_OPTIONS = (
     ("price_asc", "가격 낮은순"),
@@ -205,6 +211,7 @@ def parse_search_filter(
     sido_code: str | None = Query(None),
     municipality: str | None = Query(None),
     sigungu_code: str | None = Query(None),
+    sigungu_codes: list[str] | None = Query(None),
     complex_keyword: str | None = Query(None),
     transaction_type: str | None = Query(None),
     transaction_types: list[str] | None = Query(None),
@@ -262,12 +269,15 @@ def parse_search_filter(
     parsed_sido_code = _optional_int(sido_code)
     municipality_value = _request_string(municipality)
     municipality_codes = _municipality_codes(parsed_sido_code, municipality_value)
+    explicit_sigungu_codes = _code_list(_request_list(sigungu_codes))
     return ListingSearchFilter(
         region_code=_optional_int(region_code),
         sido_code=parsed_sido_code,
         sigungu_code=_optional_int(sigungu_code),
-        sigungu_codes=municipality_codes or None,
-        invalid_municipality=municipality_value is not None and municipality_codes == [],
+        sigungu_codes=explicit_sigungu_codes or municipality_codes or None,
+        invalid_municipality=(
+            explicit_sigungu_codes is None and municipality_value is not None and municipality_codes == []
+        ),
         complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
         trade_type=trades[0] if trades and len(trades) == 1 else None,
         trade_types=trades,
@@ -314,29 +324,183 @@ def parse_search_filter(
     )
 
 
-def _enrich_listings_with_loans(result, applicant) -> None:
-    for item in result.items:
+def _listing_items(result):
+    if result.is_grouped:
+        return [item for group in result.grouped_items for item in group.listings]
+    return result.items
+
+
+def _loan_calculation_criteria(item, applicant, evaluation) -> list[tuple[str, str]]:
+    area = Decimal(item.exclusive_area_x100) / 100 if item.exclusive_area_x100 is not None else None
+    price_label = "매매가" if item.trade_type == 1 else "보증금"
+    criteria = [
+        (price_label, f"{item.primary_price:,}원" if item.primary_price is not None else "확인 필요"),
+        ("전용면적", f"{area}㎡" if area is not None else "확인 필요"),
+        ("주소", item.address or "확인 필요"),
+        ("연소득", f"{applicant.annual_income:,}원"),
+        ("무주택", "예" if applicant.is_homeless else "아니오"),
+    ]
+    if evaluation.product_code in {"DIDIMDOL", "BOGUMJARI", "NEONATAL_PURCHASE"}:
+        ltv = "80%" if applicant.is_first_home_buyer and not _LOAN_EVALUATOR._is_capital_area(item.address) else "70%"
+        criteria.append(("적용 LTV", ltv))
+    if evaluation.product_code == "DIDIMDOL":
+        criteria.extend(
+            [
+                ("생애최초", "예" if applicant.is_first_home_buyer else "아니오"),
+                ("신혼 여부", "예" if applicant.is_newlywed else "아니오"),
+            ]
+        )
+    elif evaluation.product_code == "NEONATAL_PURCHASE":
+        criteria.append(("2년 내 출산", "예" if applicant.has_newborn else "아니오"))
+    elif evaluation.product_code == "BEOTIMMOK":
+        criteria.append(("신혼 여부", "예" if applicant.is_newlywed else "아니오"))
+    return criteria
+
+
+def _enrich_listings_with_loans(result, applicant) -> float:
+    evaluation_time_ms = 0.0
+    for item in _listing_items(result):
         transaction_type = {1: "SALE", 2: "JEONSE", 3: "MONTHLY_RENT", 4: "MONTHLY_RENT"}.get(item.trade_type)
         if transaction_type is None:
             item.eligible_loans = []
+            item.other_loans = []
+            item.loan_evaluations = []
             continue
         try:
             from realty_radar.constants import TransactionType
 
             tx = TransactionType(transaction_type)
-            area = Decimal(item.exclusive_area_x100) / 100
-            evaluations = (
-                _LOAN_EVALUATOR.evaluate_didimdol(tx, item.primary_price, area, item.address, applicant),
-                _LOAN_EVALUATOR.evaluate_bogumjari(tx, item.primary_price, area, item.address, applicant),
-                _LOAN_EVALUATOR.evaluate_neonatal_purchase(tx, item.primary_price, area, item.address, applicant),
-                _LOAN_EVALUATOR.evaluate_beotimmok(tx, item.primary_price, area, item.address, applicant),
-            )
-            item.eligible_loans = [evaluation for evaluation in evaluations if evaluation.is_eligible]
+            area = Decimal(item.exclusive_area_x100) / 100 if item.exclusive_area_x100 is not None else None
+            cached_evaluations = getattr(item, "loan_evaluations", None)
+            if cached_evaluations:
+                evaluations = tuple(cached_evaluations)
+            else:
+                started_at = perf_counter()
+                try:
+                    evaluations = (
+                        _LOAN_EVALUATOR.evaluate_didimdol(tx, item.primary_price, area, item.address, applicant),
+                        _LOAN_EVALUATOR.evaluate_bogumjari(tx, item.primary_price, area, item.address, applicant),
+                        _LOAN_EVALUATOR.evaluate_neonatal_purchase(
+                            tx, item.primary_price, area, item.address, applicant
+                        ),
+                        _LOAN_EVALUATOR.evaluate_beotimmok(tx, item.primary_price, area, item.address, applicant),
+                    )
+                finally:
+                    evaluation_time_ms += (perf_counter() - started_at) * 1000
+            for evaluation in evaluations:
+                evaluation.calculation_criteria = _loan_calculation_criteria(item, applicant, evaluation)
+            item.loan_evaluations = list(evaluations)
+            item.eligible_loans = [
+                evaluation for evaluation in evaluations if evaluation.status == LoanEligibilityStatus.ELIGIBLE
+            ]
+            item.other_loans = [
+                evaluation for evaluation in evaluations if evaluation.status != LoanEligibilityStatus.ELIGIBLE
+            ]
         except Exception:
             item.eligible_loans = []
+            item.other_loans = []
+            item.loan_evaluations = []
+    return evaluation_time_ms
+
+
+def _log_search_diagnostics(result, started_at: float) -> None:
+    diagnostics = result.diagnostics
+    diagnostics.total_time_ms = (perf_counter() - started_at) * 1000
+    logger.info(
+        "listing_search mode=%s sql_count=%d candidate_count=%d "
+        "db_ms=%.3f loan_ms=%.3f total_ms=%.3f",
+        diagnostics.mode,
+        diagnostics.sql_count,
+        diagnostics.candidate_count,
+        diagnostics.db_time_ms,
+        diagnostics.loan_evaluation_time_ms,
+        diagnostics.total_time_ms,
+    )
+
+
+def _filter_query_items(filters: ListingSearchFilter) -> list[tuple[str, str]]:
+    items: list[tuple[str, str]] = []
+    minimums = [value for value in (filters.min_price, filters.min_deposit) if value is not None]
+    maximums = [value for value in (filters.max_price, filters.max_deposit) if value is not None]
+    scalar_values = {
+        "region_code": filters.region_code,
+        "sido_code": filters.sido_code,
+        "sigungu_code": filters.sigungu_code,
+        "complex_keyword": filters.complex_keyword,
+        "min_price": max(minimums) if minimums else None,
+        "max_price": min(maximums) if maximums else None,
+        "max_monthly_rent": filters.max_monthly_rent,
+        "min_room_count": filters.min_room_count,
+        "min_bathroom_count": filters.min_bathroom_count,
+        "min_parking_per_household": filters.min_parking_per_household,
+        "max_monthly_management_cost": filters.max_monthly_management_cost,
+        "move_in_by": filters.move_in_by,
+        "max_subway_walk_minutes": filters.max_subway_walk_minutes,
+        "min_exclusive_area": filters.min_exclusive_area,
+        "max_exclusive_area": filters.max_exclusive_area,
+        "min_construction_year": filters.min_construction_year,
+        "min_households": filters.min_households,
+        "recent_days": filters.recent_days,
+        "sort_by": filters.sort_by,
+        "page_size": filters.page_size,
+    }
+    for key, value in scalar_values.items():
+        if value is not None:
+            items.append((key, value.isoformat() if isinstance(value, date) else str(value)))
+    for key, value in (
+        ("direct_trade_only", filters.direct_trade_only),
+        ("safe_lessor_hug_only", filters.safe_lessor_hug_only),
+        ("parking_possible_only", filters.parking_possible_only),
+        ("exclude_unknown_mortgage", filters.exclude_unknown_mortgage),
+        ("exclude_first_floor", filters.exclude_first_floor),
+        ("exclude_short_term", filters.exclude_short_term),
+        ("group_by_complex", filters.group_by_complex),
+        ("only_eligible_loans", filters.only_eligible_loans),
+    ):
+        items.append((key, str(value).lower()))
+    for key, values in (
+        ("sigungu_codes", filters.sigungu_codes),
+        ("mortgage_codes", filters.mortgage_codes),
+        ("direction_codes", filters.direction_codes),
+        ("floor_bands", filters.floor_bands),
+    ):
+        items.extend((key, str(value)) for value in values or ())
+    trade_codes = filters.trade_types or ([filters.trade_type] if filters.trade_type is not None else [])
+    items.extend(
+        ("trade_types", name)
+        for code in trade_codes
+        if (name := TRADE_TYPE_NAMES.get(code)) is not None
+    )
+    return items
+
+
+def _complex_listing_urls(
+    request: Request,
+    result,
+    filters: ListingSearchFilter,
+) -> dict[int, str]:
+    query_items = (
+        [
+            (key, value)
+            for key, value in request.query_params.multi_items()
+            if key not in {"append", "cursor"}
+        ]
+        if request.query_params
+        else _filter_query_items(filters)
+    )
+    query = urlencode(query_items)
+    return {
+        group.complex_id: (
+            f"{request.url_for('complex_listings', complex_id=group.complex_id)}?{query}"
+            if query
+            else str(request.url_for("complex_listings", complex_id=group.complex_id))
+        )
+        for group in result.grouped_items
+    }
 
 
 def _render_result(request: Request, db: Session, filters: ListingSearchFilter, template_name: str):
+    started_at = perf_counter()
     token = request.cookies.get(SESSION_COOKIE_NAME)
     username = verify_session_token(token)
     if username and not request.query_params:
@@ -345,10 +509,18 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
         save_user_search_filter(filters, username)
     applicant = get_request_user_profile(request)
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
-    _enrich_listings_with_loans(result, applicant)
-    next_url = str(request.url.include_query_params(cursor=result.next_cursor, append="1")) if result.next_cursor else None
+    result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
+    page_url = request.url.remove_query_params("append")
+    next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
+    previous_url = None
+    if result.has_previous:
+        previous_url = (
+            str(page_url.include_query_params(cursor=result.previous_cursor))
+            if result.previous_cursor
+            else str(page_url.remove_query_params("cursor"))
+        )
     sido_labels, sigungu_labels = _region_labels()
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request,
         template_name,
         context={
@@ -356,7 +528,10 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "listings": result.items,
             "filters": filters,
             "next_url": next_url,
+            "previous_url": previous_url,
+            "complex_urls": _complex_listing_urls(request, result, filters),
             "applicant": applicant,
+            "promissory_note_entries": [entry.to_dict() for entry in applicant.promissory_notes],
             "is_authenticated": is_authenticated(request),
             "region_options": _region_options(),
             "selected_municipality": _selected_municipality(filters),
@@ -366,11 +541,16 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "sigungu_labels": sigungu_labels,
         },
     )
+    _log_search_diagnostics(result, started_at)
+    return response
 
 
 def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_htmx: bool):
     sido_labels, sigungu_labels = _region_labels()
+    applicant = get_request_user_profile(request)
     context = {
+        "applicant": applicant,
+        "promissory_note_entries": [entry.to_dict() for entry in applicant.promissory_notes],
         "filters": filters,
         "region_options": _region_options(),
         "selected_municipality": _selected_municipality(filters),
@@ -432,3 +612,36 @@ def search_listings(
         else "listings/index.html"
     )
     return _render_or_client_error(request, db, filters, template_name, is_htmx=is_htmx)
+
+
+@router.get("/listings/complex/{complex_id}", response_class=HTMLResponse, name="complex_listings")
+def complex_listings(
+    complex_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
+):
+    started_at = perf_counter()
+    applicant = get_request_user_profile(request)
+    try:
+        result = ListingSearchService(db).search_complex_listings(filters, complex_id, applicant)
+    except ListingSearchValidationError:
+        return HTMLResponse(
+            '<p class="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">'
+            "단지 매물 페이지 cursor가 올바르지 않습니다.</p>",
+            status_code=400,
+        )
+    result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
+    page_url = request.url.remove_query_params("cursor")
+    next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
+    response = templates.TemplateResponse(
+        request,
+        "listings/complex_listings_partial.html",
+        context={
+            "listings": result.items,
+            "next_url": next_url,
+            "complex_id": complex_id,
+        },
+    )
+    _log_search_diagnostics(result, started_at)
+    return response

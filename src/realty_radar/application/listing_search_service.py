@@ -5,23 +5,31 @@ import base64
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from time import perf_counter
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, false, func, or_, select, text, true
 from sqlalchemy.orm import Session
 
 from realty_radar.config import settings
 from realty_radar.constants import TransactionType
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
-from realty_radar.domain.listing.models import ComplexGroupItem, SearchResult
+from realty_radar.domain.listing.models import ComplexGroupItem, SearchDiagnostics, SearchResult
+from realty_radar.domain.loan.candidate_plan import (
+    CAPITAL_ADDRESS_KEYWORDS,
+    CAPITAL_SIDO_CODES,
+    LoanCandidateBranch,
+    LoanCandidatePlan,
+)
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.models import ComplexCurrent, ListingCurrent
 
 
 LIFECYCLE_ACTIVE = 1
+CURSOR_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,18 +55,93 @@ class ListingSearchService:
         self.db = db
         self._cursor_secret = (cursor_secret or settings.secret_key).encode("utf-8")
         self._loan_evaluator = LoanRuleEvaluator()
+        self._diagnostics: SearchDiagnostics | None = None
 
     def search_listings(self, filters: ListingSearchFilter, applicant: Any = None) -> SearchResult:
+        return self._run_search(filters, applicant, self._search_mode(filters))
+
+    def _run_search(
+        self,
+        filters: ListingSearchFilter,
+        applicant: Any,
+        mode: str,
+        *,
+        include_previous: bool = True,
+    ) -> SearchResult:
+        diagnostics = SearchDiagnostics(mode=mode)
+        self._diagnostics = diagnostics
+        started_at = perf_counter()
         self._validate(filters)
         if filters.group_by_complex:
-            return self._search_grouped(filters, applicant)
-        return self._search_rows(filters, applicant)
+            result = self._search_grouped(filters, applicant)
+        else:
+            result = self._search_rows(filters, applicant, include_previous=include_previous)
+        diagnostics.total_time_ms = (perf_counter() - started_at) * 1000
+        result.diagnostics = diagnostics
+        return result
 
-    def _search_rows(self, filters: ListingSearchFilter, applicant: Any) -> SearchResult:
+    def search_complex_listings(
+        self,
+        filters: ListingSearchFilter,
+        complex_id: int,
+        applicant: Any = None,
+    ) -> SearchResult:
+        scoped_filters = replace(
+            filters,
+            complex_id=complex_id,
+            group_by_complex=False,
+            sort_by="price_asc",
+            page_size=20,
+        )
+        return self._run_search(
+            scoped_filters,
+            applicant,
+            "complex_detail",
+            include_previous=False,
+        )
+
+    @staticmethod
+    def _search_mode(filters: ListingSearchFilter) -> str:
+        if filters.only_eligible_loans and filters.group_by_complex:
+            return "eligible_grouped"
+        if filters.only_eligible_loans:
+            return "eligible_loans"
+        if filters.group_by_complex:
+            return "grouped"
+        return "normal"
+
+    def _scalars(self, statement) -> list[Any]:
+        return self._timed_query(lambda: self.db.scalars(statement).all())
+
+    def _mappings(self, statement) -> list[Any]:
+        return self._timed_query(lambda: self.db.execute(statement).mappings().all())
+
+    def _timed_query(self, query) -> list[Any]:
+        started_at = perf_counter()
+        try:
+            return list(query())
+        finally:
+            if self._diagnostics is not None:
+                self._diagnostics.sql_count += 1
+                self._diagnostics.db_time_ms += (perf_counter() - started_at) * 1000
+
+    def _search_rows(
+        self,
+        filters: ListingSearchFilter,
+        applicant: Any,
+        *,
+        include_previous: bool = True,
+    ) -> SearchResult:
         sort = self._sort(filters)
         if filters.only_eligible_loans:
-            return self._search_eligible_rows(filters, sort, applicant)
-        statement = self._filtered_rows(filters)
+            return self._search_eligible_rows(
+                filters,
+                sort,
+                applicant,
+                include_previous=include_previous,
+            )
+        base_statement = self._filtered_rows(filters)
+        statement = base_statement
         sort_column = getattr(ListingCurrent, sort.name)
         anchor = self._decode_cursor(filters, sort, grouped=False)
         if anchor is not None:
@@ -67,21 +150,39 @@ class ListingSearchService:
             sort_column.desc() if sort.descending else sort_column.asc(),
             ListingCurrent.article_id.desc() if sort.descending else ListingCurrent.article_id.asc(),
         ).limit(filters.page_size + 1)
-        rows = list(self.db.scalars(statement).all())
+        rows = self._scalars(statement)
         has_more = len(rows) > filters.page_size
         items = rows[: filters.page_size]
+        previous_cursor = (
+            self._previous_row_cursor(filters, sort, base_statement, sort_column, items[0], applicant)
+            if include_previous and anchor is not None and items
+            else None
+        )
         next_cursor = (
             self._encode_cursor(
                 filters, sort, items[-1], items[-1].article_id, grouped=False, applicant=applicant
             ) if has_more else None
         )
-        return SearchResult(items=items, next_cursor=next_cursor, has_more=has_more)
+        return SearchResult(
+            items=items,
+            next_cursor=next_cursor,
+            has_more=has_more,
+            previous_cursor=previous_cursor,
+            has_previous=include_previous and anchor is not None,
+        )
 
     def _search_grouped(self, filters: ListingSearchFilter, applicant: Any) -> SearchResult:
         sort = self._sort(filters)
         if filters.only_eligible_loans:
             return self._search_eligible_grouped(filters, sort, applicant)
-        filtered = self._filtered_rows(filters).cte("filtered_listing")
+        page_size = min(filters.page_size, 20)
+        filtered = self._filtered_rows(filters).with_only_columns(
+            ListingCurrent.complex_id,
+            ListingCurrent.primary_price,
+            ListingCurrent.first_seen_at,
+            ListingCurrent.exclusive_area_x100,
+            ListingCurrent.household_count,
+        ).cte("filtered_listing")
         grouped = (
             select(
                 filtered.c.complex_id,
@@ -110,42 +211,57 @@ class ListingSearchService:
         statement = statement.order_by(
             sort_column.desc() if sort.descending else sort_column.asc(),
             grouped.c.complex_id.desc() if sort.descending else grouped.c.complex_id.asc(),
-        ).limit(filters.page_size + 1)
-        group_rows = list(self.db.execute(statement).mappings().all())
-        has_more = len(group_rows) > filters.page_size
-        selected = group_rows[: filters.page_size]
+        ).limit(page_size + 1)
+        group_rows = self._mappings(statement)
+        has_more = len(group_rows) > page_size
+        selected = group_rows[:page_size]
         if not selected:
             return SearchResult(items=[], next_cursor=None, has_more=False, grouped_items=[], is_grouped=True)
 
         complex_ids = [row["complex_id"] for row in selected]
-        listing_rows = list(
-            self.db.scalars(
-                self._filtered_rows(filters)
-                .where(ListingCurrent.complex_id.in_(complex_ids))
-                .order_by(ListingCurrent.complex_id, ListingCurrent.primary_price, ListingCurrent.article_id)
-            ).all()
-        )
-        rows_by_complex: dict[int, list[ListingCurrent]] = {complex_id: [] for complex_id in complex_ids}
-        for listing in listing_rows:
-            rows_by_complex[listing.complex_id].append(listing)
+        metadata = self._complex_metadata(complex_ids)
         groups: list[ComplexGroupItem] = []
         for row in selected:
-            listings = rows_by_complex[row["complex_id"]]
-            representative = listings[0]
+            complex_row = metadata[row["complex_id"]]
             groups.append(
                 ComplexGroupItem(
                     complex_id=row["complex_id"],
-                    complex_name=representative.complex_name,
-                    address=representative.address,
-                    household_count=representative.household_count,
-                    construction_year=representative.construction_year,
+                    complex_name=complex_row.name,
+                    address=complex_row.address,
+                    household_count=complex_row.household_count,
+                    construction_year=complex_row.construction_year,
                     min_price=row["min_price"],
                     max_price=row["max_price"],
                     listing_count=row["listing_count"],
-                    listings=listings,
                 )
             )
         last = selected[-1]
+        previous_cursor = None
+        if anchor is not None:
+            preceding = self._mappings(
+                self._apply_previous_keyset(
+                    select(grouped),
+                    sort_column,
+                    grouped.c.complex_id,
+                    sort.descending,
+                    (selected[0][sort_column_name], selected[0]["complex_id"]),
+                )
+                .order_by(
+                    sort_column.asc() if sort.descending else sort_column.desc(),
+                    grouped.c.complex_id.asc() if sort.descending else grouped.c.complex_id.desc(),
+                )
+                .limit(page_size + 1)
+            )
+            if len(preceding) > page_size:
+                previous = preceding[-1]
+                previous_cursor = self._encode_cursor(
+                    filters,
+                    sort,
+                    previous[sort_column_name],
+                    previous["complex_id"],
+                    grouped=True,
+                    applicant=applicant,
+                )
         next_cursor = self._encode_cursor(
             filters,
             sort,
@@ -155,24 +271,57 @@ class ListingSearchService:
             applicant=applicant,
         ) if has_more else None
         return SearchResult(
-            items=listing_rows,
+            items=[],
             next_cursor=next_cursor,
             has_more=has_more,
+            previous_cursor=previous_cursor,
+            has_previous=anchor is not None,
             grouped_items=groups,
             is_grouped=True,
         )
 
-    def _search_eligible_rows(self, filters: ListingSearchFilter, sort: _SortSpec, applicant: Any) -> SearchResult:
+    def _complex_metadata(self, complex_ids: list[int]) -> dict[int, ComplexCurrent]:
+        rows = self._scalars(
+            select(ComplexCurrent).where(ComplexCurrent.complex_id.in_(complex_ids))
+        )
+        return {row.complex_id: row for row in rows}
+
+    def _search_eligible_rows(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        applicant: Any,
+        *,
+        include_previous: bool = True,
+    ) -> SearchResult:
         anchor = self._decode_cursor(filters, sort, grouped=False, applicant=applicant)
+        if not LoanCandidatePlan.for_applicant(applicant).branches:
+            return SearchResult(
+                items=[],
+                next_cursor=None,
+                has_more=False,
+                has_previous=include_previous and anchor is not None,
+            )
         items = self._scan_eligible_rows(filters, sort, anchor, applicant, filters.page_size + 1)
         has_more = len(items) > filters.page_size
         page = items[: filters.page_size]
+        previous_cursor = (
+            self._previous_eligible_row_cursor(filters, sort, page[0], applicant)
+            if include_previous and anchor is not None and page
+            else None
+        )
         next_cursor = (
             self._encode_cursor(
                 filters, sort, page[-1], page[-1].article_id, grouped=False, applicant=applicant
             ) if has_more else None
         )
-        return SearchResult(items=page, next_cursor=next_cursor, has_more=has_more)
+        return SearchResult(
+            items=page,
+            next_cursor=next_cursor,
+            has_more=has_more,
+            previous_cursor=previous_cursor,
+            has_previous=include_previous and anchor is not None,
+        )
 
     def _scan_eligible_rows(
         self,
@@ -182,22 +331,17 @@ class ListingSearchService:
         applicant: Any,
         wanted: int | None,
     ) -> list[ListingCurrent]:
-        statement = self._filtered_rows(filters)
-        sort_column = getattr(ListingCurrent, sort.name)
         candidate_anchor = anchor
         eligible: list[ListingCurrent] = []
         batch_size = max(100, filters.page_size * 4)
         while wanted is None or len(eligible) < wanted:
-            candidates = statement
-            if candidate_anchor is not None:
-                candidates = self._apply_keyset(
-                    candidates, sort_column, ListingCurrent.article_id, sort.descending, candidate_anchor
-                )
-            candidates = candidates.order_by(
-                sort_column.desc() if sort.descending else sort_column.asc(),
-                ListingCurrent.article_id.desc() if sort.descending else ListingCurrent.article_id.asc(),
-            ).limit(batch_size)
-            rows = list(self.db.scalars(candidates).all())
+            rows = self._loan_candidate_batch(
+                filters,
+                sort,
+                candidate_anchor,
+                applicant,
+                batch_size=batch_size,
+            )
             if not rows:
                 break
             for row in rows:
@@ -214,7 +358,22 @@ class ListingSearchService:
         # Policy evaluation is Python-only, but group candidates remain SQL
         # ordered and keyset-bounded. Stop as soon as a page plus lookahead is
         # eligible; never materialize the full result set.
-        filtered = self._filtered_rows(filters).cte("eligible_group_candidates")
+        anchor = self._decode_cursor(filters, sort, grouped=True, applicant=applicant)
+        candidate_anchor = self._decode_scan_anchor(
+            filters,
+            sort,
+            grouped=True,
+            applicant=applicant,
+        )
+        if not LoanCandidatePlan.for_applicant(applicant).branches:
+            return SearchResult(items=[], next_cursor=None, has_more=False, grouped_items=[], is_grouped=True)
+        filtered = self._eligible_candidate_rows(filters, applicant).with_only_columns(
+            ListingCurrent.complex_id,
+            ListingCurrent.primary_price,
+            ListingCurrent.first_seen_at,
+            ListingCurrent.exclusive_area_x100,
+            ListingCurrent.household_count,
+        ).cte("eligible_group_candidates")
         grouped = (
             select(
                 filtered.c.complex_id,
@@ -240,78 +399,107 @@ class ListingSearchService:
             }[sort.name]
         )
         sort_column = getattr(grouped.c, sort_column_name)
-        anchor = self._decode_cursor(filters, sort, grouped=True, applicant=applicant)
-        # The issued cursor is based on eligible aggregates, which intentionally
-        # differs from the raw SQL candidate aggregate. Keep the scan keyset
-        # private to this request and apply the public cursor after evaluation.
-        candidate_anchor = None
-        wanted = filters.page_size + 1
-        qualified: list[tuple[ComplexGroupItem, Any, int]] = []
-        batch_size = max(50, filters.page_size * 4)
+        page_size = min(filters.page_size, 20)
+        wanted = page_size + 1
+        qualified: list[
+            tuple[ComplexGroupItem, Any, int, int, tuple[Any, int] | None]
+        ] = []
+        raw_order = 0
+        batch_size = page_size + 1
         while True:
             statement = select(grouped)
             if candidate_anchor is not None:
                 statement = self._apply_keyset(
                     statement, sort_column, grouped.c.complex_id, sort.descending, candidate_anchor
                 )
-            group_rows = list(
-                self.db.execute(
-                    statement.order_by(
-                        sort_column.desc() if sort.descending else sort_column.asc(),
-                        grouped.c.complex_id.desc() if sort.descending else grouped.c.complex_id.asc(),
-                    ).limit(batch_size)
-                ).mappings().all()
+            group_rows = self._mappings(
+                statement.order_by(
+                    sort_column.desc() if sort.descending else sort_column.asc(),
+                    grouped.c.complex_id.desc() if sort.descending else grouped.c.complex_id.asc(),
+                ).limit(batch_size)
             )
             if not group_rows:
                 break
             complex_ids = [row["complex_id"] for row in group_rows]
-            listing_rows = list(
-                self.db.scalars(
-                    self._filtered_rows(filters)
-                    .where(ListingCurrent.complex_id.in_(complex_ids))
-                    .order_by(ListingCurrent.complex_id, ListingCurrent.primary_price, ListingCurrent.article_id)
-                ).all()
+            listing_rows = self._scalars(
+                self._eligible_candidate_rows(filters, applicant)
+                .where(ListingCurrent.complex_id.in_(complex_ids))
+                .order_by(ListingCurrent.complex_id, ListingCurrent.primary_price, ListingCurrent.article_id)
             )
             by_complex: dict[int, list[ListingCurrent]] = {complex_id: [] for complex_id in complex_ids}
             for listing in listing_rows:
                 if self._is_loan_eligible(listing, applicant):
                     by_complex[listing.complex_id].append(listing)
-            batch_qualified: list[tuple[ComplexGroupItem, Any, int]] = []
+            predecessor = candidate_anchor
             for row in group_rows:
                 listings = by_complex[row["complex_id"]]
                 if listings:
                     item = self._make_group(row["complex_id"], listings)
                     value = self._group_sort_value(item, sort)
                     if anchor is None or self._is_after_anchor(value, item.complex_id, sort.descending, anchor):
-                        batch_qualified.append((item, value, item.complex_id))
-            batch_qualified.sort(
-                key=lambda item: (item[1], item[2]), reverse=sort.descending
-            )
-            qualified.extend(batch_qualified)
-            qualified.sort(key=lambda item: (item[1], item[2]), reverse=sort.descending)
-            qualified = qualified[:wanted]
+                        qualified.append(
+                            (item, value, item.complex_id, raw_order, predecessor)
+                        )
+                predecessor = (row[sort_column_name], row["complex_id"])
+                raw_order += 1
             candidate_anchor = (group_rows[-1][sort_column_name], group_rows[-1]["complex_id"])
             if len(group_rows) < batch_size:
                 break
-            if len(qualified) >= wanted and self._raw_bound_is_safe(
-                candidate_anchor, (qualified[-1][1], qualified[-1][2]), sort.descending
+            ranked = sorted(
+                qualified,
+                key=lambda item: (item[1], item[2]),
+                reverse=sort.descending,
+            )
+            if len(ranked) >= wanted and self._raw_bound_is_safe(
+                candidate_anchor,
+                (ranked[wanted - 1][1], ranked[wanted - 1][2]),
+                sort.descending,
             ):
                 break
-        has_more = len(qualified) > filters.page_size
-        page = qualified[: filters.page_size]
+        ranked = sorted(
+            qualified,
+            key=lambda item: (item[1], item[2]),
+            reverse=sort.descending,
+        )
+        has_more = len(ranked) > page_size
+        page = ranked[:page_size]
         if not page:
             return SearchResult(items=[], next_cursor=None, has_more=False, grouped_items=[], is_grouped=True)
-        _, last_value, last_id = page[-1]
+        _, last_value, last_id, _, _ = page[-1]
+        returned_ids = {item[2] for item in page}
+        remaining = [item for item in qualified if item[2] not in returned_ids]
+        next_scan_anchor = (
+            min(remaining, key=lambda item: item[3])[4]
+            if remaining
+            else candidate_anchor
+        )
         next_cursor = (
-            self._encode_cursor(filters, sort, last_value, last_id, grouped=True, applicant=applicant)
+            self._encode_cursor(
+                filters,
+                sort,
+                last_value,
+                last_id,
+                grouped=True,
+                applicant=applicant,
+                scan_anchor=next_scan_anchor,
+            )
             if has_more
             else None
         )
+        groups = [item for item, _, _, _, _ in page]
+        metadata = self._complex_metadata([item.complex_id for item in groups])
+        for item in groups:
+            complex_row = metadata[item.complex_id]
+            item.complex_name = complex_row.name
+            item.address = complex_row.address
+            item.household_count = complex_row.household_count
+            item.construction_year = complex_row.construction_year
+            item.listings = []
         return SearchResult(
-            items=[listing for item, _, _ in page for listing in item.listings],
+            items=[],
             next_cursor=next_cursor,
             has_more=has_more,
-            grouped_items=[item for item, _, _ in page],
+            grouped_items=groups,
             is_grouped=True,
         )
 
@@ -354,16 +542,20 @@ class ListingSearchService:
         return raw_bound <= worst if descending else raw_bound >= worst
 
     def _is_loan_eligible(self, listing: ListingCurrent, applicant: Any) -> bool:
-        transaction = {
-            1: TransactionType.SALE,
-            2: TransactionType.JEONSE,
-            3: TransactionType.MONTHLY_RENT,
-            4: TransactionType.MONTHLY_RENT,
-        }.get(listing.trade_type)
-        if transaction is None:
-            return False
-        area = Decimal(listing.exclusive_area_x100) / 100
-        if transaction == TransactionType.SALE:
+        diagnostics = self._diagnostics
+        if diagnostics is not None:
+            diagnostics.candidate_count += 1
+        started_at = perf_counter()
+        try:
+            transaction = {
+                1: TransactionType.SALE,
+                2: TransactionType.JEONSE,
+                3: TransactionType.MONTHLY_RENT,
+                4: TransactionType.MONTHLY_RENT,
+            }.get(listing.trade_type)
+            if transaction is None:
+                return False
+            area = Decimal(listing.exclusive_area_x100) / 100
             evaluations = (
                 self._loan_evaluator.evaluate_didimdol(
                     transaction, listing.primary_price, area, listing.address, applicant
@@ -374,23 +566,140 @@ class ListingSearchService:
                 self._loan_evaluator.evaluate_neonatal_purchase(
                     transaction, listing.primary_price, area, listing.address, applicant
                 ),
-            )
-        else:
-            evaluations = (
                 self._loan_evaluator.evaluate_beotimmok(
                     transaction, listing.primary_price, area, listing.address, applicant
                 ),
             )
-        return any(result.is_eligible for result in evaluations)
+            listing.loan_evaluations = list(evaluations)
+            return any(result.is_eligible for result in evaluations)
+        finally:
+            if diagnostics is not None:
+                diagnostics.loan_evaluation_time_ms += (perf_counter() - started_at) * 1000
+
+    @staticmethod
+    def _loan_candidate_condition(branch: LoanCandidateBranch):
+        trade_condition = (
+            ListingCurrent.trade_type == branch.trade_types[0]
+            if len(branch.trade_types) == 1
+            else ListingCurrent.trade_type.in_(branch.trade_types)
+        )
+        if branch.capital_max_price == branch.non_capital_max_price:
+            price_condition = ListingCurrent.primary_price <= branch.capital_max_price
+        else:
+            capital_location = or_(
+                ListingCurrent.sido_code.in_(CAPITAL_SIDO_CODES),
+                ListingCurrent.address.is_(None),
+                ListingCurrent.address == "",
+                *(ListingCurrent.address.contains(keyword) for keyword in CAPITAL_ADDRESS_KEYWORDS),
+            )
+            price_condition = or_(
+                ListingCurrent.primary_price <= branch.non_capital_max_price,
+                and_(capital_location, ListingCurrent.primary_price <= branch.capital_max_price),
+            )
+        conditions = [trade_condition, ListingCurrent.primary_price > 0, price_condition]
+        if branch.max_exclusive_area_x100 is not None:
+            conditions.extend(
+                (
+                    ListingCurrent.exclusive_area_x100 > 0,
+                    ListingCurrent.exclusive_area_x100 <= branch.max_exclusive_area_x100,
+                )
+            )
+        return and_(*conditions)
+
+    def _eligible_candidate_rows(self, filters: ListingSearchFilter, applicant: Any):
+        plan = LoanCandidatePlan.for_applicant(applicant)
+        return self._filtered_rows(filters).where(
+            or_(*(self._loan_candidate_condition(branch) for branch in plan.branches))
+        )
+
+    def _eligible_candidate_streams(
+        self,
+        filters: ListingSearchFilter,
+        applicant: Any,
+    ) -> list[Any]:
+        streams = []
+        for branch in LoanCandidatePlan.for_applicant(applicant).branches:
+            for trade_type in branch.trade_types:
+                if filters.trade_type is not None and filters.trade_type != trade_type:
+                    continue
+                if filters.trade_types and trade_type not in filters.trade_types:
+                    continue
+                stream_branch = LoanCandidateBranch(
+                    trade_types=(trade_type,),
+                    capital_max_price=branch.capital_max_price,
+                    non_capital_max_price=branch.non_capital_max_price,
+                    max_exclusive_area_x100=branch.max_exclusive_area_x100,
+                )
+                streams.append(
+                    self._filtered_rows(filters).where(
+                        self._loan_candidate_condition(stream_branch)
+                    )
+                )
+        return streams
+
+    def _loan_candidate_batch(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        anchor: tuple[Any, int] | None,
+        applicant: Any,
+        *,
+        batch_size: int,
+        previous: bool = False,
+    ) -> list[ListingCurrent]:
+        sort_column = getattr(ListingCurrent, sort.name)
+        merged: dict[int, ListingCurrent] = {}
+        for stream in self._eligible_candidate_streams(filters, applicant):
+            statement = self._with_candidate_index_hint(stream, filters, sort)
+            if anchor is not None:
+                keyset = self._apply_previous_keyset if previous else self._apply_keyset
+                statement = keyset(
+                    statement,
+                    sort_column,
+                    ListingCurrent.article_id,
+                    sort.descending,
+                    anchor,
+                )
+            stream_descending = not sort.descending if previous else sort.descending
+            rows = self._scalars(
+                statement.order_by(
+                    sort_column.desc() if stream_descending else sort_column.asc(),
+                    ListingCurrent.article_id.desc()
+                    if stream_descending
+                    else ListingCurrent.article_id.asc(),
+                ).limit(batch_size)
+            )
+            merged.update((row.article_id, row) for row in rows)
+        return sorted(
+            merged.values(),
+            key=lambda row: (getattr(row, sort.name), row.article_id),
+            reverse=not sort.descending if previous else sort.descending,
+        )[:batch_size]
+
+    @staticmethod
+    def _with_candidate_index_hint(statement, filters: ListingSearchFilter, sort: _SortSpec):
+        if sort.name != "primary_price" or filters.complex_id is not None:
+            return statement
+        index_name = (
+            "ix_listing_price_sigungu_tx"
+            if filters.sigungu_code is not None
+            else "ix_listing_price_tx"
+        )
+        return statement.with_hint(
+            ListingCurrent,
+            f"USE INDEX ({index_name})",
+            dialect_name="mysql",
+        )
 
     def _filtered_rows(self, filters: ListingSearchFilter):
         statement = select(ListingCurrent).where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE)
         if filters.exclude_short_term:
-            statement = statement.where(ListingCurrent.is_short_term.is_(False))
+            statement = statement.where(ListingCurrent.is_short_term == false())
         for column, value in (
             (ListingCurrent.region_code, filters.region_code),
             (ListingCurrent.sido_code, filters.sido_code),
             (ListingCurrent.sigungu_code, filters.sigungu_code),
+            (ListingCurrent.complex_id, filters.complex_id),
             (ListingCurrent.trade_type, filters.trade_type),
         ):
             if value is not None:
@@ -410,15 +719,15 @@ class ListingSearchService:
         if filters.max_monthly_rent is not None:
             statement = statement.where(ListingCurrent.monthly_rent <= filters.max_monthly_rent)
         if filters.direct_trade_only:
-            statement = statement.where(ListingCurrent.is_direct_trade.is_(True))
+            statement = statement.where(ListingCurrent.is_direct_trade == true())
         if filters.safe_lessor_hug_only:
-            statement = statement.where(ListingCurrent.is_safe_lessor_hug.is_(True))
+            statement = statement.where(ListingCurrent.is_safe_lessor_hug == true())
         if filters.min_room_count is not None:
             statement = statement.where(ListingCurrent.room_count >= filters.min_room_count)
         if filters.min_bathroom_count is not None:
             statement = statement.where(ListingCurrent.bathroom_count >= filters.min_bathroom_count)
         if filters.parking_possible_only:
-            statement = statement.where(ListingCurrent.parking_possible.is_(True))
+            statement = statement.where(ListingCurrent.parking_possible == true())
         if filters.min_parking_per_household_x100 is not None:
             statement = statement.where(
                 ListingCurrent.parking_per_household_x100 >= filters.min_parking_per_household_x100
@@ -489,6 +798,79 @@ class ListingSearchService:
             return statement.where(or_(sort_column < value, and_(sort_column == value, id_column < item_id)))
         return statement.where(or_(sort_column > value, and_(sort_column == value, id_column > item_id)))
 
+    @staticmethod
+    def _apply_previous_keyset(statement, sort_column, id_column, descending: bool, anchor: tuple[Any, int]):
+        value, item_id = anchor
+        if descending:
+            return statement.where(or_(sort_column > value, and_(sort_column == value, id_column > item_id)))
+        return statement.where(or_(sort_column < value, and_(sort_column == value, id_column < item_id)))
+
+    def _previous_row_cursor(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        statement,
+        sort_column,
+        first_item: ListingCurrent,
+        applicant: Any,
+    ) -> str | None:
+        preceding = self._scalars(
+            self._apply_previous_keyset(
+                statement,
+                sort_column,
+                ListingCurrent.article_id,
+                sort.descending,
+                (getattr(first_item, sort.name), first_item.article_id),
+            )
+            .order_by(
+                sort_column.asc() if sort.descending else sort_column.desc(),
+                ListingCurrent.article_id.asc() if sort.descending else ListingCurrent.article_id.desc(),
+            )
+            .limit(filters.page_size + 1)
+        )
+        if len(preceding) <= filters.page_size:
+            return None
+        previous = preceding[-1]
+        return self._encode_cursor(
+            filters, sort, previous, previous.article_id, grouped=False, applicant=applicant
+        )
+
+    def _previous_eligible_row_cursor(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        first_item: ListingCurrent,
+        applicant: Any,
+    ) -> str | None:
+        anchor = (getattr(first_item, sort.name), first_item.article_id)
+        preceding: list[ListingCurrent] = []
+        batch_size = max(100, filters.page_size * 4)
+        while len(preceding) < filters.page_size + 1:
+            rows = self._loan_candidate_batch(
+                filters,
+                sort,
+                anchor,
+                applicant,
+                batch_size=batch_size,
+                previous=True,
+            )
+            if not rows:
+                break
+            for row in rows:
+                if self._is_loan_eligible(row, applicant):
+                    preceding.append(row)
+                    if len(preceding) >= filters.page_size + 1:
+                        break
+            anchor = (getattr(rows[-1], sort.name), rows[-1].article_id)
+            if len(rows) < batch_size:
+                break
+        if len(preceding) <= filters.page_size:
+            return None
+        previous = preceding[-1]
+        return self._encode_cursor(
+            filters, sort, previous, previous.article_id, grouped=False, applicant=applicant
+        )
+
     def _encode_cursor(
         self,
         filters: ListingSearchFilter,
@@ -498,14 +880,21 @@ class ListingSearchService:
         *,
         grouped: bool,
         applicant: Any = None,
+        scan_anchor: tuple[Any, int] | None = None,
     ) -> str:
         value = getattr(item, sort.name) if hasattr(item, sort.name) else item
         payload = {
+            "v": CURSOR_VERSION,
             "sort": self._serialize_value(value),
             "id": item_id,
             "fp": self._filter_fingerprint(filters, applicant),
             "grouped": grouped,
         }
+        if scan_anchor is not None:
+            payload["scan"] = {
+                "sort": self._serialize_value(scan_anchor[0]),
+                "id": scan_anchor[1],
+            }
         raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
         signature = hmac.new(self._cursor_secret, raw, hashlib.sha256).digest()
         return f"{self._b64(raw)}.{self._b64(signature)}"
@@ -513,6 +902,46 @@ class ListingSearchService:
     def _decode_cursor(
         self, filters: ListingSearchFilter, sort: _SortSpec, *, grouped: bool, applicant: Any = None
     ) -> tuple[Any, int] | None:
+        payload = self._decode_cursor_payload(
+            filters,
+            grouped=grouped,
+            applicant=applicant,
+        )
+        if payload is None:
+            return None
+        try:
+            return self._deserialize_value(payload["sort"], sort.value_kind), int(payload["id"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ListingSearchValidationError("invalid cursor") from error
+
+    def _decode_scan_anchor(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        *,
+        grouped: bool,
+        applicant: Any = None,
+    ) -> tuple[Any, int] | None:
+        payload = self._decode_cursor_payload(
+            filters,
+            grouped=grouped,
+            applicant=applicant,
+        )
+        if payload is None or "scan" not in payload:
+            return None
+        try:
+            scan = payload["scan"]
+            return self._deserialize_value(scan["sort"], sort.value_kind), int(scan["id"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ListingSearchValidationError("invalid cursor scan anchor") from error
+
+    def _decode_cursor_payload(
+        self,
+        filters: ListingSearchFilter,
+        *,
+        grouped: bool,
+        applicant: Any = None,
+    ) -> dict[str, Any] | None:
         if not filters.cursor:
             return None
         try:
@@ -525,12 +954,13 @@ class ListingSearchService:
             raise ListingSearchValidationError("invalid cursor") from error
         if not hmac.compare_digest(signature, expected):
             raise ListingSearchValidationError("invalid cursor signature")
+        if not isinstance(payload, dict):
+            raise ListingSearchValidationError("invalid cursor")
+        if payload.get("v") != CURSOR_VERSION:
+            raise ListingSearchValidationError("unsupported cursor version")
         if payload.get("fp") != self._filter_fingerprint(filters, applicant) or payload.get("grouped") is not grouped:
             raise ListingSearchValidationError("cursor does not match filters")
-        try:
-            return self._deserialize_value(payload["sort"], sort.value_kind), int(payload["id"])
-        except (KeyError, TypeError, ValueError) as error:
-            raise ListingSearchValidationError("invalid cursor") from error
+        return payload
 
     @staticmethod
     def _serialize_value(value: Any) -> str | int:

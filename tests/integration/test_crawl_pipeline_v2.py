@@ -7,7 +7,7 @@ from realty_radar.application.crawl_job_service import CrawlJobService
 from realty_radar.application.crawl_pipeline_service import CrawlPipelineService
 from realty_radar.application.listing_batch_writer import IncomingListing
 from realty_radar.crawler.adapters.site_a.adapter import DongCollectionOutcome
-from realty_radar.infrastructure.database.models import Base, CrawlScope
+from realty_radar.infrastructure.database.models import Base, CrawlScope, ListingCurrent
 
 
 @pytest.fixture
@@ -45,6 +45,19 @@ class FakeAdapter:
             await result
         return DongCollectionOutcome(region_code, 1, 1, 0, False)
 
+    async def article_detail(self, article_id: int, complex_id: int):
+        return {
+            "articleDetail": {
+                "roomCount": 3,
+                "bathroomCount": 2,
+                "parkingPossibleYN": "Y",
+                "parkingPerHousehold": "1.2",
+                "monthlyManagementCost": 180000,
+                "moveInPossibleYmd": "20260901",
+                "walkingTimeToNearSubway": 4,
+            }
+        }
+
     async def aclose(self):
         self.closed = True
 
@@ -65,6 +78,11 @@ async def test_pipeline_bootstraps_each_job_but_keeps_injected_worker_adapter_op
 
         assert result["created_count"] == 1
         assert result["partial_scope_count"] == 0
+        assert result["detail_checked_count"] == 1
         assert adapter.bootstrap_count == 1
         assert adapter.closed is False
         assert session.get(CrawlScope, (job.job_id, 1150010200)).status == 2
+        listing = session.get(ListingCurrent, 2001)
+        assert listing is not None
+        assert listing.room_count == 3
+        assert listing.detail_checked_at is not None

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from realty_radar.application.async_batch_writer import BoundedBatchWriter
 from realty_radar.application.crawl_job_service import CrawlJobService
+from realty_radar.application.mortgage_enrichment_service import MortgageEnrichmentRunner
 from realty_radar.crawler.adapters.site_a.adapter import DongCollectionOutcome, SiteAAdapter
 from realty_radar.crawler.adapters.site_a.http_client import RetryWaitError
 from realty_radar.infrastructure.database.models import CrawlJob
@@ -94,6 +95,11 @@ class CrawlPipelineService:
                 await asyncio.gather(*tasks, return_exceptions=True)
                 raise
             batch_result = await writer.aclose()
+            detail_checked_count = await MortgageEnrichmentRunner(
+                self._session_factory,
+                detail_fetcher=adapter.article_detail,
+                job_id=job.job_id,
+            ).run_once(batch_size=100, priority_job_id=job.job_id)
             return {
                 "job_id": job.job_id,
                 "scope_code": job.scope_code,
@@ -106,6 +112,7 @@ class CrawlPipelineService:
                 "created_count": batch_result.created_count,
                 "updated_count": batch_result.updated_count,
                 "rejected_count": batch_result.rejected_count,
+                "detail_checked_count": detail_checked_count,
                 "outcomes": [asdict(outcome) for outcome in outcomes],
             }
         finally:

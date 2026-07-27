@@ -1,0 +1,17 @@
+{% import "listings/_listing_cards.html" as cards %}
+<template data-search-mode="complex-detail"></template>
+{% for item in listings %}
+{{ cards.listing_card(item) }}
+{% else %}
+<p class="rounded-lg border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">조건에 맞는 매물이 없습니다.</p>
+{% endfor %}
+{% if next_url %}
+<button
+    type="button"
+    data-complex-more
+    hx-get="{{ next_url }}"
+    hx-target="this"
+    hx-swap="outerHTML"
+    class="w-full rounded-lg border border-indigo-500/60 px-4 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-500/20"
+>매물 더 보기</button>
+{% endif %}

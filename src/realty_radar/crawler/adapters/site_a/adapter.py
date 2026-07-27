@@ -93,6 +93,14 @@ class NaverLandApi:
             raise NaverHttpError("SITE_A article response must be an object")
         return payload
 
+    async def article_detail(self, article_id: int, complex_id: int) -> dict:
+        payload = await self._client.get_json(
+            f"{NEW_LAND_BASE}/api/articles/{article_id}", params={"complexNo": complex_id}
+        )
+        if not isinstance(payload, dict):
+            raise NaverHttpError("SITE_A article detail response must be an object")
+        return payload
+
 
 class SiteAAdapter:
     """SITE_A 한 곳만 수집하며 브라우저 fetch fallback을 제공하지 않는다."""
@@ -208,6 +216,9 @@ class SiteAAdapter:
             rejected_count=state["rejected"],
             partial=state["partial"],
         )
+
+    async def article_detail(self, article_id: int, complex_id: int) -> dict:
+        return await self._api.article_detail(article_id, complex_id)
 
     async def aclose(self) -> None:
         if not self._owns_resources:

@@ -19,9 +19,22 @@ class ComplexGroupItem:
 
 
 @dataclass(slots=True)
+class SearchDiagnostics:
+    mode: str = "normal"
+    sql_count: int = 0
+    candidate_count: int = 0
+    db_time_ms: float = 0.0
+    loan_evaluation_time_ms: float = 0.0
+    total_time_ms: float = 0.0
+
+
+@dataclass(slots=True)
 class SearchResult:
     items: list[Any]
     next_cursor: str | None
     has_more: bool
+    previous_cursor: str | None = None
+    has_previous: bool = False
     grouped_items: list[ComplexGroupItem] = field(default_factory=list)
     is_grouped: bool = False
+    diagnostics: SearchDiagnostics = field(default_factory=SearchDiagnostics)

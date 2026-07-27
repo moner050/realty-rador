@@ -3,47 +3,51 @@
 {% set mortgage_labels = {0: '융자 정보 미상', 1: '융자 없음', 2: '융자 있음'} %}
 {% set direction_labels = {1: '남', 2: '남동', 3: '동', 4: '북동', 5: '북', 6: '북서', 7: '서', 8: '남서'} %}
 {% set floor_labels = {1: '저층', 2: '중층', 3: '고층', 4: '탑층', 5: '지하'} %}
-<div id="search-status" hx-swap-oob="true" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-    <p class="text-sm text-slate-400">검색 결과{% if result.is_grouped %} · 단지별 묶음{% endif %}</p>
-    <div class="flex min-w-0 flex-col gap-2 sm:items-end">
-        <label class="flex min-h-11 shrink-0 items-center gap-2 text-sm text-slate-300"><span class="font-medium">정렬</span><select data-result-sort form="listing-search-form" name="sort_by" class="min-h-11 rounded-lg border border-slate-700 bg-slate-950 px-3 text-white">{% for value, label in sort_options %}<option value="{{ value }}" {% if filters.sort_by == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <div class="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-1 text-xs whitespace-nowrap">
-            {% if filters.sido_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시도 {{ sido_labels.get(filters.sido_code, filters.sido_code) }}</span>{% endif %}
-            {% if filters.sigungu_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시군구 {{ sigungu_labels.get(filters.sigungu_code, filters.sigungu_code) }}</span>{% elif selected_municipality %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">시군구 {{ selected_municipality }} 전체</span>{% endif %}
-            {% if filters.region_code %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">동 {{ filters.region_code }}</span>{% endif %}
-            {% if filters.complex_keyword %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.complex_keyword }}</span>{% endif %}
-            {% if filters.trade_types %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">거래 {% for code in filters.trade_types %}{{ trade_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
-            {% if filters.min_price or filters.max_price %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">가격 {{ filters.min_price | korean_money if filters.min_price else '전체' }} ~ {{ filters.max_price | korean_money if filters.max_price else '전체' }}</span>{% endif %}
-            {% if filters.max_monthly_rent is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">월세 상한 {{ filters.max_monthly_rent | korean_money }}</span>{% endif %}
-            {% if filters.min_exclusive_area or filters.max_exclusive_area %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">전용 {{ filters.min_exclusive_area or '전체' }}㎡ ~ {{ filters.max_exclusive_area or '전체' }}㎡</span>{% endif %}
-            {% if filters.min_room_count %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">방 {{ filters.min_room_count }}개 이상</span>{% endif %}
-            {% if filters.min_bathroom_count %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">욕실 {{ filters.min_bathroom_count }}개 이상</span>{% endif %}
-            {% if filters.parking_possible_only %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">주차 가능</span>{% endif %}
-            {% if filters.min_parking_per_household %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">세대당 주차 {{ filters.min_parking_per_household }}대 이상</span>{% endif %}
-            {% if filters.max_monthly_management_cost is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">관리비 {{ filters.max_monthly_management_cost | comma_number }}원 이하</span>{% endif %}
-            {% if filters.move_in_by %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.move_in_by }}까지 입주</span>{% endif %}
-            {% if filters.max_subway_walk_minutes is not none %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">역 도보 {{ filters.max_subway_walk_minutes }}분 이하</span>{% endif %}
-            {% if filters.min_construction_year %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">준공 {{ filters.min_construction_year }}년 이후</span>{% endif %}
-            {% if filters.min_households %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ filters.min_households }}세대 이상</span>{% endif %}
-            {% if filters.recent_days %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">최근 {{ filters.recent_days }}일</span>{% endif %}
-            {% if filters.mortgage_codes %}{% for code in filters.mortgage_codes %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">{{ mortgage_labels[code] }}</span>{% endfor %}{% endif %}
-            {% if filters.exclude_unknown_mortgage %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">융자 정보 미상 제외</span>{% endif %}
-            {% if filters.direction_codes %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">방향 {% for code in filters.direction_codes %}{{ direction_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
-            {% if filters.floor_bands %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">층 {% for code in filters.floor_bands %}{{ floor_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
-            {% if filters.exclude_first_floor %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">1층 제외</span>{% endif %}
-            <span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">단기임대 {{ '제외' if filters.exclude_short_term else '포함' }}</span>
-            {% if filters.group_by_complex %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">단지별 묶기</span>{% endif %}
-            {% if filters.only_eligible_loans %}<span class="rounded-full bg-indigo-500/20 px-2.5 py-1 text-indigo-200">대출 적격</span>{% endif %}
-            {% if filters.direct_trade_only %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">직거래만</span>{% endif %}
-            {% if filters.safe_lessor_hug_only %}<span class="rounded-full bg-slate-700 px-2.5 py-1 text-slate-200">HUG 안심임대인 표기</span>{% endif %}
+<div id="search-results" data-search-mode="{% if result.is_grouped %}grouped{% elif filters.only_eligible_loans %}eligible-loans{% else %}normal{% endif %}" class="space-y-3">
+<div id="search-status" data-result-controls class="sticky top-20 z-30 flex flex-col gap-3 rounded-xl border border-slate-700/90 bg-slate-900/95 p-3 shadow-lg shadow-slate-950/40 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
+        <p class="text-xs font-semibold text-slate-300">검색 결과{% if result.is_grouped %} <span class="text-indigo-400">· 단지별 묶음</span>{% endif %}</p>
+    </div>
+    <div class="flex min-w-0 flex-col gap-2.5 sm:items-end">
+        <div class="flex flex-wrap items-center gap-2"><span class="text-xs font-medium text-slate-400">페이지당 20개</span><a href="#listing-search-form" class="inline-flex min-h-9 items-center rounded-lg border border-indigo-500/60 px-3 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20">필터 변경</a><label class="flex min-h-10 shrink-0 items-center gap-2 text-xs text-slate-300"><span class="font-medium text-slate-400">정렬</span><select data-result-sort form="listing-search-form" name="sort_by" class="min-h-9 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500">{% for value, label in sort_options %}<option value="{{ value }}" {% if filters.sort_by == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label></div>
+        <!-- 활성화된 필터 칩 태그 바 -->
+        <div class="-mx-1 flex max-w-full gap-1.5 overflow-x-auto px-1 pb-1 text-xs whitespace-nowrap">
+            {% if filters.sido_code %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">시도 {{ sido_labels.get(filters.sido_code, filters.sido_code) }}</span>{% endif %}
+            {% if filters.sigungu_code %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">시군구 {{ sigungu_labels.get(filters.sigungu_code, filters.sigungu_code) }}</span>{% elif selected_municipality %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">시군구 {{ selected_municipality }} 전체</span>{% endif %}
+            {% if filters.region_code %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">동 {{ filters.region_code }}</span>{% endif %}
+            {% if filters.complex_keyword %}<span class="rounded-full border border-indigo-700/60 bg-indigo-950/60 px-3 py-1 text-xs text-indigo-300 font-medium shadow-sm">{{ filters.complex_keyword }}</span>{% endif %}
+            {% if filters.trade_types %}<span class="rounded-full border border-indigo-700/60 bg-indigo-950/60 px-3 py-1 text-xs text-indigo-300 font-medium shadow-sm">거래 {% for code in filters.trade_types %}{{ trade_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
+            {% if filters.min_price or filters.max_price %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">가격 {{ filters.min_price | korean_money if filters.min_price else '전체' }} ~ {{ filters.max_price | korean_money if filters.max_price else '전체' }}</span>{% endif %}
+            {% if filters.max_monthly_rent is not none %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">월세 상한 {{ filters.max_monthly_rent | korean_money }}</span>{% endif %}
+            {% if filters.min_exclusive_area or filters.max_exclusive_area %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">전용 {{ filters.min_exclusive_area or '전체' }}㎡ ~ {{ filters.max_exclusive_area or '전체' }}㎡</span>{% endif %}
+            {% if filters.min_room_count %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">방 {{ filters.min_room_count }}개 이상</span>{% endif %}
+            {% if filters.min_bathroom_count %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">욕실 {{ filters.min_bathroom_count }}개 이상</span>{% endif %}
+            {% if filters.parking_possible_only %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">주차 가능</span>{% endif %}
+            {% if filters.min_parking_per_household %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">세대당 주차 {{ filters.min_parking_per_household }}대 이상</span>{% endif %}
+            {% if filters.max_monthly_management_cost is not none %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">관리비 {{ filters.max_monthly_management_cost | comma_number }}원 이하</span>{% endif %}
+            {% if filters.move_in_by %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">{{ filters.move_in_by }}까지 입주</span>{% endif %}
+            {% if filters.max_subway_walk_minutes is not none %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">역 도보 {{ filters.max_subway_walk_minutes }}분 이하</span>{% endif %}
+            {% if filters.min_construction_year %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">준공 {{ filters.min_construction_year }}년 이후</span>{% endif %}
+            {% if filters.min_households %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">{{ filters.min_households }}세대 이상</span>{% endif %}
+            {% if filters.recent_days %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">최근 {{ filters.recent_days }}일</span>{% endif %}
+            {% if filters.mortgage_codes %}{% for code in filters.mortgage_codes %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">{{ mortgage_labels[code] }}</span>{% endfor %}{% endif %}
+            {% if filters.exclude_unknown_mortgage %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">융자 정보 미상 제외</span>{% endif %}
+            {% if filters.direction_codes %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">방향 {% for code in filters.direction_codes %}{{ direction_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
+            {% if filters.floor_bands %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">층 {% for code in filters.floor_bands %}{{ floor_labels[code] }}{% if not loop.last %}·{% endif %}{% endfor %}</span>{% endif %}
+            {% if filters.exclude_first_floor %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">1층 제외</span>{% endif %}
+            <span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">단기임대 {{ '제외' if filters.exclude_short_term else '포함' }}</span>
+            {% if filters.group_by_complex %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">단지별 묶기</span>{% endif %}
+            {% if filters.only_eligible_loans %}<span class="rounded-full border border-indigo-700/60 bg-indigo-950/60 px-3 py-1 text-xs text-indigo-300 font-medium shadow-sm">가능 대출 있는 매물만</span>{% endif %}
+            {% if filters.direct_trade_only %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">직거래만</span>{% endif %}
+            {% if filters.safe_lessor_hug_only %}<span class="rounded-full border border-slate-700 bg-slate-800/90 px-3 py-1 text-xs text-slate-200 font-medium shadow-sm">HUG 안심임대인 표기</span>{% endif %}
         </div>
     </div>
 </div>
-<div id="search-results" class="space-y-3">
     <div id="listing-cards" class="space-y-3">
-        {{ cards.render(result, listings) }}
+        {{ cards.render(result, listings, complex_urls) }}
     </div>
     <div id="listing-pager" class="mt-4 text-center">
-        {{ cards.pager(result, next_url) }}
+        {{ cards.pager(result, previous_url, next_url) }}
     </div>
 </div>

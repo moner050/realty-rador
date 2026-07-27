@@ -71,6 +71,7 @@ class ListingSearchFilter:
     sigungu_code: int | None = None
     sigungu_codes: list[int] | None = None
     invalid_municipality: bool = False
+    complex_id: int | None = None
     complex_keyword: str | None = None
     trade_type: int | None = None
     trade_types: list[int] | None = None
@@ -117,6 +118,7 @@ class ListingSearchFilter:
 
     def to_dict(self) -> dict[str, object]:
         values = asdict(self)
+        values.pop("complex_id", None)
         for key in ("min_exclusive_area", "max_exclusive_area", "min_parking_per_household"):
             if values[key] is not None:
                 values[key] = str(values[key])

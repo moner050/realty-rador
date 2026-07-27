@@ -178,9 +178,15 @@ class MortgageEnrichmentRunner:
         self._job_id = job_id
         self._concurrency = concurrency
 
-    async def run_once(self, *, batch_size: int = 100) -> int:
+    async def run_once(self, *, batch_size: int = 100, priority_job_id: int | None = None) -> int:
         """Run the first pending batch; callers needing a full sweep use ``run_until_idle``."""
-        return (await self._run_batch(batch_size=batch_size, after_article_id=None)).checked_count
+        return (
+            await self._run_batch(
+                batch_size=batch_size,
+                after_article_id=None,
+                priority_job_id=priority_job_id,
+            )
+        ).checked_count
 
     async def run_until_idle(self, *, batch_size: int = 100, max_batches: int = 100) -> int:
         """Sweep pending active rows with a keyset cursor so one bad row cannot starve later rows."""
@@ -196,7 +202,13 @@ class MortgageEnrichmentRunner:
             after_article_id = batch.last_candidate_id
         return checked
 
-    async def _run_batch(self, *, batch_size: int, after_article_id: int | None) -> EnrichmentBatch:
+    async def _run_batch(
+        self,
+        *,
+        batch_size: int,
+        after_article_id: int | None,
+        priority_job_id: int | None = None,
+    ) -> EnrichmentBatch:
         if not 1 <= batch_size <= 500:
             raise ValueError("batch_size must be between 1 and 500")
         with self._session_factory() as db:
@@ -204,14 +216,25 @@ class MortgageEnrichmentRunner:
                 select(ListingCurrent.article_id, ListingCurrent.complex_id)
                 .where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE, ListingCurrent.detail_checked_at.is_(None))
                 .order_by(ListingCurrent.article_id)
-                .limit(batch_size)
             )
             if after_article_id is not None:
                 statement = statement.where(ListingCurrent.article_id > after_article_id)
-            candidates = [
-                (row.article_id, row.complex_id)
-                for row in db.execute(statement).all()
-            ]
+            candidates = []
+            if priority_job_id is not None and after_article_id is None:
+                candidates = [
+                    (row.article_id, row.complex_id)
+                    for row in db.execute(
+                        statement.where(ListingCurrent.last_seen_job_id == priority_job_id).limit(batch_size)
+                    ).all()
+                ]
+            if len(candidates) < batch_size:
+                fallback = statement
+                if priority_job_id is not None and after_article_id is None:
+                    fallback = fallback.where(ListingCurrent.last_seen_job_id != priority_job_id)
+                candidates.extend(
+                    (row.article_id, row.complex_id)
+                    for row in db.execute(fallback.limit(batch_size - len(candidates))).all()
+                )
         last_candidate_id = candidates[-1][0] if candidates else None
         semaphore = asyncio.Semaphore(self._concurrency)
 

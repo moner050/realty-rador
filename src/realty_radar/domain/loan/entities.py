@@ -107,6 +107,7 @@ class LoanEvaluationResult:
     reason: str | None = None
     interest_rate: float | None = None  # 예상 연 이자율 (%)
     estimated_monthly_interest: int | None = None  # 월 예상 이자 (원)
+    calculation_criteria: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def is_eligible(self) -> bool:

@@ -265,3 +265,25 @@ def test_combined_enrichment_updates_detail_once_and_retries_transport_failures(
         assert listing.nearest_subway_walk_minutes == 4
         events = list(session.scalars(select(ListingHistory.event_type).where(ListingHistory.article_id == 10)).all())
         assert sorted(events) == [HISTORY_MORTGAGE_ENRICHED, HISTORY_DETAIL_ENRICHED]
+
+
+def test_enrichment_prioritizes_current_job_rows_then_backfills_pending_rows():
+    factory = _session_factory()
+    calls: list[int] = []
+    with factory() as session:
+        session.get(ListingCurrent, 11).last_seen_job_id = 2
+        session.get(ListingCurrent, 12).detail_checked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        session.commit()
+
+    async def detail(article_id: int, complex_id: int):
+        calls.append(article_id)
+        return {"articleDetail": {"roomCount": article_id}}
+
+    runner = MortgageEnrichmentRunner(factory, detail_fetcher=detail, job_id=2)
+    assert asyncio.run(runner.run_once(batch_size=2, priority_job_id=2)) == 2
+    assert calls == [11, 10]
+
+    with factory() as session:
+        assert session.get(ListingCurrent, 11).room_count == 11
+        assert session.get(ListingCurrent, 10).room_count == 10
+        assert session.get(ListingCurrent, 12).detail_checked_at is not None

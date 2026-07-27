@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from html import unescape
+from pathlib import Path
 import re
 
 import pytest
@@ -13,6 +14,12 @@ from realty_radar.infrastructure.database.session import get_db
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.web.main import app
 from realty_radar.web.routes.home import _region_options, parse_search_filter
+
+
+def test_listing_cards_link_to_fin_land_article_pages():
+    template = Path("src/realty_radar/web/templates/listings/_listing_cards.html").read_text(encoding="utf-8")
+
+    assert 'href="https://fin.land.naver.com/articles/{{ item.article_id }}"' in template
 
 
 def test_search_filter_parses_all_apartment_search_controls_and_legacy_deposit_aliases():
@@ -209,7 +216,7 @@ def test_active_filter_chips_describe_every_applied_search_condition():
         "1층 제외",
         "단기임대 포함",
         "단지별 묶기",
-        "대출 적격",
+        "가능 대출 있는 매물만",
         "전용면적 넓은순",
     ):
         assert label in response.text
@@ -484,7 +491,7 @@ def test_price_slider_is_capped_at_thirty_eok_while_other_bounds_expand():
     assert 'id="recent-days" type="range" min="1" max="500"' in response.text
 
 
-def test_htmx_load_more_appends_cards_and_replaces_only_the_pager():
+def test_htmx_page_navigation_replaces_the_search_results():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -535,17 +542,18 @@ def test_htmx_load_more_appends_cards_and_replaces_only_the_pager():
         client = TestClient(app)
         first = client.get("/listings/search?page_size=1", headers={"HX-Request": "true"})
         next_url = unescape(re.search(r'hx-get="([^"]+)"', first.text).group(1))
-        appended = client.get(next_url, headers={"HX-Request": "true"})
+        second_page = client.get(next_url, headers={"HX-Request": "true"})
     finally:
         app.dependency_overrides.clear()
 
     assert first.status_code == 200
     assert "첫번째 단지" in first.text
-    assert "append=1" in next_url
-    assert appended.status_code == 200
-    assert "두번째 단지" in appended.text
-    assert 'id="search-results"' not in appended.text
-    assert 'id="listing-pager" hx-swap-oob="true"' in appended.text
+    assert "append=1" not in next_url
+    assert 'hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true">다음 페이지' in first.text
+    assert second_page.status_code == 200
+    assert "두번째 단지" in second_page.text
+    assert "첫번째 단지" not in second_page.text
+    assert 'id="search-results"' in second_page.text
 
 
 def test_home_renders_v2_cursor_search_without_a_database_count_query():
@@ -569,6 +577,41 @@ def test_home_renders_v2_cursor_search_without_a_database_count_query():
 
     assert response.status_code == 200
     assert "cursor 조회" in response.text
+
+
+def test_http_search_logs_timing_diagnostics(caplog):
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    caplog.set_level(20, logger="realty_radar.web.routes.home")
+    try:
+        response = TestClient(app).get("/listings/search", headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.clear()
+
+    telemetry = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "realty_radar.web.routes.home"
+        and record.getMessage().startswith("listing_search ")
+    ]
+    assert response.status_code == 200
+    assert len(telemetry) == 1
+    assert re.search(
+        r"^listing_search mode=normal sql_count=1 candidate_count=0 "
+        r"db_ms=\d+\.\d{3} loan_ms=\d+\.\d{3} total_ms=\d+\.\d{3}$",
+        telemetry[0],
+    )
 
 
 def test_search_filter_converts_eok_price_inputs_without_overriding_canonical_prices():
