@@ -21,11 +21,11 @@
     <input id="{{ max_id }}-value" type="hidden" name="{{ max_name }}" data-slider-name="{{ max_name }}" value="{{ max_value if max_value is not none else '' }}">
     <div class="flex items-center justify-between gap-3"><p {% if key == 'price' %}data-price-label{% endif %} class="text-sm font-medium text-slate-200">{{ label }}</p><span class="text-xs text-slate-500">드래그로 범위 선택</span></div>
     <div data-range-side="min" class="mt-3">
-        <div class="flex items-center justify-between gap-3"><label for="{{ min_id }}" class="text-xs text-slate-400">최소</label><div class="flex items-center gap-2"><output data-range-output="min" class="text-sm font-semibold text-indigo-200">{% if min_value is not none %}{{ min_value }}{{ unit }}{% else %}제한 없음{% endif %}</output><button type="button" data-range-clear="min" class="min-h-9 rounded-md px-2 text-xs text-slate-300 underline underline-offset-2 hover:text-white">초기화</button></div></div>
+        <div class="flex items-center justify-between gap-3"><label for="{{ min_id }}" class="text-xs text-slate-400">최소</label><div class="flex items-center gap-2"><output data-range-output="min" class="text-sm font-semibold text-indigo-200">{% if min_value is not none %}{{ min_value }}{{ unit }}{% else %}제한 없음{% endif %}</output>{% if key == 'exclusive-area' %}<output data-range-pyeong="min" class="text-xs text-slate-400">{% if min_value is not none %}약 {{ (min_value * 10 / 33) | round(1) }}평{% endif %}</output>{% endif %}<button type="button" data-range-clear="min" class="min-h-9 rounded-md px-2 text-xs text-slate-300 underline underline-offset-2 hover:text-white">초기화</button></div></div>
         <input id="{{ min_id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ min_value if min_value is not none else minimum }}" data-range-handle="min" aria-label="{{ label }} 최소" class="h-11 w-full cursor-pointer accent-indigo-500">
     </div>
     <div data-range-side="max" class="mt-1">
-        <div class="flex items-center justify-between gap-3"><label for="{{ max_id }}" class="text-xs text-slate-400">최대</label><div class="flex items-center gap-2"><output data-range-output="max" class="text-sm font-semibold text-indigo-200">{% if max_value is not none %}{{ max_value }}{{ unit }}{% else %}제한 없음{% endif %}</output><button type="button" data-range-clear="max" class="min-h-9 rounded-md px-2 text-xs text-slate-300 underline underline-offset-2 hover:text-white">초기화</button></div></div>
+        <div class="flex items-center justify-between gap-3"><label for="{{ max_id }}" class="text-xs text-slate-400">최대</label><div class="flex items-center gap-2"><output data-range-output="max" class="text-sm font-semibold text-indigo-200">{% if max_value is not none %}{{ max_value }}{{ unit }}{% else %}제한 없음{% endif %}</output>{% if key == 'exclusive-area' %}<output data-range-pyeong="max" class="text-xs text-slate-400">{% if max_value is not none %}약 {{ (max_value * 10 / 33) | round(1) }}평{% endif %}</output>{% endif %}<button type="button" data-range-clear="max" class="min-h-9 rounded-md px-2 text-xs text-slate-300 underline underline-offset-2 hover:text-white">초기화</button></div></div>
         <input id="{{ max_id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ max_value if max_value is not none else maximum }}" data-range-handle="max" aria-label="{{ label }} 최대" class="h-11 w-full cursor-pointer accent-indigo-500">
     </div>
     {% if helper %}<p class="mt-1 text-xs text-slate-500">{{ helper }}</p>{% endif %}
@@ -60,7 +60,7 @@
                 <summary class="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-white"><span>가격·면적 상세 조건</span><span class="text-xs font-normal text-slate-400">거래 유형에 맞는 조건을 펼쳐 보세요</span></summary>
                 <div data-trade-filter class="mt-4 space-y-4">
                     <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">{{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억') }}<div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.') }}</div></div>
-                    <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="가격 빠른 선택"><button type="button" data-price-range=";5" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">5억 이하</button><button type="button" data-price-range="5;10" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">5~10억</button><button type="button" data-price-range="10;" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">10억 이상</button></div>
+                    <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="가격 빠른 선택"><button type="button" data-price-range=";6" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">6억 이하</button><button type="button" data-price-range="6;9" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">6~9억</button><button type="button" data-price-range="9;" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">9억 이상</button></div>
                     {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '84㎡는 약 25평이며, 1평은 약 3.3㎡입니다.') }}
                     <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="평형 빠른 선택">{% for area, pyeong in [(59, 18), (74, 22), (84, 25), (102, 31)] %}<button type="button" data-area="{{ area }}" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">{{ area }}㎡ (약 {{ pyeong }}평)</button>{% endfor %}</div>
                 </div>
@@ -162,6 +162,7 @@
     updateTradeFilters();
 
     const displayValue = (value, unit) => `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit}`;
+    const formatPyeong = (area) => `약 ${(Number(area) / 3.3).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}평`;
     const scaled = (value, scale) => String(Math.round(Number(value) * scale * 100) / 100);
     document.querySelectorAll("[data-single-slider]").forEach((container) => {
         const hidden = container.querySelector("input[type=hidden]");
@@ -195,9 +196,11 @@
             max: container.querySelector('[data-range-output="max"]'),
         };
         const render = (side) => {
-            if (hidden[side].value === "") { output[side].textContent = "제한 없음"; return; }
+            const pyeong = container.querySelector(`[data-range-pyeong="${side}"]`);
+            if (hidden[side].value === "") { output[side].textContent = "제한 없음"; if (pyeong) pyeong.textContent = ""; return; }
             handle[side].value = hidden[side].value;
             output[side].textContent = displayValue(handle[side].value, unit);
+            if (pyeong) pyeong.textContent = formatPyeong(handle[side].value);
         };
         const set = (side, value) => {
             hidden[side].value = value;

@@ -637,6 +637,12 @@ def test_home_renders_mobile_filter_groups_and_dynamic_region_controls():
     assert "overflow-x-auto" in response.text
     assert "59㎡" in response.text
     assert "84㎡" in response.text
+    assert 'data-price-range=";6"' in response.text
+    assert 'data-price-range="6;9"' in response.text
+    assert 'data-price-range="9;"' in response.text
+    assert 'data-range-pyeong="min"' in response.text
+    assert 'data-range-pyeong="max"' in response.text
+    assert "formatPyeong" in response.text
     assert "region?.municipalities" in response.text
     assert "district.replaceChildren" in response.text
     assert "populateDistricts" in response.text
