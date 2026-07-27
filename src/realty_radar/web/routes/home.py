@@ -27,7 +27,7 @@ register_jinja_filters(templates)
 _LOAN_EVALUATOR = LoanRuleEvaluator()
 
 TRADE_TYPE_CODES = {"SALE": 1, "JEONSE": 2, "MONTHLY_RENT": 3, "SHORT_TERM": 4}
-MAX_PRICE_WON = 10_000_000_000
+MAX_PRICE_WON = 3_000_000_000
 SORT_OPTIONS = (
     ("price_asc", "가격 낮은순"),
     ("price_desc", "가격 높은순"),
@@ -183,7 +183,7 @@ def _slider_limits(filters: ListingSearchFilter) -> dict[str, int | Decimal]:
         return max(base, int((Decimal(value) / scale).to_integral_value(rounding=ROUND_CEILING)))
 
     return {
-        "price_eok": 100,
+        "price_eok": 30,
         "monthly_rent_manwon": scaled_limit(filters.max_monthly_rent, base=1_000, scale=10_000),
         "area": scaled_limit(
             max(value for value in (filters.min_exclusive_area, filters.max_exclusive_area) if value is not None)
