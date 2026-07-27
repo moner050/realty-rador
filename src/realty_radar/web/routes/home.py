@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -108,17 +108,45 @@ def _request_bool(value: object, default: bool) -> bool:
 
 
 def _region_options() -> list[dict[str, object]]:
-    return [
-        {
-            "name": sido_name,
-            "code": int(sido_code) // 100_000_000,
-            "sigungu": [
-                {"name": sigungu_name, "code": int(sigungu_code) // 100_000}
-                for sigungu_name, sigungu_code in SIGUNGU_CODES[sido_name].items()
-            ],
-        }
-        for sido_name, sido_code in SIDO_CODES.items()
-    ]
+    options: list[dict[str, object]] = []
+    for sido_name, sido_code in SIDO_CODES.items():
+        municipalities: dict[str, dict[str, object]] = {}
+        direct_districts: list[dict[str, object]] = []
+        for sigungu_name, sigungu_code in SIGUNGU_CODES[sido_name].items():
+            code = int(sigungu_code) // 100_000
+            parent, separator, district = sigungu_name.partition(" ")
+            if separator and parent.endswith("시") and district.endswith("구"):
+                municipality = municipalities.setdefault(
+                    parent,
+                    {"name": parent, "codes": [], "districts": []},
+                )
+                municipality["codes"].append(code)
+                municipality["districts"].append({"name": district, "code": code})
+            elif sido_name == "경기도":
+                municipalities[sigungu_name] = {"name": sigungu_name, "codes": [code], "districts": []}
+            else:
+                direct_districts.append({"name": sigungu_name, "code": code})
+        options.append(
+            {
+                "name": sido_name,
+                "code": int(sido_code) // 100_000_000,
+                "municipalities": list(municipalities.values()),
+                "districts": direct_districts,
+            }
+        )
+    return options
+
+
+def _municipality_codes(sido_code: int | None, municipality: str | None) -> list[int] | None:
+    if not municipality:
+        return None
+    for region in _region_options():
+        if region["code"] != sido_code:
+            continue
+        for item in region["municipalities"]:
+            if item["name"] == municipality:
+                return list(item["codes"])
+    return []
 
 
 def _region_labels() -> tuple[dict[int, str], dict[int, str]]:
@@ -132,9 +160,51 @@ def _region_labels() -> tuple[dict[int, str], dict[int, str]]:
     )
 
 
+def _selected_municipality(filters: ListingSearchFilter) -> str | None:
+    if not filters.sigungu_codes or filters.sigungu_code is not None:
+        return None
+    selected_codes = sorted(filters.sigungu_codes)
+    for region in _region_options():
+        for municipality in region["municipalities"]:
+            if municipality["codes"] == selected_codes:
+                return str(municipality["name"])
+    return None
+
+
+def _slider_limits(filters: ListingSearchFilter) -> dict[str, int | Decimal]:
+    def scaled_limit(value: int | Decimal | None, *, base: int, scale: int = 1) -> int:
+        if value is None:
+            return base
+        return max(base, int((Decimal(value) / scale).to_integral_value(rounding=ROUND_CEILING)))
+
+    return {
+        "price_eok": scaled_limit(
+            max(value for value in (filters.min_price, filters.max_price) if value is not None)
+            if filters.min_price is not None or filters.max_price is not None
+            else None,
+            base=500,
+            scale=100_000_000,
+        ),
+        "monthly_rent_manwon": scaled_limit(filters.max_monthly_rent, base=1_000, scale=10_000),
+        "area": scaled_limit(
+            max(value for value in (filters.min_exclusive_area, filters.max_exclusive_area) if value is not None)
+            if filters.min_exclusive_area is not None or filters.max_exclusive_area is not None
+            else None,
+            base=500,
+        ),
+        "parking": scaled_limit(filters.min_parking_per_household, base=5),
+        "management_cost_manwon": scaled_limit(filters.max_monthly_management_cost, base=200, scale=10_000),
+        "subway_minutes": scaled_limit(filters.max_subway_walk_minutes, base=60),
+        "construction_year": scaled_limit(filters.min_construction_year, base=date.today().year),
+        "households": scaled_limit(filters.min_households, base=10_000),
+        "recent_days": scaled_limit(filters.recent_days, base=365),
+    }
+
+
 def parse_search_filter(
     region_code: str | None = Query(None),
     sido_code: str | None = Query(None),
+    municipality: str | None = Query(None),
     sigungu_code: str | None = Query(None),
     complex_keyword: str | None = Query(None),
     transaction_type: str | None = Query(None),
@@ -190,10 +260,15 @@ def parse_search_filter(
     parsed_exclude_short_term = _request_bool(exclude_short_term, True)
     if trades and 4 in trades:
         parsed_exclude_short_term = False
+    parsed_sido_code = _optional_int(sido_code)
+    municipality_value = _request_string(municipality)
+    municipality_codes = _municipality_codes(parsed_sido_code, municipality_value)
     return ListingSearchFilter(
         region_code=_optional_int(region_code),
-        sido_code=_optional_int(sido_code),
+        sido_code=parsed_sido_code,
         sigungu_code=_optional_int(sigungu_code),
+        sigungu_codes=municipality_codes or None,
+        invalid_municipality=municipality_value is not None and municipality_codes == [],
         complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
         trade_type=trades[0] if trades and len(trades) == 1 else None,
         trade_types=trades,
@@ -285,6 +360,8 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "applicant": applicant,
             "is_authenticated": is_authenticated(request),
             "region_options": _region_options(),
+            "selected_municipality": _selected_municipality(filters),
+            "slider_limits": _slider_limits(filters),
             "sort_options": SORT_OPTIONS,
             "sido_labels": sido_labels,
             "sigungu_labels": sigungu_labels,
@@ -297,6 +374,8 @@ def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_h
     context = {
         "filters": filters,
         "region_options": _region_options(),
+        "selected_municipality": _selected_municipality(filters),
+        "slider_limits": _slider_limits(filters),
         "sort_options": SORT_OPTIONS,
         "sido_labels": sido_labels,
         "sigungu_labels": sigungu_labels,

@@ -395,6 +395,8 @@ class ListingSearchService:
         ):
             if value is not None:
                 statement = statement.where(column == value)
+        if filters.sigungu_codes:
+            statement = statement.where(ListingCurrent.sigungu_code.in_(filters.sigungu_codes))
         if filters.trade_types:
             statement = statement.where(ListingCurrent.trade_type.in_(filters.trade_types))
         if filters.min_price is not None:
@@ -571,5 +573,7 @@ class ListingSearchService:
     def _validate(filters: ListingSearchFilter) -> None:
         if not 1 <= filters.page_size <= 100:
             raise ListingSearchValidationError("page_size must be between 1 and 100")
+        if filters.invalid_municipality:
+            raise ListingSearchValidationError("unsupported municipality")
         if filters.complex_keyword and len("".join(filters.complex_keyword.split())) < 2:
             raise ListingSearchValidationError("complex keyword must be at least two characters")

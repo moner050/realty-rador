@@ -89,6 +89,34 @@ def test_cursor_cannot_be_reused_with_different_filters():
         )
 
 
+def test_multi_sigungu_filter_returns_each_selected_district_without_keyset_gaps():
+    session = _session()
+    _seed(session)
+    rows = {row.article_id: row for row in session.query(ListingCurrent).all()}
+    rows[2001].region_code = 4111100000  # 수원시 영통구
+    rows[2002].region_code = 4111300000  # 수원시 장안구
+    rows[2003].region_code = 4111500000  # 수원시 팔달구
+    rows[2004].region_code = 4119000000  # 부천시
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+
+    first = service.search_listings(
+        ListingSearchFilter(sigungu_codes=[41115, 41111, 41113], sort_by="price_asc", page_size=2)
+    )
+    second = service.search_listings(
+        ListingSearchFilter(
+            sigungu_codes=[41111, 41113, 41115],
+            sort_by="price_asc",
+            page_size=2,
+            cursor=first.next_cursor,
+        )
+    )
+
+    assert [item.article_id for item in first.items + second.items] == [2001, 2002, 2003]
+    assert first.has_more is True
+    assert second.has_more is False
+
+
 @pytest.mark.parametrize(
     ("filter_name", "filter_value", "matching_value", "nonmatching_value"),
     [

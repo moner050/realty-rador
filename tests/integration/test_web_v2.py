@@ -12,7 +12,7 @@ from realty_radar.infrastructure.database.models import Base, ComplexCurrent, Li
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.web.main import app
-from realty_radar.web.routes.home import parse_search_filter
+from realty_radar.web.routes.home import _region_options, parse_search_filter
 
 
 def test_search_filter_parses_all_apartment_search_controls_and_legacy_deposit_aliases():
@@ -98,6 +98,26 @@ def test_recent_preset_wins_when_a_no_javascript_form_submits_both_values():
     filters = parse_search_filter(recent_days="7", recent_days_custom="12")
 
     assert filters.recent_days == 7
+
+
+def test_municipality_query_expands_suwon_to_all_child_districts_and_round_trips_saved_filter():
+    filters = parse_search_filter(sido_code="41", municipality="수원시")
+
+    assert filters.sido_code == 41
+    assert filters.sigungu_code is None
+    assert filters.sigungu_codes == [41111, 41113, 41115, 41117]
+    assert type(filters).from_dict(filters.to_dict()) == filters
+
+
+def test_region_options_split_gyeonggi_municipalities_from_child_districts():
+    gyeonggi = next(region for region in _region_options() if region["code"] == 41)
+    suwon = next(item for item in gyeonggi["municipalities"] if item["name"] == "수원시")
+    bucheon = next(item for item in gyeonggi["municipalities"] if item["name"] == "부천시")
+
+    assert [district["name"] for district in suwon["districts"]] == ["영통구", "장안구", "팔달구", "권선구"]
+    assert [district["code"] for district in suwon["districts"]] == [41111, 41113, 41115, 41117]
+    assert bucheon["districts"] == []
+    assert bucheon["codes"] == [41190]
 
 
 def test_short_term_trade_selection_includes_short_term_rows_despite_default_exclusion():
@@ -274,6 +294,31 @@ def test_active_region_chips_use_human_readable_sido_and_sigungu_names():
     assert "시군구 강남구" in response.text
 
 
+def test_city_wide_region_chip_and_unknown_municipality_error_are_human_readable():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        city_response = TestClient(app).get("/?sido_code=41&municipality=수원시")
+        invalid_response = TestClient(app).get("/?sido_code=41&municipality=없는시")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert city_response.status_code == 200
+    assert "시군구 수원시 전체" in city_response.text
+    assert invalid_response.status_code == 400
+
+
 def test_search_filter_prefers_primary_price_and_accepts_singular_legacy_trade():
     filters = parse_search_filter(
         transaction_type="SALE",
@@ -315,6 +360,76 @@ def test_home_exposes_hierarchical_auto_search_and_append_pager_contract():
     assert "delay:400ms" in response.text
     assert append_response.status_code == 200
     assert "hx-swap-oob=\"true\"" in append_response.text
+
+
+def test_home_uses_three_level_region_selectors_and_drag_only_numeric_filters():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/?min_price=600000000&max_monthly_rent=1200000&min_households=1200")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="municipality-select" name="municipality"' in response.text
+    assert 'id="district-select" name="sigungu_code"' in response.text
+    assert 'data-range-slider="price"' in response.text
+    assert 'data-range-slider="exclusive-area"' in response.text
+    assert response.text.count('type="range"') >= 12
+    for name in (
+        "min_price_eok",
+        "max_price_eok",
+        "max_monthly_rent",
+        "min_exclusive_area",
+        "max_exclusive_area",
+        "min_room_count",
+        "min_bathroom_count",
+        "min_parking_per_household",
+        "max_monthly_management_cost",
+        "max_subway_walk_minutes",
+        "min_construction_year",
+        "min_households",
+        "recent_days",
+    ):
+        assert f'type="hidden" name="{name}"' in response.text
+        assert f'data-slider-name="{name}"' in response.text
+    assert 'name="min_room_count" inputmode=' not in response.text
+
+
+def test_slider_bounds_expand_for_saved_values_above_default_limits():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/?min_price=60000000000&min_exclusive_area=620&recent_days=500")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="min-price-eok" type="range" min="0" max="600"' in response.text
+    assert 'id="min-exclusive-area" type="range" min="0" max="620"' in response.text
+    assert 'id="recent-days" type="range" min="1" max="500"' in response.text
 
 
 def test_htmx_load_more_appends_cards_and_replaces_only_the_pager():
@@ -464,14 +579,15 @@ def test_home_renders_mobile_filter_groups_and_dynamic_region_controls():
     ):
         assert f'name="{field}"' in response.text
     assert 'id="sido-select"' in response.text
-    assert 'id="sigungu-select"' in response.text
+    assert 'id="municipality-select"' in response.text
+    assert 'id="district-select"' in response.text
     assert "min-h-11" in response.text
     assert "overflow-x-auto" in response.text
     assert "59㎡" in response.text
     assert "84㎡" in response.text
-    assert "region?.sigungu" in response.text
-    assert "sigungu.replaceChildren" in response.text
-    assert "sigungu.dataset.selected = \"\"" in response.text
+    assert "region?.municipalities" in response.text
+    assert "district.replaceChildren" in response.text
+    assert "populateDistricts" in response.text
     assert '<option value="11680"' not in response.text
     assert 'hx-trigger="submit, change delay:400ms, keyup changed delay:400ms"' in response.text
 
