@@ -407,6 +407,58 @@ def test_home_uses_three_level_region_selectors_and_drag_only_numeric_filters():
     assert 'name="min_room_count" inputmode=' not in response.text
 
 
+def test_home_slider_script_handles_an_unselected_municipality_without_stopping_initialization():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'JSON.parse(district.dataset.selectedCodes || "[]") || []' in response.text
+    assert 'document.querySelectorAll("[data-single-slider]")' in response.text
+
+
+def test_trade_specific_filters_are_collapsible_and_marked_for_dynamic_visibility():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/?trade_types=SALE")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="transaction-advanced-filters"' in response.text
+    assert 'data-price-label' in response.text
+    assert 'data-monthly-rent-filter' in response.text
+    assert 'data-trade-filter' in response.text
+    assert 'updateTradeFilters' in response.text
+    assert 'addEventListener("change", updateTradeFilters, true)' in response.text
+
+
 def test_slider_bounds_expand_for_saved_values_above_default_limits():
     engine = create_engine(
         "sqlite:///:memory:",

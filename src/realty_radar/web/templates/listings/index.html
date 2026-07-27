@@ -19,7 +19,7 @@
 <div data-range-slider="{{ key }}" data-unit="{{ unit }}" class="rounded-lg border border-slate-700 bg-slate-950/60 p-3">
     <input id="{{ min_id }}-value" type="hidden" name="{{ min_name }}" data-slider-name="{{ min_name }}" value="{{ min_value if min_value is not none else '' }}">
     <input id="{{ max_id }}-value" type="hidden" name="{{ max_name }}" data-slider-name="{{ max_name }}" value="{{ max_value if max_value is not none else '' }}">
-    <div class="flex items-center justify-between gap-3"><p class="text-sm font-medium text-slate-200">{{ label }}</p><span class="text-xs text-slate-500">드래그로 범위 선택</span></div>
+    <div class="flex items-center justify-between gap-3"><p {% if key == 'price' %}data-price-label{% endif %} class="text-sm font-medium text-slate-200">{{ label }}</p><span class="text-xs text-slate-500">드래그로 범위 선택</span></div>
     <div data-range-side="min" class="mt-3">
         <div class="flex items-center justify-between gap-3"><label for="{{ min_id }}" class="text-xs text-slate-400">최소</label><div class="flex items-center gap-2"><output data-range-output="min" class="text-sm font-semibold text-indigo-200">{% if min_value is not none %}{{ min_value }}{{ unit }}{% else %}제한 없음{% endif %}</output><button type="button" data-range-clear="min" class="min-h-9 rounded-md px-2 text-xs text-slate-300 underline underline-offset-2 hover:text-white">초기화</button></div></div>
         <input id="{{ min_id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ min_value if min_value is not none else minimum }}" data-range-handle="min" aria-label="{{ label }} 최소" class="h-11 w-full cursor-pointer accent-indigo-500">
@@ -57,10 +57,15 @@
             </div>
             <fieldset class="mt-4"><legend class="text-sm font-medium text-slate-200">거래</legend><div class="mt-2 flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">{% for code, label in [(1, '매매'), (2, '전세'), (3, '월세'), (4, '단기임대')] %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-full border border-slate-600 px-4 text-sm text-slate-200 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20"><input class="sr-only" type="checkbox" name="trade_types" value="{{ ['SALE', 'JEONSE', 'MONTHLY_RENT', 'SHORT_TERM'][loop.index0] }}" {% if code == 4 %}id="short-term-trade"{% endif %} {% if code in selected_trades %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
 
-            <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">{{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억') }}{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.') }}</div>
-            <div class="mt-2 flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="가격 빠른 선택"><button type="button" data-price-range=";5" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">5억 이하</button><button type="button" data-price-range="5;10" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">5~10억</button><button type="button" data-price-range="10;" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">10억 이상</button></div>
-            <div class="mt-4">{{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '84㎡는 약 25평이며, 1평은 약 3.3㎡입니다.') }}</div>
-            <div class="mt-2 flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="평형 빠른 선택">{% for area, pyeong in [(59, 18), (74, 22), (84, 25), (102, 31)] %}<button type="button" data-area="{{ area }}" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">{{ area }}㎡ (약 {{ pyeong }}평)</button>{% endfor %}</div>
+            <details id="transaction-advanced-filters" class="mt-4 rounded-xl border border-slate-700 bg-slate-950/40 p-4" {% if filters.min_price is not none or filters.max_price is not none or filters.max_monthly_rent is not none or filters.min_exclusive_area is not none or filters.max_exclusive_area is not none %}open{% endif %}>
+                <summary class="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-white"><span>가격·면적 상세 조건</span><span class="text-xs font-normal text-slate-400">거래 유형에 맞는 조건을 펼쳐 보세요</span></summary>
+                <div data-trade-filter class="mt-4 space-y-4">
+                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">{{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억') }}<div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.') }}</div></div>
+                    <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="가격 빠른 선택"><button type="button" data-price-range=";5" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">5억 이하</button><button type="button" data-price-range="5;10" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">5~10억</button><button type="button" data-price-range="10;" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">10억 이상</button></div>
+                    {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '84㎡는 약 25평이며, 1평은 약 3.3㎡입니다.') }}
+                    <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="평형 빠른 선택">{% for area, pyeong in [(59, 18), (74, 22), (84, 25), (102, 31)] %}<button type="button" data-area="{{ area }}" class="min-h-11 shrink-0 rounded-full border border-slate-600 px-4 text-sm text-slate-200">{{ area }}㎡ (약 {{ pyeong }}평)</button>{% endfor %}</div>
+                </div>
+            </details>
         </section>
 
         <section class="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
@@ -92,7 +97,7 @@
     const shortTermTrade = document.getElementById("short-term-trade");
     const excludeShortTerm = document.getElementById("exclude-short-term");
     const selectedDistrict = district.dataset.selected;
-    const selectedCodes = JSON.parse(district.dataset.selectedCodes || "[]").map(String).sort();
+    const selectedCodes = (JSON.parse(district.dataset.selectedCodes || "[]") || []).map(String).sort();
     const regionForSido = () => regions.find((item) => String(item.code) === sido.value);
     const sameCodes = (left, right) => left.map(String).sort().join(",") === right.map(String).sort().join(",");
     const option = (label, value = "", selected = false) => new Option(label, value, false, selected);
@@ -130,7 +135,7 @@
         const region = regionForSido();
         if (!region) return "";
         if (municipality.dataset.selected) return municipality.dataset.selected;
-        return (region.municipalities ?? []).find((item) => String(item.codes).includes(selectedDistrict) || sameCodes(item.codes, selectedCodes))?.name ?? "";
+        return (region.municipalities ?? []).find((item) => item.codes.map(String).includes(selectedDistrict) || sameCodes(item.codes, selectedCodes))?.name ?? "";
     };
     const initializeRegion = () => {
         const selectedMunicipality = inferredMunicipality();
@@ -140,7 +145,23 @@
     initializeRegion();
     sido.addEventListener("change", () => { populateMunicipalities(); populateDistricts(); }, true);
     municipality.addEventListener("change", () => { populateDistricts(); }, true);
-    shortTermTrade.addEventListener("change", () => { excludeShortTerm.checked = shortTermTrade.checked ? false : excludeShortTerm.checked; excludeShortTerm.disabled = shortTermTrade.checked; });
+    const tradeInputs = [...document.querySelectorAll('input[name="trade_types"]')];
+    const monthlyRentFilter = document.querySelector("[data-monthly-rent-filter]");
+    const updateTradeFilters = () => {
+        const selectedTrades = tradeInputs.filter((input) => input.checked).map((input) => input.value);
+        const onlySale = selectedTrades.length === 1 && selectedTrades[0] === "SALE";
+        const onlyJeonse = selectedTrades.length === 1 && selectedTrades[0] === "JEONSE";
+        const onlyRent = selectedTrades.length === 1 && ["MONTHLY_RENT", "SHORT_TERM"].includes(selectedTrades[0]);
+        const priceLabel = onlySale ? "매매가" : onlyJeonse ? "전세 보증금" : onlyRent ? "보증금" : "가격·보증금";
+        document.querySelectorAll("[data-price-label]").forEach((label) => { label.textContent = priceLabel; });
+        const showMonthlyRent = selectedTrades.length === 0 || selectedTrades.some((trade) => ["MONTHLY_RENT", "SHORT_TERM"].includes(trade));
+        monthlyRentFilter.hidden = !showMonthlyRent;
+        monthlyRentFilter.querySelectorAll("input").forEach((input) => { input.disabled = !showMonthlyRent; });
+        excludeShortTerm.checked = shortTermTrade.checked ? false : excludeShortTerm.checked;
+        excludeShortTerm.disabled = shortTermTrade.checked;
+    };
+    tradeInputs.forEach((input) => input.addEventListener("change", updateTradeFilters, true));
+    updateTradeFilters();
 
     const displayValue = (value, unit) => `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit}`;
     const scaled = (value, scale) => String(Math.round(Number(value) * scale * 100) / 100);
