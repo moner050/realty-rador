@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import md5
+import random
+import time
 from typing import Iterable
 
 from sqlalchemy import case, select, text, update
@@ -342,186 +344,196 @@ class ListingBatchWriter:
         return created, len(changed)
 
     def _commit_mysql(self, job_id: int, rows: list[IncomingListing], now: datetime) -> tuple[int, int]:
-        connection = self.session.connection()
-        self._ensure_mysql_staging_table(connection)
-        connection.execute(text("DELETE FROM incoming_listing"))
-        stage_rows = [self._stage_values(row, now) for row in rows]
-        connection.execute(
-            text(
-                """
-                INSERT INTO incoming_listing (
-                    article_id, complex_id, region_code, complex_name, normalized_complex_name,
-                    address, construction_year, household_count, trade_type, primary_price,
-                    monthly_rent, exclusive_area_x100, supply_area_x100, floor_no, total_floor,
-                    floor_band, direction_code, mortgage_code, is_top_floor, is_short_term,
-                    is_direct_trade, is_safe_lessor_hug,
-                    building_name, description, listing_state_hash, complex_state_hash, observed_at
-                ) VALUES (
-                    :article_id, :complex_id, :region_code, :complex_name, :normalized_complex_name,
-                    :address, :construction_year, :household_count, :trade_type, :primary_price,
-                    :monthly_rent, :exclusive_area_x100, :supply_area_x100, :floor_no, :total_floor,
-                    :floor_band, :direction_code, :mortgage_code, :is_top_floor, :is_short_term,
-                    :is_direct_trade, :is_safe_lessor_hug,
-                    :building_name, :description, :listing_state_hash, :complex_state_hash, :observed_at
+        max_attempts = 5
+        for attempt in range(1, max_attempts + 1):
+            try:
+                connection = self.session.connection()
+                self._ensure_mysql_staging_table(connection)
+                connection.execute(text("DELETE FROM incoming_listing"))
+                stage_rows = [self._stage_values(row, now) for row in rows]
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO incoming_listing (
+                            article_id, complex_id, region_code, complex_name, normalized_complex_name,
+                            address, construction_year, household_count, trade_type, primary_price,
+                            monthly_rent, exclusive_area_x100, supply_area_x100, floor_no, total_floor,
+                            floor_band, direction_code, mortgage_code, is_top_floor, is_short_term,
+                            is_direct_trade, is_safe_lessor_hug,
+                            building_name, description, listing_state_hash, complex_state_hash, observed_at
+                        ) VALUES (
+                            :article_id, :complex_id, :region_code, :complex_name, :normalized_complex_name,
+                            :address, :construction_year, :household_count, :trade_type, :primary_price,
+                            :monthly_rent, :exclusive_area_x100, :supply_area_x100, :floor_no, :total_floor,
+                            :floor_band, :direction_code, :mortgage_code, :is_top_floor, :is_short_term,
+                            :is_direct_trade, :is_safe_lessor_hug,
+                            :building_name, :description, :listing_state_hash, :complex_state_hash, :observed_at
+                        )
+                        """
+                    ),
+                    stage_rows,
                 )
-                """
-            ),
-            stage_rows,
-        )
 
-        created = int(
-            connection.scalar(
-                text(
-                    """
-                    SELECT COUNT(*)
-                    FROM incoming_listing incoming
-                    LEFT JOIN listing_current current ON current.article_id = incoming.article_id
-                    WHERE current.article_id IS NULL
-                    """
+                created = int(
+                    connection.scalar(
+                        text(
+                            """
+                            SELECT COUNT(*)
+                            FROM incoming_listing incoming
+                            LEFT JOIN listing_current current ON current.article_id = incoming.article_id
+                            WHERE current.article_id IS NULL
+                            """
+                        )
+                    )
+                    or 0
                 )
-            )
-            or 0
-        )
-        updated = int(
-            connection.scalar(
-                text(
-                    """
-                    SELECT COUNT(*)
-                    FROM incoming_listing incoming
-                    JOIN listing_current current ON current.article_id = incoming.article_id
-                    WHERE current.state_hash <> incoming.listing_state_hash
-                       OR current.lifecycle <> :active
-                    """
-                ),
-                {"active": LIFECYCLE_ACTIVE},
-            )
-            or 0
-        )
+                updated = int(
+                    connection.scalar(
+                        text(
+                            """
+                            SELECT COUNT(*)
+                            FROM incoming_listing incoming
+                            JOIN listing_current current ON current.article_id = incoming.article_id
+                            WHERE current.state_hash <> incoming.listing_state_hash
+                               OR current.lifecycle <> :active
+                            """
+                        ),
+                        {"active": LIFECYCLE_ACTIVE},
+                    )
+                    or 0
+                )
 
-        connection.execute(
-            text(
-                """
-                INSERT INTO complex_current (
-                    complex_id, region_code, name, normalized_name, address,
-                    construction_year, household_count, state_hash,
-                    first_seen_at, last_seen_at, updated_at
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO complex_current (
+                            complex_id, region_code, name, normalized_name, address,
+                            construction_year, household_count, state_hash,
+                            first_seen_at, last_seen_at, updated_at
+                        )
+                        SELECT
+                            complex_id, MIN(region_code), MIN(complex_name), MIN(normalized_complex_name), MIN(address),
+                            MIN(construction_year), MIN(household_count), MIN(complex_state_hash),
+                            MIN(observed_at), MAX(observed_at), MAX(observed_at)
+                        FROM incoming_listing
+                        GROUP BY complex_id
+                        ON DUPLICATE KEY UPDATE
+                            region_code = VALUES(region_code),
+                            name = VALUES(name),
+                            normalized_name = VALUES(normalized_name),
+                            address = VALUES(address),
+                            construction_year = VALUES(construction_year),
+                            household_count = VALUES(household_count),
+                            last_seen_at = VALUES(last_seen_at),
+                            updated_at = IF(state_hash <> VALUES(state_hash), VALUES(updated_at), updated_at),
+                            state_hash = VALUES(state_hash)
+                        """
+                    )
                 )
-                SELECT
-                    complex_id, MIN(region_code), MIN(complex_name), MIN(normalized_complex_name), MIN(address),
-                    MIN(construction_year), MIN(household_count), MIN(complex_state_hash),
-                    MIN(observed_at), MAX(observed_at), MAX(observed_at)
-                FROM incoming_listing
-                GROUP BY complex_id
-                ON DUPLICATE KEY UPDATE
-                    region_code = VALUES(region_code),
-                    name = VALUES(name),
-                    normalized_name = VALUES(normalized_name),
-                    address = VALUES(address),
-                    construction_year = VALUES(construction_year),
-                    household_count = VALUES(household_count),
-                    last_seen_at = VALUES(last_seen_at),
-                    updated_at = IF(state_hash <> VALUES(state_hash), VALUES(updated_at), updated_at),
-                    state_hash = VALUES(state_hash)
-                """
-            )
-        )
-        connection.execute(
-            text(
-                """
-                INSERT IGNORE INTO listing_history (
-                    article_id, complex_id, job_id, event_type, change_mask, primary_price,
-                    monthly_rent, lifecycle, mortgage_code, floor_no, total_floor, direction_code,
-                    state_hash, occurred_at
+                connection.execute(
+                    text(
+                        """
+                        INSERT IGNORE INTO listing_history (
+                            article_id, complex_id, job_id, event_type, change_mask, primary_price,
+                            monthly_rent, lifecycle, mortgage_code, floor_no, total_floor, direction_code,
+                            state_hash, occurred_at
+                        )
+                        SELECT
+                            incoming.article_id,
+                            incoming.complex_id,
+                            :job_id,
+                            CASE WHEN current.lifecycle <> :active THEN :reactivated ELSE :updated END,
+                            (CASE WHEN current.primary_price <> incoming.primary_price THEN :price_mask ELSE 0 END)
+                            | (CASE WHEN current.monthly_rent <> incoming.monthly_rent THEN :rent_mask ELSE 0 END)
+                            | (CASE WHEN COALESCE(current.floor_no, -999) <> COALESCE(incoming.floor_no, -999)
+                                      OR COALESCE(current.total_floor, 0) <> COALESCE(incoming.total_floor, 0)
+                                   THEN :floor_mask ELSE 0 END)
+                            | (CASE WHEN current.direction_code <> incoming.direction_code THEN :direction_mask ELSE 0 END)
+                            | (CASE WHEN current.lifecycle <> :active THEN :lifecycle_mask ELSE 0 END),
+                            incoming.primary_price, incoming.monthly_rent, :active, current.mortgage_code,
+                            incoming.floor_no, incoming.total_floor, incoming.direction_code,
+                            incoming.listing_state_hash, incoming.observed_at
+                        FROM incoming_listing incoming
+                        JOIN listing_current current ON current.article_id = incoming.article_id
+                        WHERE current.state_hash <> incoming.listing_state_hash
+                           OR current.lifecycle <> :active
+                        """
+                    ),
+                    {
+                        "job_id": job_id,
+                        "active": LIFECYCLE_ACTIVE,
+                        "removed": LIFECYCLE_REMOVED,
+                        "updated": HISTORY_UPDATED,
+                        "reactivated": HISTORY_REACTIVATED,
+                        "price_mask": CHANGE_PRICE,
+                        "rent_mask": CHANGE_MONTHLY_RENT,
+                        "floor_mask": CHANGE_FLOOR,
+                        "direction_mask": CHANGE_DIRECTION,
+                        "lifecycle_mask": CHANGE_LIFECYCLE,
+                    },
                 )
-                SELECT
-                    incoming.article_id,
-                    incoming.complex_id,
-                    :job_id,
-                    CASE WHEN current.lifecycle <> :active THEN :reactivated ELSE :updated END,
-                    (CASE WHEN current.primary_price <> incoming.primary_price THEN :price_mask ELSE 0 END)
-                    | (CASE WHEN current.monthly_rent <> incoming.monthly_rent THEN :rent_mask ELSE 0 END)
-                    | (CASE WHEN COALESCE(current.floor_no, -999) <> COALESCE(incoming.floor_no, -999)
-                              OR COALESCE(current.total_floor, 0) <> COALESCE(incoming.total_floor, 0)
-                           THEN :floor_mask ELSE 0 END)
-                    | (CASE WHEN current.direction_code <> incoming.direction_code THEN :direction_mask ELSE 0 END)
-                    | (CASE WHEN current.lifecycle <> :active THEN :lifecycle_mask ELSE 0 END),
-                    incoming.primary_price, incoming.monthly_rent, :active, current.mortgage_code,
-                    incoming.floor_no, incoming.total_floor, incoming.direction_code,
-                    incoming.listing_state_hash, incoming.observed_at
-                FROM incoming_listing incoming
-                JOIN listing_current current ON current.article_id = incoming.article_id
-                WHERE current.state_hash <> incoming.listing_state_hash
-                   OR current.lifecycle <> :active
-                """
-            ),
-            {
-                "job_id": job_id,
-                "active": LIFECYCLE_ACTIVE,
-                "removed": LIFECYCLE_REMOVED,
-                "updated": HISTORY_UPDATED,
-                "reactivated": HISTORY_REACTIVATED,
-                "price_mask": CHANGE_PRICE,
-                "rent_mask": CHANGE_MONTHLY_RENT,
-                "floor_mask": CHANGE_FLOOR,
-                "direction_mask": CHANGE_DIRECTION,
-                "lifecycle_mask": CHANGE_LIFECYCLE,
-            },
-        )
-        connection.execute(
-            text(
-                """
-                INSERT INTO listing_current (
-                    article_id, complex_id, region_code, complex_name, address, construction_year,
-                    household_count, trade_type, primary_price, monthly_rent, exclusive_area_x100,
-                    supply_area_x100, floor_no, total_floor, floor_band, direction_code, mortgage_code,
-                    is_top_floor, is_short_term, is_direct_trade, is_safe_lessor_hug,
-                    building_name, description, lifecycle, miss_count,
-                    state_hash, last_seen_job_id, first_seen_at, last_seen_at, last_changed_at, removed_at
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO listing_current (
+                            article_id, complex_id, region_code, complex_name, address, construction_year,
+                            household_count, trade_type, primary_price, monthly_rent, exclusive_area_x100,
+                            supply_area_x100, floor_no, total_floor, floor_band, direction_code, mortgage_code,
+                            is_top_floor, is_short_term, is_direct_trade, is_safe_lessor_hug,
+                            building_name, description, lifecycle, miss_count,
+                            state_hash, last_seen_job_id, first_seen_at, last_seen_at, last_changed_at, removed_at
+                        )
+                        SELECT
+                            article_id, complex_id, region_code, complex_name, address, construction_year,
+                            household_count, trade_type, primary_price, monthly_rent, exclusive_area_x100,
+                            supply_area_x100, floor_no, total_floor, floor_band, direction_code, mortgage_code,
+                            is_top_floor, is_short_term, is_direct_trade, is_safe_lessor_hug,
+                            building_name, description, :active, 0,
+                            listing_state_hash, :job_id, observed_at, observed_at, observed_at, NULL
+                        FROM incoming_listing
+                        ON DUPLICATE KEY UPDATE
+                            last_changed_at = IF(state_hash <> VALUES(state_hash) OR lifecycle <> :active,
+                                                  VALUES(last_seen_at), last_changed_at),
+                            complex_id = VALUES(complex_id),
+                            region_code = VALUES(region_code),
+                            complex_name = VALUES(complex_name),
+                            address = VALUES(address),
+                            construction_year = VALUES(construction_year),
+                            household_count = VALUES(household_count),
+                            trade_type = VALUES(trade_type),
+                            primary_price = VALUES(primary_price),
+                            monthly_rent = VALUES(monthly_rent),
+                            exclusive_area_x100 = VALUES(exclusive_area_x100),
+                            supply_area_x100 = VALUES(supply_area_x100),
+                            floor_no = VALUES(floor_no),
+                            total_floor = VALUES(total_floor),
+                            floor_band = VALUES(floor_band),
+                            direction_code = VALUES(direction_code),
+                            is_top_floor = VALUES(is_top_floor),
+                            is_short_term = VALUES(is_short_term),
+                            is_direct_trade = VALUES(is_direct_trade),
+                            is_safe_lessor_hug = VALUES(is_safe_lessor_hug),
+                            building_name = VALUES(building_name),
+                            description = VALUES(description),
+                            lifecycle = :active,
+                            miss_count = 0,
+                            state_hash = VALUES(state_hash),
+                            last_seen_job_id = VALUES(last_seen_job_id),
+                            last_seen_at = VALUES(last_seen_at),
+                            removed_at = NULL
+                        """
+                    ),
+                    {"active": LIFECYCLE_ACTIVE, "job_id": job_id},
                 )
-                SELECT
-                    article_id, complex_id, region_code, complex_name, address, construction_year,
-                    household_count, trade_type, primary_price, monthly_rent, exclusive_area_x100,
-                    supply_area_x100, floor_no, total_floor, floor_band, direction_code, mortgage_code,
-                    is_top_floor, is_short_term, is_direct_trade, is_safe_lessor_hug,
-                    building_name, description, :active, 0,
-                    listing_state_hash, :job_id, observed_at, observed_at, observed_at, NULL
-                FROM incoming_listing
-                ON DUPLICATE KEY UPDATE
-                    last_changed_at = IF(state_hash <> VALUES(state_hash) OR lifecycle <> :active,
-                                          VALUES(last_seen_at), last_changed_at),
-                    complex_id = VALUES(complex_id),
-                    region_code = VALUES(region_code),
-                    complex_name = VALUES(complex_name),
-                    address = VALUES(address),
-                    construction_year = VALUES(construction_year),
-                    household_count = VALUES(household_count),
-                    trade_type = VALUES(trade_type),
-                    primary_price = VALUES(primary_price),
-                    monthly_rent = VALUES(monthly_rent),
-                    exclusive_area_x100 = VALUES(exclusive_area_x100),
-                    supply_area_x100 = VALUES(supply_area_x100),
-                    floor_no = VALUES(floor_no),
-                    total_floor = VALUES(total_floor),
-                    floor_band = VALUES(floor_band),
-                    direction_code = VALUES(direction_code),
-                    is_top_floor = VALUES(is_top_floor),
-                    is_short_term = VALUES(is_short_term),
-                    is_direct_trade = VALUES(is_direct_trade),
-                    is_safe_lessor_hug = VALUES(is_safe_lessor_hug),
-                    building_name = VALUES(building_name),
-                    description = VALUES(description),
-                    lifecycle = :active,
-                    miss_count = 0,
-                    state_hash = VALUES(state_hash),
-                    last_seen_job_id = VALUES(last_seen_job_id),
-                    last_seen_at = VALUES(last_seen_at),
-                    removed_at = NULL
-                """
-            ),
-            {"active": LIFECYCLE_ACTIVE, "job_id": job_id},
-        )
-        self.session.commit()
-        return created, updated
+                self.session.commit()
+                return created, updated
+            except Exception as exc:
+                is_deadlock = "1213" in str(exc) or "Deadlock" in str(exc)
+                if is_deadlock and attempt < max_attempts:
+                    self.session.rollback()
+                    time.sleep(0.1 * (2 ** (attempt - 1)) + random.uniform(0.01, 0.05))
+                    continue
+                raise
 
     def _increment_job_counts(
         self,
@@ -532,19 +544,30 @@ class ListingBatchWriter:
         updated: int,
         rejected: int,
     ) -> None:
-        self.session.execute(
-            update(CrawlJob)
-            .where(CrawlJob.job_id == job_id)
-            .values(
-                fetched_count=CrawlJob.fetched_count + fetched,
-                committed_count=CrawlJob.committed_count + committed,
-                created_count=CrawlJob.created_count + created,
-                updated_count=CrawlJob.updated_count + updated,
-                rejected_count=CrawlJob.rejected_count + rejected,
-                updated_at=utc_now(),
-            )
-        )
-        self.session.commit()
+        max_attempts = 5
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.session.execute(
+                    update(CrawlJob)
+                    .where(CrawlJob.job_id == job_id)
+                    .values(
+                        fetched_count=CrawlJob.fetched_count + fetched,
+                        committed_count=CrawlJob.committed_count + committed,
+                        created_count=CrawlJob.created_count + created,
+                        updated_count=CrawlJob.updated_count + updated,
+                        rejected_count=CrawlJob.rejected_count + rejected,
+                        updated_at=utc_now(),
+                    )
+                )
+                self.session.commit()
+                return
+            except Exception as exc:
+                is_deadlock = "1213" in str(exc) or "Deadlock" in str(exc)
+                if is_deadlock and attempt < max_attempts:
+                    self.session.rollback()
+                    time.sleep(0.1 * (2 ** (attempt - 1)) + random.uniform(0.01, 0.05))
+                    continue
+                raise
 
     @staticmethod
     def _change_mask(

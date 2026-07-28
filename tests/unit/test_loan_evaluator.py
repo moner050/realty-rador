@@ -86,11 +86,11 @@ def test_bogumjari_eligible_evaluation():
 
 
 def test_neonatal_purchase_eligible_evaluation():
-    """신생아 특례대출 9억 이하 매물 및 소득 2억 이하 적격성 평가 테스트."""
+    """신생아 특례대출 9억 이하 매물 및 소득 1.3억/맞벌이 2억 이하 적격성 평가 테스트."""
     evaluator = LoanRuleEvaluator()
     applicant = ApplicantProfile(
         is_homeless=True,
-        annual_income=150_000_000,  # 소득 2억 이하
+        annual_income=120_000_000,  # 외벌이 1.3억 이하
         has_newborn=True,  # 2년 이내 출산 가구
     )
 
@@ -103,8 +103,8 @@ def test_neonatal_purchase_eligible_evaluation():
     )
 
     assert res.status == LoanEligibilityStatus.ELIGIBLE
-    # 수도권 LTV 70%: 8.5억 * 0.7 = 5.95억 -> 최대 한도 5.0억 적용
-    assert res.max_loan_amount == 500_000_000
+    # 수도권 LTV 70%: 8.5억 * 0.7 = 5.95억 -> 최신 2025.06 개정 상한 한도 4.0억 적용
+    assert res.max_loan_amount == 400_000_000
 
 
 def test_didimdol_income_exceeded_ineligible():

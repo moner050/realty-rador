@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     admin_password: str = Field(default="admin1234", validation_alias="ADMIN_PASSWORD")
     secret_key: str = Field(default="realty-radar-secret-key-2026", validation_alias="SECRET_KEY")
 
+    google_client_id: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, validation_alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = Field(default="http://localhost:8000/auth/google/callback", validation_alias="GOOGLE_REDIRECT_URI")
+
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

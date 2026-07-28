@@ -20,7 +20,7 @@ from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSear
 from realty_radar.domain.loan.entities import LoanEligibilityStatus
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.session import get_db
-from realty_radar.web.auth import SESSION_COOKIE_NAME, is_authenticated, verify_session_token
+from realty_radar.web.auth import SESSION_COOKIE_NAME, is_authenticated, verify_session_token, get_current_username, is_admin_user
 from realty_radar.web.jinja_filters import register_jinja_filters
 from realty_radar.web.routes.settings import get_request_user_profile, load_user_search_filter, save_user_search_filter
 
@@ -330,6 +330,44 @@ def _listing_items(result):
     return result.items
 
 
+def _favorite_listing_payload(item) -> dict[str, object]:
+    return {
+        "article_id": item.article_id,
+        "complex_id": item.complex_id,
+        "complex_name": item.complex_name,
+        "address": item.address,
+        "trade_type": item.trade_type,
+        "primary_price": item.primary_price,
+        "exclusive_area_x100": item.exclusive_area_x100,
+        "floor_no": item.floor_no,
+        "direction_code": item.direction_code,
+        "household_count": item.household_count,
+        "construction_year": item.construction_year,
+        "eligible_loans": [
+            {"loan_type_name": loan.loan_type_name} for loan in getattr(item, "eligible_loans", [])
+        ],
+    }
+
+
+def _favorite_complex_payload(group) -> dict[str, object]:
+    return {
+        "complex_id": group.complex_id,
+        "complex_name": group.complex_name,
+        "address": group.address,
+    }
+
+
+def _favorite_payload_context(result) -> dict[str, dict[int, dict[str, object]]]:
+    return {
+        "favorite_listing_payloads": {
+            item.article_id: _favorite_listing_payload(item) for item in _listing_items(result)
+        },
+        "favorite_complex_payloads": {
+            group.complex_id: _favorite_complex_payload(group) for group in result.grouped_items
+        },
+    }
+
+
 def _loan_calculation_criteria(item, applicant, evaluation) -> list[tuple[str, str]]:
     area = Decimal(item.exclusive_area_x100) / 100 if item.exclusive_area_x100 is not None else None
     price_label = "매매가" if item.trade_type == 1 else "보증금"
@@ -510,6 +548,7 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
     applicant = get_request_user_profile(request)
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
     result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
+    favorite_payloads = _favorite_payload_context(result)
     page_url = request.url.remove_query_params("append")
     next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
     previous_url = None
@@ -533,12 +572,15 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "applicant": applicant,
             "promissory_note_entries": [entry.to_dict() for entry in applicant.promissory_notes],
             "is_authenticated": is_authenticated(request),
+            "is_admin": is_admin_user(request),
+            "current_username": get_current_username(request),
             "region_options": _region_options(),
             "selected_municipality": _selected_municipality(filters),
             "slider_limits": _slider_limits(filters),
             "sort_options": SORT_OPTIONS,
             "sido_labels": sido_labels,
             "sigungu_labels": sigungu_labels,
+            **favorite_payloads,
         },
     )
     _log_search_diagnostics(result, started_at)
@@ -559,6 +601,7 @@ def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_h
         "sido_labels": sido_labels,
         "sigungu_labels": sigungu_labels,
         "is_authenticated": is_authenticated(request),
+        "is_admin": is_admin_user(request),
         "search_error": True,
     }
     response = templates.TemplateResponse(
@@ -632,6 +675,9 @@ def complex_listings(
             status_code=400,
         )
     result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
+    favorite_listing_payloads = {
+        item.article_id: _favorite_listing_payload(item) for item in result.items
+    }
     page_url = request.url.remove_query_params("cursor")
     next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
     response = templates.TemplateResponse(
@@ -641,6 +687,7 @@ def complex_listings(
             "listings": result.items,
             "next_url": next_url,
             "complex_id": complex_id,
+            "favorite_listing_payloads": favorite_listing_payloads,
         },
     )
     _log_search_diagnostics(result, started_at)

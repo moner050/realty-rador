@@ -276,3 +276,39 @@ class CrawlScope(Base):
     error_message = Column(String(512), nullable=True)
     started_at = Column(DateTime6, nullable=True)
     finished_at = Column(DateTime6, nullable=True)
+
+
+class UserAccount(Base):
+    """간소화 회원가입 및 인증을 위한 사용자 계정 모델."""
+
+    __tablename__ = "user_account"
+    __table_args__ = (
+        Index("ux_user_username", "username", unique=True),
+        {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
+    )
+
+    id = Column(UnsignedInteger, primary_key=True, autoincrement=True)
+    username = Column(String(50), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, server_default=text("'USER'"), default="USER")
+    created_at = Column(DateTime6, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+    preference = relationship("UserPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+
+class UserPreference(Base):
+    """사용자의 즐겨찾기, 필터링 및 대출 자격 설정을 보존하는 모델."""
+
+    __tablename__ = "user_preference"
+    __table_args__ = (
+        {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
+    )
+
+    user_id = Column(UnsignedInteger, ForeignKey("user_account.id", ondelete="CASCADE"), primary_key=True)
+    favorites_json = Column(JSON, nullable=True)
+    filters_json = Column(JSON, nullable=True)
+    loan_profile_json = Column(JSON, nullable=True)
+    updated_at = Column(DateTime6, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+    user = relationship("UserAccount", back_populates="preference")
+

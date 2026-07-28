@@ -1,12 +1,36 @@
 import hmac
 import hashlib
 import base64
-from fastapi import Request, HTTPException, status
-from fastapi.responses import RedirectResponse
+import os
+from typing import Optional
+
+from fastapi import Request, HTTPException, Depends, status
+from sqlalchemy.orm import Session
 
 from realty_radar.config import settings
+from realty_radar.infrastructure.database.models.v2 import UserAccount
+from realty_radar.infrastructure.database.session import SessionFactory, get_db
 
 SESSION_COOKIE_NAME = "realty_session"
+
+
+def hash_password(password: str) -> str:
+    """비밀번호를 PBKDF2 HMAC SHA256 해시 문자열로 생성합니다."""
+    salt = os.urandom(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return f"{salt.hex()}:${key.hex()}"
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """평문 비밀번호와 저장된 해시 문자열의 일치 여부를 검증합니다."""
+    try:
+        salt_hex, key_hex = hashed_password.split(":$")
+        salt = bytes.fromhex(salt_hex)
+        expected_key = bytes.fromhex(key_hex)
+        key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100000)
+        return hmac.compare_digest(key, expected_key)
+    except Exception:
+        return False
 
 
 def create_session_token(username: str) -> str:
@@ -55,20 +79,53 @@ def require_authentication(request: Request) -> str:
     username = verify_session_token(token)
 
     if not username:
-        # HTMX 비동기 요청일 경우 HTMX 전용 리다이렉트 헤더 전송 지원
         if request.headers.get("HX-Request") == "true":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="로그인이 필요합니다.",
                 headers={"HX-Redirect": "/login"},
             )
-        # 일반 HTTP GET/POST 요청 시 /login으로 리다이렉트
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
             headers={"Location": "/login"},
         )
 
     return username
+
+
+def get_current_user_account(request: Request, db: Session = Depends(get_db)) -> UserAccount:
+    """현재 로그인된 사용자의 UserAccount 모델을 반환합니다."""
+    username = require_authentication(request)
+    user = db.query(UserAccount).filter(UserAccount.username == username).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자 계정을 찾을 수 없습니다.")
+    return user
+
+
+def require_admin(request: Request, db: Session = Depends(get_db)) -> UserAccount:
+    """관리자(ADMIN) 권한 전용 라우터 보호 의존성."""
+    user = get_current_user_account(request, db)
+    if user.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자(ADMIN) 권한이 필요합니다.",
+        )
+    return user
+
+
+def is_admin_user(request: Request, db: Optional[Session] = None) -> bool:
+    """현재 사용자가 ADMIN 권한인지 여부를 반환합니다."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    username = verify_session_token(token)
+    if not username:
+        return False
+    if db is not None:
+        user = db.query(UserAccount).filter(UserAccount.username == username).first()
+        return user is not None and user.role == "ADMIN"
+
+    with SessionFactory() as session:
+        user = session.query(UserAccount).filter(UserAccount.username == username).first()
+        return user is not None and user.role == "ADMIN"
 
 
 def get_current_username(request: Request) -> str:

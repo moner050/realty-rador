@@ -25,67 +25,118 @@
 {%- endmacro %}
 
 {% macro loan_detail(loan) -%}
-<section class="rounded-lg border border-slate-700 bg-slate-950/60 p-3 text-sm">
+<section class="rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-950/60 p-3.5 text-sm transition-colors">
     <div class="flex flex-wrap items-center justify-between gap-2">
-        <h4 class="font-semibold text-white">{{ loan.loan_type_name }}</h4>
-        <span class="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-200">{{ loan_status_label(loan) }}</span>
+        <h4 class="font-extrabold text-slate-900 dark:text-white">{{ loan.loan_type_name }}</h4>
+        <span class="rounded-full bg-emerald-600/15 dark:bg-emerald-500/20 px-2.5 py-0.5 text-xs font-extrabold text-emerald-800 dark:text-emerald-200 border border-emerald-500/40">{{ loan_status_label(loan) }}</span>
     </div>
-    <p class="mt-2 text-xs text-slate-300">{{ loan.reason or '판정 사유를 확인할 수 없습니다.' }}</p>
+    <p class="mt-2 text-xs font-semibold text-slate-800 dark:text-slate-300">{{ loan.reason or '판정 사유를 확인할 수 없습니다.' }}</p>
     <dl class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-        <div><dt class="text-slate-500">최대 가능액</dt><dd class="font-medium text-slate-100">{{ loan.max_loan_amount | korean_money if loan.max_loan_amount is not none else '확인 필요' }}</dd></div>
-        <div><dt class="text-slate-500">예상 연이율</dt><dd class="font-medium text-slate-100">{{ '%.2f' | format(loan.interest_rate) ~ '%' if loan.interest_rate is not none else '확인 필요' }}</dd></div>
-        <div><dt class="text-slate-500">월 예상 이자</dt><dd class="font-medium text-slate-100">{{ loan.estimated_monthly_interest | korean_money if loan.estimated_monthly_interest is not none else '확인 필요' }}</dd></div>
+        <div><dt class="font-bold text-slate-600 dark:text-slate-400">최대 가능액</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ loan.max_loan_amount | korean_money if loan.max_loan_amount is not none else '확인 필요' }}</dd></div>
+        <div><dt class="font-bold text-slate-600 dark:text-slate-400">예상 연이율</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ '%.2f' | format(loan.interest_rate) ~ '%' if loan.interest_rate is not none else '확인 필요' }}</dd></div>
+        <div><dt class="font-bold text-slate-600 dark:text-slate-400">월 예상 이자</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ loan.estimated_monthly_interest | korean_money if loan.estimated_monthly_interest is not none else '확인 필요' }}</dd></div>
     </dl>
-    <div class="mt-3 border-t border-slate-800 pt-3">
-        <h5 class="text-xs font-semibold text-indigo-200">대출 계산 기준</h5>
+    <div class="mt-3 border-t border-slate-300 dark:border-slate-800 pt-3">
+        <h5 class="text-xs font-bold text-indigo-800 dark:text-indigo-200">대출 계산 기준</h5>
         <dl class="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
-            {% for label, value in loan.calculation_criteria %}<div class="flex justify-between gap-2"><dt class="text-slate-500">{{ label }}</dt><dd class="text-right text-slate-200">{{ value }}</dd></div>{% endfor %}
+            {% for label, value in loan.calculation_criteria %}<div class="flex justify-between gap-2"><dt class="font-bold text-slate-600 dark:text-slate-400">{{ label }}</dt><dd class="text-right font-bold text-slate-900 dark:text-slate-200">{{ value }}</dd></div>{% endfor %}
         </dl>
     </div>
 </section>
 {%- endmacro %}
 
-{% macro listing_card(item) -%}
-<article class="relative grid gap-4 rounded-xl border border-slate-700 bg-slate-800 p-4 transition-colors hover:border-indigo-400 focus-within:border-indigo-400 md:grid-cols-[minmax(0,1fr)_auto] md:items-center" data-listing-card x-data="{ open: false }" tabindex="0" @click="if (!open) { open = true; $refs.dialog.showModal(); }" @keydown.enter.prevent="if (!open) { open = true; $refs.dialog.showModal(); }" @keydown.space.prevent="if (!open) { open = true; $refs.dialog.showModal(); }">
-    <div class="order-2 flex shrink-0 items-center justify-between gap-3 md:order-none md:col-start-2 md:row-start-1 md:flex-col md:items-end">
-        <p class="whitespace-nowrap text-lg font-bold text-indigo-300">{{ item.primary_price | korean_money }}{% if item.monthly_rent %}<span class="block text-xs font-normal text-slate-300">월 {{ item.monthly_rent | korean_money }}</span>{% endif %}</p>
-        <a class="shrink-0 whitespace-nowrap rounded-lg border border-indigo-500/60 px-3 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20" target="_blank" rel="noopener" href="https://fin.land.naver.com/articles/{{ item.article_id }}" @click.stop>매물 링크</a>
+{% macro listing_card(item, favorite_payload) -%}
+<article class="theme-listing-card relative grid gap-4 rounded-xl border border-slate-300/80 dark:border-slate-700 bg-white dark:bg-slate-800 p-4.5 shadow-sm hover:shadow-xl transition-all duration-200 hover:border-indigo-500 dark:hover:border-indigo-400 focus-within:border-indigo-500 md:grid-cols-[minmax(0,1fr)_auto] md:items-start text-slate-900 dark:text-slate-100" data-listing-card x-data="{ open: false }" tabindex="0" @click="if (!open) { open = true; $refs.dialog.showModal(); }" @keydown.enter.prevent="if (!open) { open = true; $refs.dialog.showModal(); }" @keydown.space.prevent="if (!open) { open = true; $refs.dialog.showModal(); }">
+    <div class="order-2 flex shrink-0 items-center justify-between gap-3 md:order-none md:col-start-2 md:row-start-1 md:flex-col md:items-end md:gap-3">
+        <div class="flex items-center gap-2">
+            <p class="whitespace-nowrap text-xl font-extrabold text-indigo-700 dark:text-indigo-300">{{ item.primary_price | korean_money }}{% if item.monthly_rent %}<span class="block text-xs font-semibold text-slate-700 dark:text-slate-300">월 {{ item.monthly_rent | korean_money }}</span>{% endif %}</p>
+            <!-- 개별 매물 즐겨찾기 토글 버튼 -->
+            <button type="button" onclick="event.stopPropagation(); toggleListingFavorite({{ favorite_payload | tojson }});" class="group/fav p-1.5 rounded-lg bg-slate-100 dark:bg-slate-900/80 hover:bg-amber-500/20 border border-slate-300 dark:border-slate-700 hover:border-amber-500/50 text-slate-600 dark:text-slate-400 hover:text-amber-500 transition-all" title="이 매물 즐겨찾기 추가/제거" data-fav-btn-listing="{{ item.article_id }}">
+                <svg class="w-4 h-4 fill-current transition-transform group-hover/fav:scale-110" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+            </button>
+        </div>
+        <a class="shrink-0 whitespace-nowrap rounded-lg border border-indigo-600 bg-indigo-50 dark:bg-transparent px-3 py-2 text-xs font-bold text-indigo-800 dark:text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all shadow-sm" target="_blank" rel="noopener" href="https://fin.land.naver.com/articles/{{ item.article_id }}" @click.stop>매물 링크 ↗</a>
     </div>
     <div class="min-w-0 md:row-span-2">
-        <div class="flex min-w-0 flex-wrap items-center gap-2"><span class="shrink-0 rounded bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-200">{{ trade_label(item.trade_type) }}</span>{% if item.is_direct_trade %}<span class="shrink-0 rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-200">직거래 표기</span>{% endif %}{% if item.is_safe_lessor_hug %}<span class="shrink-0 rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-200">HUG 안심임대인 표기</span>{% endif %}<h2 class="min-w-0 truncate font-bold text-white">{{ item.complex_name }}</h2></div>
-        <p class="mt-1 truncate text-sm text-slate-400">{{ item.address }}</p>
-        <div class="mt-2 flex flex-wrap gap-1.5 text-xs font-medium">
-            {% if item.exclusive_area_x100 is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-indigo-500/15 px-2 py-1 text-indigo-200">전용 {{ item.exclusive_area_x100 / 100 }}㎡ · {{ (item.exclusive_area_x100 / 100) | to_pyeong }}</span>{% endif %}
-            <span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">{{ item.floor_no if item.floor_no is not none else '-' }}/{{ item.total_floor if item.total_floor is not none else '-' }}층 · {{ direction_label(item.direction_code) }}</span>
-            <span class="inline-flex whitespace-nowrap rounded-md bg-sky-500/15 px-2 py-1 text-sky-300">{{ item.household_count | comma_number }}세대</span>
-            <span class="inline-flex whitespace-nowrap rounded-md bg-amber-500/15 px-2 py-1 text-amber-300">{{ item.construction_year or '-' }}년 준공</span>
-            {% if item.room_count is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">방 {{ item.room_count }}</span>{% endif %}
-            {% if item.bathroom_count is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">욕실 {{ item.bathroom_count }}</span>{% endif %}
-            {% if item.parking_possible is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">{{ '주차 가능' if item.parking_possible else '주차 불가' }}</span>{% endif %}
-            {% if item.parking_per_household_x100 is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">{{ item.parking_per_household_x100 / 100 }}대/세대</span>{% endif %}
-            {% if item.monthly_management_cost is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">관리비 {{ item.monthly_management_cost | comma_number }}원</span>{% endif %}
-            {% if item.move_in_available_on %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">입주 {{ item.move_in_available_on }}</span>{% endif %}
-            {% if item.nearest_subway_walk_minutes is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-700/80 px-2 py-1 text-slate-200">역 도보 {{ item.nearest_subway_walk_minutes }}분</span>{% endif %}
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <span class="shrink-0 rounded bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-300 dark:border-indigo-500/30 px-2.5 py-0.5 text-xs font-extrabold text-indigo-800 dark:text-indigo-200">{{ trade_label(item.trade_type) }}</span>
+            {% if item.is_direct_trade %}<span class="shrink-0 rounded bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs font-bold text-slate-800 dark:text-slate-200">직거래 표기</span>{% endif %}
+            {% if item.is_safe_lessor_hug %}<span class="shrink-0 rounded bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs font-bold text-slate-800 dark:text-slate-200">HUG 안심임대인 표기</span>{% endif %}
+            <h2 class="min-w-0 truncate font-extrabold text-base text-slate-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">{{ item.complex_name }}</h2>
         </div>
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs"><span class="rounded-full bg-slate-700 px-2 py-1 text-slate-200">{{ mortgage_label(item) }}</span>{% if item.eligible_loans %}<span class="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-200">{{ item.eligible_loans | map(attribute='loan_type_name') | join(' · ') }} 가능</span>{% endif %}</div>
+        <p class="mt-1.5 truncate text-sm text-slate-700 dark:text-slate-300 font-semibold">{{ item.address }}</p>
+        <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold leading-5">
+            {% if item.exclusive_area_x100 is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-indigo-100/80 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/20 px-2 py-1 text-indigo-900 dark:text-indigo-200">전용 {{ item.exclusive_area_x100 / 100 }}㎡ · {{ (item.exclusive_area_x100 / 100) | to_pyeong }}</span>{% endif %}
+            <span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">{{ item.floor_no if item.floor_no is not none else '-' }}/{{ item.total_floor if item.total_floor is not none else '-' }}층 · {{ direction_label(item.direction_code) }}</span>
+            <span class="inline-flex whitespace-nowrap rounded-md bg-sky-100/90 dark:bg-sky-500/15 border border-sky-300 dark:border-sky-500/20 px-2 py-1 text-sky-900 dark:text-sky-300">{{ item.household_count | comma_number }}세대</span>
+            <span class="inline-flex whitespace-nowrap rounded-md bg-amber-100/90 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/20 px-2 py-1 text-amber-900 dark:text-amber-300">{{ item.construction_year or '-' }}년 준공</span>
+            {% if item.room_count is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">방 {{ item.room_count }}</span>{% endif %}
+            {% if item.bathroom_count is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">욕실 {{ item.bathroom_count }}</span>{% endif %}
+            {% if item.parking_possible is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">{{ '주차 가능' if item.parking_possible else '주차 불가' }}</span>{% endif %}
+            {% if item.parking_per_household_x100 is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">{{ item.parking_per_household_x100 / 100 }}대/세대</span>{% endif %}
+            {% if item.monthly_management_cost is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">관리비 {{ item.monthly_management_cost | comma_number }}원</span>{% endif %}
+            {% if item.move_in_available_on %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">입주 {{ item.move_in_available_on }}</span>{% endif %}
+            {% if item.nearest_subway_walk_minutes is not none %}<span class="inline-flex whitespace-nowrap rounded-md bg-slate-200/80 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-700 px-2 py-1 text-slate-800 dark:text-slate-200">역 도보 {{ item.nearest_subway_walk_minutes }}분</span>{% endif %}
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span class="rounded-full bg-slate-200/90 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2.5 py-0.5 text-slate-800 dark:text-slate-200 font-bold">{{ mortgage_label(item) }}</span>
+            {% if item.eligible_loans %}
+            <span class="rounded-full bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/30 px-2.5 py-0.5 font-extrabold text-emerald-800 dark:text-emerald-200">{{ item.eligible_loans | map(attribute='loan_type_name') | join(' · ') }} 가능</span>
+            {% endif %}
+        </div>
     </div>
-    <dialog id="listing-detail-{{ item.article_id }}" x-ref="dialog" class="w-[min(48rem,calc(100vw-2rem))] rounded-2xl border border-slate-700 bg-slate-900 p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/80" @click.stop @close="open = false">
+    <dialog id="listing-detail-{{ item.article_id }}" x-ref="dialog" class="theme-surface w-[min(48rem,calc(100vw-2rem))] rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60" @click.stop @close="open = false">
         <div class="max-h-[85vh] overflow-y-auto p-5 sm:p-6">
-            <div class="flex items-start justify-between gap-4"><div><p class="text-xs font-medium text-indigo-300">매물 상세 정보</p><h3 class="mt-1 text-xl font-bold text-white">{{ item.complex_name }}</h3><p class="mt-1 text-sm text-slate-400">{{ item.address }}</p></div><button type="button" class="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="상세 모달 닫기" @click.stop="$refs.dialog.close()">✕</button></div>
-            <dl class="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3"><div><dt class="text-slate-500">거래</dt><dd>{{ trade_label(item.trade_type) }} · {{ item.primary_price | korean_money }}</dd></div><div><dt class="text-slate-500">전용면적</dt><dd>{{ item.exclusive_area_x100 / 100 if item.exclusive_area_x100 is not none else '-' }}㎡</dd></div><div><dt class="text-slate-500">층/방향</dt><dd>{{ item.floor_no if item.floor_no is not none else '-' }}층 · {{ direction_label(item.direction_code) }}</dd></div><div><dt class="text-slate-500">방/욕실</dt><dd>{{ item.room_count if item.room_count is not none else '-' }} / {{ item.bathroom_count if item.bathroom_count is not none else '-' }}</dd></div><div><dt class="text-slate-500">주차</dt><dd>{{ item.parking_per_household_x100 / 100 if item.parking_per_household_x100 is not none else '-' }}대/세대</dd></div><div><dt class="text-slate-500">관리비</dt><dd>{{ item.monthly_management_cost | korean_money if item.monthly_management_cost is not none else '-' }}</dd></div><div><dt class="text-slate-500">입주 가능일</dt><dd>{{ item.move_in_available_on or '-' }}</dd></div><div><dt class="text-slate-500">역 도보</dt><dd>{{ item.nearest_subway_walk_minutes ~ '분' if item.nearest_subway_walk_minutes is not none else '-' }}</dd></div></dl>
-            <div class="mt-6 border-t border-slate-800 pt-5"><div class="flex items-center justify-between gap-3"><div><h4 class="font-semibold text-white">정책대출 예상</h4><p class="mt-1 text-xs text-slate-400">현재 설정과 내장 규칙에 따른 예상값이며, 실제 심사 결과와 다를 수 있습니다.</p></div><a class="text-xs font-semibold text-indigo-300 hover:text-indigo-200" target="_blank" rel="noopener" href="https://fin.land.naver.com/articles/{{ item.article_id }}" @click.stop>매물 링크 열기</a></div>
-                <div class="mt-3 space-y-3">{% for loan in item.eligible_loans %}{{ loan_detail(loan) }}{% else %}<p class="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-400">현재 설정으로 바로 가능한 정책대출이 없습니다.</p>{% endfor %}</div>
-                <details class="group mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3"><summary class="cursor-pointer text-sm font-semibold text-slate-300 flex items-center justify-between"><span>추가 확인·불가 상품 ({{ item.other_loans | length }})</span><svg class="w-4 h-4 text-slate-400 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></summary><div class="mt-3 space-y-3">{% for loan in item.other_loans %}{{ loan_detail(loan) }}{% endfor %}</div></details>
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold text-indigo-700 dark:text-indigo-300">매물 상세 정보</p>
+                    <h3 class="mt-1 text-xl font-extrabold text-slate-900 dark:text-white">{{ item.complex_name }}</h3>
+                    <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-400">{{ item.address }}</p>
+                </div>
+                <button type="button" class="rounded-lg p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white" aria-label="상세 모달 닫기" @click.stop="$refs.dialog.close()">✕</button>
+            </div>
+            <dl class="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 bg-slate-100/80 dark:bg-slate-950/50 p-4 rounded-xl border border-slate-300 dark:border-slate-800">
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">거래</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ trade_label(item.trade_type) }} · {{ item.primary_price | korean_money }}</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">전용면적</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.exclusive_area_x100 / 100 if item.exclusive_area_x100 is not none else '-' }}㎡</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">층/방향</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.floor_no if item.floor_no is not none else '-' }}층 · {{ direction_label(item.direction_code) }}</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">방/욕실</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.room_count if item.room_count is not none else '-' }} / {{ item.bathroom_count if item.bathroom_count is not none else '-' }}</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">주차</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.parking_per_household_x100 / 100 if item.parking_per_household_x100 is not none else '-' }}대/세대</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">관리비</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.monthly_management_cost | korean_money if item.monthly_management_cost is not none else '-' }}</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">입주 가능일</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.move_in_available_on or '-' }}</dd></div>
+                <div><dt class="font-bold text-slate-600 dark:text-slate-400 text-xs">역 도보</dt><dd class="font-extrabold text-slate-900 dark:text-slate-100">{{ item.nearest_subway_walk_minutes ~ '분' if item.nearest_subway_walk_minutes is not none else '-' }}</dd></div>
+            </dl>
+            <div class="mt-6 border-t border-slate-300 dark:border-slate-800 pt-5">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <h4 class="font-extrabold text-slate-900 dark:text-white">정책대출 예상</h4>
+                        <p class="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-400">현재 설정과 내장 규칙에 따른 예상값이며, 실제 심사 결과와 다를 수 있습니다.</p>
+                    </div>
+                    <a class="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:underline" target="_blank" rel="noopener" href="https://fin.land.naver.com/articles/{{ item.article_id }}" @click.stop>매물 링크 열기 ↗</a>
+                </div>
+                <div class="mt-3 space-y-3">
+                    {% for loan in item.eligible_loans %}
+                        {{ loan_detail(loan) }}
+                    {% else %}
+                        <p class="rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/50 p-3 text-sm font-semibold text-slate-700 dark:text-slate-400">현재 설정으로 바로 가능한 정책대출이 없습니다.</p>
+                    {% endfor %}
+                </div>
+                <details class="group mt-4 rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/40 p-3">
+                    <summary class="cursor-pointer text-sm font-bold text-slate-800 dark:text-slate-300 flex items-center justify-between">
+                        <span>추가 확인·불가 상품 ({{ item.other_loans | length }})</span>
+                        <svg class="w-4 h-4 text-slate-600 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </summary>
+                    <div class="mt-3 space-y-3">{% for loan in item.other_loans %}{{ loan_detail(loan) }}{% endfor %}</div>
+                </details>
             </div>
         </div>
     </dialog>
 </article>
 {%- endmacro %}
 
-{% macro render(result, listings, complex_urls) -%}
+{% macro render(result, listings, complex_urls, favorite_listing_payloads, favorite_complex_payloads) -%}
     {% if result.is_grouped %}
         {% for group in result.grouped_items %}
-        <details class="complex-group group rounded-xl border border-slate-700 bg-slate-800 p-4 transition-all hover:border-slate-600" data-complex-group
+        <details class="complex-group theme-surface group rounded-xl border border-slate-300/80 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 transition-all shadow-sm hover:shadow-md hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100" data-complex-group
             hx-get="{{ complex_urls[group.complex_id] }}"
             hx-trigger="toggle once"
             hx-target="#complex-listings-{{ group.complex_id }}"
@@ -93,46 +144,53 @@
         >
             <summary class="grid cursor-pointer list-none gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                 <div class="min-w-0">
-                    <h2 class="truncate font-bold text-white">{{ group.complex_name }}</h2>
-                    <div class="mt-1 flex flex-wrap gap-1.5 text-xs">
-                        <span class="max-w-full truncate text-slate-400">{{ group.address }}</span>
-                        <span class="whitespace-nowrap text-sky-300">{{ group.household_count | comma_number }}세대</span>
-                        <span class="whitespace-nowrap text-amber-300">{{ group.construction_year or '-' }}년 준공</span>
+                    <div class="flex items-center gap-2">
+                        <h2 class="truncate font-extrabold text-slate-900 dark:text-white">{{ group.complex_name }}</h2>
+                        <!-- 단지 전체 즐겨찾기 버튼 -->
+                        <button type="button" onclick="event.preventDefault(); event.stopPropagation(); toggleComplexFavorite({{ favorite_complex_payloads[group.complex_id] | tojson }});" class="p-1 rounded bg-slate-100 dark:bg-slate-900/80 hover:bg-amber-500/20 border border-slate-300 dark:border-slate-700 hover:border-amber-500/50 text-slate-700 dark:text-slate-400 hover:text-amber-500 transition-all text-xs flex items-center gap-1" title="이 단지 전체 즐겨찾기 추가/제거" data-fav-btn-complex="{{ group.complex_id }}">
+                            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            <span class="text-[11px] font-bold">단지 보관</span>
+                        </button>
+                    </div>
+                    <div class="mt-1 flex flex-wrap gap-1.5 text-xs font-bold">
+                        <span class="max-w-full truncate text-slate-700 dark:text-slate-400">{{ group.address }}</span>
+                        <span class="whitespace-nowrap text-sky-900 dark:text-sky-300 bg-sky-100 dark:bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-500/20">{{ group.household_count | comma_number }}세대</span>
+                        <span class="whitespace-nowrap text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">{{ group.construction_year or '-' }}년 준공</span>
                     </div>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
-                    <p class="whitespace-nowrap text-sm font-semibold text-indigo-200">{{ group.min_price | korean_money }} ~ {{ group.max_price | korean_money }} · {{ group.listing_count }}건</p>
-                    <svg class="w-4 h-4 text-indigo-300 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    <p class="whitespace-nowrap text-sm font-extrabold text-indigo-800 dark:text-indigo-200">{{ group.min_price | korean_money }} ~ {{ group.max_price | korean_money }} · {{ group.listing_count }}건</p>
+                    <svg class="w-4 h-4 text-indigo-700 dark:text-indigo-300 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                 </div>
             </summary>
-            <div id="complex-listings-{{ group.complex_id }}" data-complex-listings class="mt-3 space-y-3 border-t border-slate-700 pt-3">
-                <p class="text-sm text-slate-400">펼치면 매물을 불러옵니다.</p>
+            <div id="complex-listings-{{ group.complex_id }}" data-complex-listings class="mt-3 space-y-3 border-t border-slate-300 dark:border-slate-700 pt-3">
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-400">펼치면 매물을 불러옵니다.</p>
             </div>
         </details>
         {% endfor %}
     {% else %}
         {% for item in listings %}
-            {{ listing_card(item) }}
+            {{ listing_card(item, favorite_listing_payloads[item.article_id]) }}
         {% else %}
-            <div class="rounded-2xl border border-slate-800 bg-slate-900/80 p-8 text-center shadow-lg"><svg class="mx-auto h-12 w-12 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><h3 class="mt-3 text-base font-semibold text-white">조건에 부합하는 매물이 없습니다.</h3><p class="mt-1 text-xs text-slate-400">검색 조건을 변경하거나 전체 초기화를 시도해 보세요.</p></div>
+            <div class="rounded-2xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-8 text-center shadow-md"><svg class="mx-auto h-12 w-12 text-slate-500 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><h3 class="mt-3 text-base font-extrabold text-slate-900 dark:text-white">조건에 부합하는 매물이 없습니다.</h3><p class="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-400">검색 조건을 변경하거나 전체 초기화를 시도해 보세요.</p></div>
         {% endfor %}
     {% endif %}
 {%- endmacro %}
 
 {% macro pager(result, previous_url, next_url) -%}
-<div class="flex items-center justify-between border-t border-slate-800 pt-4">
+<div class="flex items-center justify-between border-t border-slate-300 dark:border-slate-800 pt-4">
     {% if previous_url %}
-    <a class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-4 text-xs font-semibold text-slate-200 hover:border-slate-500 hover:text-white transition-all" href="{{ previous_url }}" hx-get="{{ previous_url }}" hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true">이전 페이지</a>
+    <a class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-xs font-extrabold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all shadow-sm" href="{{ previous_url }}" hx-get="{{ previous_url }}" hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true">이전 페이지</a>
     {% else %}
-    <span class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-4 text-xs text-slate-600 cursor-not-allowed">이전 페이지</span>
+    <span class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-4 text-xs text-slate-500 dark:text-slate-600 cursor-not-allowed">이전 페이지</span>
     {% endif %}
 
-    <span class="text-xs text-slate-400 font-medium">커서 기반 페이징</span>
+    <span class="text-xs text-slate-700 dark:text-slate-400 font-bold">커서 기반 페이징</span>
 
     {% if next_url %}
-    <a class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-4 text-xs font-semibold text-slate-200 hover:border-slate-500 hover:text-white transition-all" href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true">다음 페이지</a>
+    <a class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-xs font-extrabold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all shadow-sm" href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true">다음 페이지</a>
     {% else %}
-    <span class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-4 text-xs text-slate-600 cursor-not-allowed">다음 페이지</span>
+    <span class="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-4 text-xs text-slate-500 dark:text-slate-600 cursor-not-allowed">다음 페이지</span>
     {% endif %}
 </div>
 {%- endmacro %}

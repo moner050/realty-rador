@@ -1,56 +1,311 @@
 <!DOCTYPE html>
-<html lang="ko" class="h-full bg-slate-900 text-slate-100">
+<html lang="ko" class="h-full">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="개인용 부동산 매물 크롤링 및 다중 필터링 플랫폼 Realty Radar">
     <title>{% block title %}Realty Radar - 부동산 통합 검색{% endblock %}</title>
-    <!-- Tailwind CSS CDN -->
+
+    <!-- FOUC 깜빡임 방지 테마 사전 로딩 스크립트 (기본값: 화이트/라이트 테마) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem("rr_theme_v1") || "light";
+            if (savedTheme === "dark") {
+                document.documentElement.classList.add("dark");
+            } else {
+                document.documentElement.classList.remove("dark");
+            }
+        })();
+    </script>
+
+    <!-- Tailwind CSS CDN 및 다크모드 클래스 설정 -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        };
+    </script>
+
     <!-- HTMX CDN -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <!-- Alpine.js CDN -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
     <style>
-        [x-cloak] { display: none !important; }
-        .htmx-indicator { opacity: 0; transition: opacity 160ms ease-in; }
-        .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
-        /* 새로고침 시 Tailwind 스크립트 로딩 전 FOUC(CSS 순간 깨짐) 방지 사전 로딩 스타일 */
-        html, body {
-            background-color: #0f172a !important;
-            color: #f1f5f9 !important;
+        [x-cloak] {
+            display: none !important;
+        }
+
+        .htmx-indicator {
+            opacity: 0;
+            transition: opacity 160ms ease-in;
+        }
+
+        .htmx-request .htmx-indicator,
+        .htmx-request.htmx-indicator {
+            opacity: 1;
+        }
+
+        html:not(.dark) {
+            --rr-canvas: #F6F5F2;
+            --rr-surface: #FFFDF9;
+            --rr-surface-raised: #FFFFFF;
+            --rr-surface-subtle: #F0EDE8;
+            --rr-border: #DEDAD4;
+            --rr-text-primary: #25262A;
+            --rr-text-secondary: #51545C;
+            --rr-text-muted: #6B6E76;
+            --rr-shadow: 0 12px 30px rgba(58, 48, 40, 0.07);
+        }
+
+        html.dark {
+            --rr-canvas: #0B1020;
+            --rr-surface: #141A29;
+            --rr-surface-raised: #1B2335;
+            --rr-surface-subtle: #202A3D;
+            --rr-border: #334155;
+            --rr-text-primary: #F8FAFC;
+            --rr-text-secondary: #CBD5E1;
+            --rr-text-muted: #94A3B8;
+            --rr-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+        }
+
+        body {
+            background-color: var(--rr-canvas) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-surface,
+        .light-surface {
+            background-color: var(--rr-surface) !important;
+            border-color: var(--rr-border) !important;
+            box-shadow: var(--rr-shadow);
+        }
+
+        .theme-subtle-surface,
+        .light-subtle-surface {
+            background-color: var(--rr-surface-subtle) !important;
+            border-color: var(--rr-border) !important;
+        }
+
+        .theme-divider,
+        .light-divider {
+            border-color: var(--rr-border) !important;
+        }
+
+        .theme-primary-text,
+        .light-primary-text { color: var(--rr-text-primary) !important; }
+        .theme-secondary-text,
+        .light-secondary-text { color: var(--rr-text-secondary) !important; }
+        .theme-muted-text,
+        .light-muted-text { color: var(--rr-text-muted) !important; }
+
+        .theme-control {
+            min-height: 2.75rem;
+            border-color: var(--rr-border) !important;
+            background-color: var(--rr-surface-raised) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-info-panel {
+            border-color: color-mix(in srgb, #6366F1 42%, var(--rr-border)) !important;
+            background: linear-gradient(145deg, color-mix(in srgb, #6366F1 15%, var(--rr-surface)), var(--rr-surface)) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-listing-card {
+            min-width: 0;
+            padding: 1.25rem !important;
+            border-color: var(--rr-border) !important;
+            background-color: var(--rr-surface-raised) !important;
+            box-shadow: 0 7px 20px rgba(58, 48, 40, 0.06);
+        }
+
+        .theme-result-toolbar {
+            border-color: var(--rr-border) !important;
+            background-color: color-mix(in srgb, var(--rr-surface-raised) 94%, transparent) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-form-grid > label {
+            border-color: var(--rr-border) !important;
+            background-color: var(--rr-surface-subtle) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-form-grid input:not([type="checkbox"]),
+        .theme-form-grid select {
+            border-color: var(--rr-border) !important;
+            background-color: var(--rr-surface-raised) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-form-grid .text-white,
+        .theme-form-grid .text-slate-100,
+        .theme-form-grid .text-slate-200,
+        .theme-form-grid .text-slate-300 { color: var(--rr-text-primary) !important; }
+        .theme-form-grid .text-slate-400,
+        .theme-form-grid .text-slate-500 { color: var(--rr-text-secondary) !important; }
+
+        .theme-profile-modal {
+            color: var(--rr-text-primary) !important;
+        }
+
+        .theme-profile-modal .text-white,
+        .theme-profile-modal .text-slate-100,
+        .theme-profile-modal .text-slate-200,
+        .theme-profile-modal .text-slate-300 { color: var(--rr-text-primary) !important; }
+        .theme-profile-modal .text-slate-400,
+        .theme-profile-modal .text-slate-500 { color: var(--rr-text-secondary) !important; }
+        .theme-profile-modal [class*="bg-slate-9"],
+        .theme-profile-modal [class*="bg-slate-8"] {
+            background-color: var(--rr-surface-raised) !important;
+        }
+
+        .theme-soft-accent {
+            border-color: #C7D2FE !important;
+            background-color: #EEF2FF !important;
+            color: #3730A3 !important;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.08);
+        }
+
+        .theme-soft-accent:hover {
+            border-color: #A5B4FC !important;
+            background-color: #E0E7FF !important;
+            color: #312E81 !important;
+        }
+
+        html.dark .theme-soft-accent {
+            border-color: #6366F1 !important;
+            background-color: #312E81 !important;
+            color: #E0E7FF !important;
+        }
+
+        html.dark .theme-soft-accent:hover {
+            background-color: #4338CA !important;
+            color: #FFFFFF !important;
+        }
+
+        .theme-soft-emerald {
+            border-color: #A7F3D0 !important;
+            background-color: #ECFDF5 !important;
+            color: #065F46 !important;
+            box-shadow: 0 4px 10px rgba(5, 150, 105, 0.07);
+        }
+
+        .theme-soft-emerald:hover {
+            border-color: #6EE7B7 !important;
+            background-color: #D1FAE5 !important;
+            color: #064E3B !important;
+        }
+
+        html.dark .theme-soft-emerald {
+            border-color: #059669 !important;
+            background-color: #064E3B !important;
+            color: #D1FAE5 !important;
+        }
+
+        html.dark .theme-soft-emerald:hover {
+            background-color: #047857 !important;
+            color: #FFFFFF !important;
+        }
+
+        html:not(.dark) #listing-search-form [class*="bg-slate-9"],
+        html:not(.dark) #listing-search-form [class*="bg-slate-8"] {
+            background-color: var(--rr-surface-raised) !important;
+        }
+
+        html:not(.dark) #listing-search-form [class*="bg-slate-1"],
+        html:not(.dark) #listing-search-form [class*="bg-slate-2"] {
+            background-color: var(--rr-surface-subtle) !important;
+        }
+
+        html:not(.dark) #listing-search-form [class*="border-slate-7"],
+        html:not(.dark) #listing-search-form [class*="border-slate-8"] {
+            border-color: var(--rr-border) !important;
+        }
+
+        html:not(.dark) #listing-search-form input:not([type="checkbox"]),
+        html:not(.dark) #listing-search-form select {
+            background-color: var(--rr-surface-raised) !important;
+            border-color: var(--rr-border) !important;
+            color: var(--rr-text-primary) !important;
+        }
+
+        html:not(.dark) #listing-search-form .text-slate-100,
+        html:not(.dark) #listing-search-form .text-slate-200,
+        html:not(.dark) #listing-search-form .text-slate-300 { color: var(--rr-text-primary) !important; }
+        html:not(.dark) #listing-search-form .text-slate-400,
+        html:not(.dark) #listing-search-form .text-slate-500 { color: var(--rr-text-secondary) !important; }
+
+        html.dark .theme-listing-card { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2); }
+
+        @media (max-width: 640px) {
+            header > div { height: auto !important; min-height: 4rem; padding-top: 0.625rem; padding-bottom: 0.625rem; gap: 0.75rem; }
+            header nav { flex-wrap: wrap; justify-content: flex-end; row-gap: 0.5rem; }
+            .theme-listing-card { padding: 1rem !important; }
+        }
+
+        @media (min-width: 768px) {
+            .theme-listing-card { grid-template-columns: minmax(0, 1fr) 9.5rem !important; gap: 1.25rem !important; }
+        }
+
+        html,
+        body {
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             min-height: 100vh;
+            transition: background-color 200ms ease, color 200ms ease;
         }
     </style>
 </head>
-<body class="flex flex-col min-h-full font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+<body class="flex flex-col min-h-full font-sans antialiased bg-slate-100/70 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-indigo-500 selection:text-white transition-colors">
 
     <!-- 글로벌 네비게이션 바 -->
-    <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+    <header class="theme-surface sticky top-0 z-50 bg-white/95 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center space-x-3">
-                <a href="/" class="flex items-center space-x-2 text-indigo-400 font-bold text-xl tracking-tight">
-                    <svg class="w-7 h-7 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11m0 0h4m-4 0H9m4 0V7m0 0h4m-4 0H9"/>
+                <a href="/" class="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-bold text-xl tracking-tight">
+                    <svg class="w-7 h-7 text-indigo-600 dark:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11m0 0h4m-4 0H9m4 0V7m0 0h4m-4 0H9" />
                     </svg>
                     <span>Realty Radar</span>
                 </a>
-                <span class="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">Local v0.1</span>
+                <span
+                    class="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-bold">Local
+                    v0.1</span>
             </div>
 
-            <nav class="flex items-center space-x-6">
-                <a href="/" class="text-sm font-medium text-slate-200 hover:text-indigo-400 transition-colors">매물 검색</a>
+            <nav class="flex items-center space-x-3 sm:space-x-5">
+                <!-- ☀️/🌙 라이트/다크 테마 토글 버튼 -->
+                <button type="button" onclick="toggleAppTheme()" id="theme-toggle-btn"
+                        class="p-2 sm:px-3 sm:py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-all text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                        title="테마 전환 (라이트/다크)">
+                    <span id="theme-toggle-icon" class="text-sm">☀️</span>
+                    <span id="theme-toggle-label" class="hidden sm:inline">라이트 모드</span>
+                </button>
+
+                <a href="/" class="text-sm font-bold text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">매물 검색</a>
+                
+                <!-- 즐겨찾기 우측 사이드바 열기 버튼 -->
+                <button type="button" id="toggle-favorite-sidebar-btn" onclick="toggleFavoriteSidebar()" class="relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-800 dark:text-amber-300 font-bold text-xs transition-all shadow-sm">
+                    <svg class="w-4 h-4 text-amber-500 fill-amber-500" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                    <span>즐겨찾기</span>
+                    <span id="nav-favorite-count-badge" class="ml-0.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 font-extrabold text-[11px]">0</span>
+                </button>
+
                 {% if is_authenticated %}
-                <a href="/jobs" class="text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors">수집 현황</a>
-                <a href="/settings" class="text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors">설정</a>
-                <a href="/logout" class="text-xs px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-red-600/80 text-slate-300 hover:text-white border border-slate-700 transition-all font-medium">로그아웃</a>
+                <span class="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">👋 {{ current_username if current_username else '회원' }}님</span>
+                {% if is_admin %}
+                <a href="/jobs" class="text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">수집 현황</a>
+                {% endif %}
+                <a href="/logout" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-red-600/80 text-slate-800 dark:text-slate-300 hover:text-white border border-slate-300 dark:border-slate-700 transition-all font-semibold">로그아웃</a>
                 {% else %}
-                <a href="/login" class="text-xs px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-1">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
-                    </svg>
-                    <span>로그인</span>
+                <a href="/login" class="text-xs px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-700 transition-all">로그인</a>
+                <a href="/register" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-1">
+                    <span>✨ 간편 회원가입</span>
                 </a>
                 {% endif %}
             </nav>
@@ -63,9 +318,34 @@
     </main>
 
     <!-- 푸터 -->
-    <footer class="border-t border-slate-800 bg-slate-950/50 py-6 text-center text-xs text-slate-500">
+    <footer class="theme-subtle-surface border-t border-slate-200 dark:border-slate-800 bg-slate-200/50 dark:bg-slate-950/50 py-6 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 transition-colors">
         <p>© 2026 Realty Radar. Personal Real Estate Search & Aggregator System.</p>
     </footer>
 
+    <!-- 테마 실시간 토글 제어 스크립트 -->
+    <script>
+        function updateThemeUI() {
+            const isDark = document.documentElement.classList.contains("dark");
+            const iconEl = document.getElementById("theme-toggle-icon");
+            const labelEl = document.getElementById("theme-toggle-label");
+            if (iconEl) iconEl.textContent = isDark ? "🌙" : "☀️";
+            if (labelEl) labelEl.textContent = isDark ? "다크 모드" : "라이트 모드";
+        }
+
+        function toggleAppTheme() {
+            const isDark = document.documentElement.classList.contains("dark");
+            if (isDark) {
+                document.documentElement.classList.remove("dark");
+                localStorage.setItem("rr_theme_v1", "light");
+            } else {
+                document.documentElement.classList.add("dark");
+                localStorage.setItem("rr_theme_v1", "dark");
+            }
+            updateThemeUI();
+        }
+
+        document.addEventListener("DOMContentLoaded", updateThemeUI);
+    </script>
 </body>
+
 </html>

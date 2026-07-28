@@ -13,12 +13,12 @@ from sqlalchemy.orm import Session
 from realty_radar.application.crawl_job_service import CrawlJobService
 from realty_radar.infrastructure.database.models import CrawlJob
 from realty_radar.infrastructure.database.session import get_db
-from realty_radar.web.auth import require_authentication
+from realty_radar.web.auth import require_admin
 from realty_radar.web.jinja_filters import register_jinja_filters
 from realty_radar.web.routes.home import _municipality_codes, _region_options
 
 
-router = APIRouter(tags=["jobs"], dependencies=[Depends(require_authentication)])
+router = APIRouter(tags=["jobs"], dependencies=[Depends(require_admin)])
 templates = Jinja2Templates(directory="src/realty_radar/web/templates")
 register_jinja_filters(templates)
 
@@ -73,7 +73,7 @@ def _render_progress(request: Request, db: Session):
     return templates.TemplateResponse(
         request,
         "jobs/progress_partial.html",
-        _progress_context(db),
+        {"is_admin": True, **_progress_context(db)},
     )
 
 
@@ -83,7 +83,7 @@ def get_jobs_dashboard(request: Request, db: Annotated[Session, Depends(get_db)]
     return templates.TemplateResponse(
         request,
         "jobs/index.html",
-        {"jobs": jobs, "is_authenticated": True, **_progress_context(db)},
+        {"jobs": jobs, "is_authenticated": True, "is_admin": True, **_progress_context(db)},
     )
 
 

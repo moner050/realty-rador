@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import random
+import time
 from uuid import uuid4
 
 from sqlalchemy import select, text, update
@@ -122,71 +124,79 @@ class CrawlJobService:
 
     def get_latest_metro_batch_progress(self) -> dict[str, object]:
         """Return the latest manual metro batch without adding a tracking table."""
-        latest = self.db.scalar(
-            select(CrawlJob)
-            .where(CrawlJob.dedupe_key.like(f"{METRO_BATCH_PREFIX}%"))
-            .order_by(CrawlJob.created_at.desc(), CrawlJob.job_id.desc())
-            .limit(1)
-        )
-        if latest is None:
-            return self._empty_metro_batch_progress()
-
-        batch_id = self._metro_batch_id(latest.dedupe_key)
-        if batch_id is None:
-            return self._empty_metro_batch_progress()
-        jobs = list(
-            self.db.scalars(
+        try:
+            if self.db.bind is not None and self.db.bind.dialect.name == "mysql":
+                try:
+                    self.db.execute(text("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED"))
+                except Exception:
+                    pass
+            latest = self.db.scalar(
                 select(CrawlJob)
-                .where(CrawlJob.dedupe_key.like(f"{METRO_BATCH_PREFIX}{batch_id}:%"))
-                .order_by(CrawlJob.scope_code)
-            ).all()
-        )
-        status_counts = {
-            JOB_QUEUED: 0,
-            JOB_RUNNING: 0,
-            JOB_SUCCESS: 0,
-            JOB_RETRY_WAIT: 0,
-            JOB_FAILED: 0,
-            JOB_CANCELLED: 0,
-        }
-        regions: dict[str, list[dict[str, object]]] = {sido_name: [] for sido_name in SIGUNGU_CODES}
-        for job in jobs:
-            status_counts[job.status] = status_counts.get(job.status, 0) + 1
-            sido_name, sigungu_name = _SIGUNGU_BY_CODE.get(job.scope_code, ("기타", str(job.scope_code)))
-            regions.setdefault(sido_name, []).append(
-                {
-                    "job_id": job.job_id,
-                    "sigungu_name": sigungu_name,
-                    "status": job.status,
-                    "status_label": _JOB_STATUS_LABELS.get(job.status, "알 수 없음"),
-                    "fetched_count": job.fetched_count,
-                    "committed_count": job.committed_count,
-                    "error_code": job.error_code,
-                    "error_message": job.error_message,
-                }
+                .where(CrawlJob.dedupe_key.like(f"{METRO_BATCH_PREFIX}%"))
+                .order_by(CrawlJob.created_at.desc(), CrawlJob.job_id.desc())
+                .limit(1)
             )
+            if latest is None:
+                return self._empty_metro_batch_progress()
 
-        pending_count = status_counts[JOB_QUEUED] + status_counts[JOB_RETRY_WAIT]
-        running_count = status_counts[JOB_RUNNING]
-        failed_count = status_counts[JOB_FAILED]
-        success_count = status_counts[JOB_SUCCESS]
-        return {
-            "has_batch": True,
-            "batch_id": batch_id,
-            "total_sigungu": len(jobs),
-            "pending_count": pending_count,
-            "running_count": running_count,
-            "completed_count": success_count,
-            "failed_count": failed_count,
-            "retry_count": status_counts[JOB_RETRY_WAIT],
-            "is_active": bool(pending_count or running_count),
-            "worker_waiting": bool(status_counts[JOB_QUEUED] and not running_count),
-            "regions": [
-                {"sido_name": sido_name, "items": items}
-                for sido_name, items in regions.items()
-                if items
-            ],
-        }
+            batch_id = self._metro_batch_id(latest.dedupe_key)
+            if batch_id is None:
+                return self._empty_metro_batch_progress()
+            jobs = list(
+                self.db.scalars(
+                    select(CrawlJob)
+                    .where(CrawlJob.dedupe_key.like(f"{METRO_BATCH_PREFIX}{batch_id}:%"))
+                    .order_by(CrawlJob.scope_code)
+                ).all()
+            )
+            status_counts = {
+                JOB_QUEUED: 0,
+                JOB_RUNNING: 0,
+                JOB_SUCCESS: 0,
+                JOB_RETRY_WAIT: 0,
+                JOB_FAILED: 0,
+                JOB_CANCELLED: 0,
+            }
+            regions: dict[str, list[dict[str, object]]] = {sido_name: [] for sido_name in SIGUNGU_CODES}
+            for job in jobs:
+                status_counts[job.status] = status_counts.get(job.status, 0) + 1
+                sido_name, sigungu_name = _SIGUNGU_BY_CODE.get(job.scope_code, ("기타", str(job.scope_code)))
+                regions.setdefault(sido_name, []).append(
+                    {
+                        "job_id": job.job_id,
+                        "sigungu_name": sigungu_name,
+                        "status": job.status,
+                        "status_label": _JOB_STATUS_LABELS.get(job.status, "알 수 없음"),
+                        "fetched_count": job.fetched_count,
+                        "committed_count": job.committed_count,
+                        "error_code": job.error_code,
+                        "error_message": job.error_message if job.status != JOB_SUCCESS else None,
+                    }
+                )
+
+            pending_count = status_counts[JOB_QUEUED] + status_counts[JOB_RETRY_WAIT]
+            running_count = status_counts[JOB_RUNNING]
+            failed_count = status_counts[JOB_FAILED]
+            success_count = status_counts[JOB_SUCCESS]
+            return {
+                "has_batch": True,
+                "batch_id": batch_id,
+                "total_sigungu": len(jobs),
+                "pending_count": pending_count,
+                "running_count": running_count,
+                "completed_count": success_count,
+                "failed_count": failed_count,
+                "retry_count": status_counts[JOB_RETRY_WAIT],
+                "is_active": bool(pending_count or running_count),
+                "worker_waiting": bool(status_counts[JOB_QUEUED] and not running_count),
+                "regions": [
+                    {"sido_name": sido_name, "items": items}
+                    for sido_name, items in regions.items()
+                    if items
+                ],
+            }
+        except Exception:
+            return self._empty_metro_batch_progress()
 
     @staticmethod
     def _metro_batch_id(dedupe_key: str) -> str | None:
@@ -398,6 +408,8 @@ class CrawlJobService:
         now = utc_now()
         job.status = status
         job.result_json = result_json
+        job.error_code = None
+        job.error_message = None
         job.finished_at = now
         job.lease_token = None
         job.lease_owner = None
@@ -483,82 +495,92 @@ class CrawlJobService:
         return stale, removed
 
     def _advance_lifecycle_mysql(self, job_id: int, region_code: int) -> tuple[int, int]:
-        connection = self.db.connection()
-        parameters = {
-            "job_id": job_id,
-            "region_code": region_code,
-            "active": LIFECYCLE_ACTIVE,
-            "stale": LIFECYCLE_STALE,
-            "removed": LIFECYCLE_REMOVED,
-            "stale_event": HISTORY_STALE,
-            "removed_event": HISTORY_REMOVED,
-            "mask": CHANGE_LIFECYCLE,
-            "now": utc_now(),
-        }
-        stale = int(
-            connection.scalar(
-                text(
-                    """
-                    SELECT COUNT(*) FROM listing_current
-                    WHERE region_code = :region_code AND last_seen_job_id <> :job_id
-                      AND lifecycle = :active
-                    """
-                ),
-                parameters,
-            )
-            or 0
-        )
-        removed = int(
-            connection.scalar(
-                text(
-                    """
-                    SELECT COUNT(*) FROM listing_current
-                    WHERE region_code = :region_code AND last_seen_job_id <> :job_id
-                      AND lifecycle = :stale
-                    """
-                ),
-                parameters,
-            )
-            or 0
-        )
-        connection.execute(
-            text(
-                """
-                INSERT IGNORE INTO listing_history (
-                    article_id, complex_id, job_id, event_type, change_mask, primary_price,
-                    monthly_rent, lifecycle, mortgage_code, floor_no, total_floor,
-                    direction_code, state_hash, occurred_at
+        max_attempts = 5
+        for attempt in range(1, max_attempts + 1):
+            try:
+                connection = self.db.connection()
+                parameters = {
+                    "job_id": job_id,
+                    "region_code": region_code,
+                    "active": LIFECYCLE_ACTIVE,
+                    "stale": LIFECYCLE_STALE,
+                    "removed": LIFECYCLE_REMOVED,
+                    "stale_event": HISTORY_STALE,
+                    "removed_event": HISTORY_REMOVED,
+                    "mask": CHANGE_LIFECYCLE,
+                    "now": utc_now(),
+                }
+                stale = int(
+                    connection.scalar(
+                        text(
+                            """
+                            SELECT COUNT(*) FROM listing_current
+                            WHERE region_code = :region_code AND last_seen_job_id <> :job_id
+                              AND lifecycle = :active
+                            """
+                        ),
+                        parameters,
+                    )
+                    or 0
                 )
-                SELECT article_id, complex_id, :job_id,
-                       CASE WHEN lifecycle = :active THEN :stale_event ELSE :removed_event END,
-                       :mask, primary_price, monthly_rent,
-                       CASE WHEN lifecycle = :active THEN :stale ELSE :removed END,
-                       mortgage_code, floor_no, total_floor, direction_code, state_hash, :now
-                FROM listing_current
-                WHERE region_code = :region_code AND last_seen_job_id <> :job_id
-                  AND lifecycle IN (:active, :stale)
-                """
-            ),
-            parameters,
-        )
-        connection.execute(
-            text(
-                """
-                UPDATE listing_current
-                SET lifecycle = CASE WHEN lifecycle = :active THEN :stale ELSE :removed END,
-                    miss_count = LEAST(255, miss_count + 1),
-                    last_changed_at = :now,
-                    removed_at = CASE WHEN lifecycle = :stale THEN :now ELSE removed_at END
-                WHERE region_code = :region_code AND last_seen_job_id <> :job_id
-                  AND lifecycle IN (:active, :stale)
-                """
-            ),
-            parameters,
-        )
-        if removed:
-            connection.execute(
-                update(CrawlJob)
-                .where(CrawlJob.job_id == job_id)
-                .values(removed_count=CrawlJob.removed_count + removed, updated_at=parameters["now"])
-            )
-        return stale, removed
+                removed = int(
+                    connection.scalar(
+                        text(
+                            """
+                            SELECT COUNT(*) FROM listing_current
+                            WHERE region_code = :region_code AND last_seen_job_id <> :job_id
+                              AND lifecycle = :stale
+                            """
+                        ),
+                        parameters,
+                    )
+                    or 0
+                )
+                connection.execute(
+                    text(
+                        """
+                        INSERT IGNORE INTO listing_history (
+                            article_id, complex_id, job_id, event_type, change_mask, primary_price,
+                            monthly_rent, lifecycle, mortgage_code, floor_no, total_floor,
+                            direction_code, state_hash, occurred_at
+                        )
+                        SELECT article_id, complex_id, :job_id,
+                               CASE WHEN lifecycle = :active THEN :stale_event ELSE :removed_event END,
+                               :mask, primary_price, monthly_rent,
+                               CASE WHEN lifecycle = :active THEN :stale ELSE :removed END,
+                               mortgage_code, floor_no, total_floor, direction_code, state_hash, :now
+                        FROM listing_current
+                        WHERE region_code = :region_code AND last_seen_job_id <> :job_id
+                          AND lifecycle IN (:active, :stale)
+                        """
+                    ),
+                    parameters,
+                )
+                connection.execute(
+                    text(
+                        """
+                        UPDATE listing_current
+                        SET lifecycle = CASE WHEN lifecycle = :active THEN :stale ELSE :removed END,
+                            miss_count = LEAST(255, miss_count + 1),
+                            last_changed_at = :now,
+                            removed_at = CASE WHEN lifecycle = :stale THEN :now ELSE removed_at END
+                        WHERE region_code = :region_code AND last_seen_job_id <> :job_id
+                          AND lifecycle IN (:active, :stale)
+                        """
+                    ),
+                    parameters,
+                )
+                if removed:
+                    connection.execute(
+                        update(CrawlJob)
+                        .where(CrawlJob.job_id == job_id)
+                        .values(removed_count=CrawlJob.removed_count + removed, updated_at=parameters["now"])
+                    )
+                return stale, removed
+            except Exception as exc:
+                is_deadlock = "1213" in str(exc) or "Deadlock" in str(exc)
+                if is_deadlock and attempt < max_attempts:
+                    self.db.rollback()
+                    time.sleep(0.1 * (2 ** (attempt - 1)) + random.uniform(0.01, 0.05))
+                    continue
+                raise

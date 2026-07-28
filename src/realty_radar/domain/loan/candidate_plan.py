@@ -51,7 +51,7 @@ class LoanCandidatePlan:
             return cls(
                 branches=(
                     LoanCandidateBranch((1,), 900_000_000, 900_000_000),
-                    LoanCandidateBranch((2, 3, 4), 300_000_000, 200_000_000, 8500),
+                    LoanCandidateBranch((2, 3, 4), 500_000_000, 400_000_000, 8500),
                 )
             )
 
@@ -63,13 +63,19 @@ class LoanCandidatePlan:
             didimdol_income_limit = 85_000_000
         elif applicant.is_first_home_buyer or has_multiple_children:
             didimdol_income_limit = 70_000_000
+
         if applicant.is_homeless and applicant.annual_income <= didimdol_income_limit:
-            didimdol_price_limit = (
-                600_000_000
-                if applicant.is_newlywed or has_multiple_children
-                else 500_000_000
-            )
-            sale_limits.append((didimdol_price_limit, 8500))
+            if applicant.is_single_household:
+                didimdol_price_limit = 300_000_000
+                didimdol_area_limit = 6000
+            else:
+                didimdol_price_limit = (
+                    600_000_000
+                    if applicant.is_newlywed or has_multiple_children
+                    else 500_000_000
+                )
+                didimdol_area_limit = 8500
+            sale_limits.append((didimdol_price_limit, didimdol_area_limit))
 
         bogumjari_income_limit = 70_000_000
         if has_multiple_children:
@@ -81,8 +87,9 @@ class LoanCandidatePlan:
         if applicant.annual_income <= bogumjari_income_limit:
             sale_limits.append((600_000_000, None))
 
-        if applicant.has_newborn and applicant.annual_income <= 200_000_000:
-            sale_limits.append((900_000_000, None))
+        neonatal_income_limit = 200_000_000 if applicant.is_dual_income else 130_000_000
+        if applicant.has_newborn and applicant.annual_income <= neonatal_income_limit:
+            sale_limits.append((900_000_000, 8500))
 
         branches: list[LoanCandidateBranch] = []
         if sale_limits:
@@ -99,14 +106,25 @@ class LoanCandidatePlan:
                 )
             )
 
+        # 전세 자금 대출 한도 (신생아 버팀목 수도권 5억/비수도권 4억, 신혼/다자녀 버팀목 수도권 4억/비수도권 3억, 일반 수도권 3억/비수도권 2억)
+        rental_limits: list[tuple[int, int]] = []
+        if applicant.has_newborn and applicant.annual_income <= neonatal_income_limit:
+            rental_limits.append((500_000_000, 400_000_000))
+
         special_rental_limit = applicant.is_newlywed or has_multiple_children
         rental_income_limit = 75_000_000 if special_rental_limit else 50_000_000
         if applicant.annual_income <= rental_income_limit:
+            if special_rental_limit:
+                rental_limits.append((400_000_000, 300_000_000))
+            else:
+                rental_limits.append((300_000_000, 200_000_000))
+
+        if rental_limits:
             branches.append(
                 LoanCandidateBranch(
                     trade_types=(2, 3, 4),
-                    capital_max_price=500_000_000 if special_rental_limit else 300_000_000,
-                    non_capital_max_price=400_000_000 if special_rental_limit else 200_000_000,
+                    capital_max_price=max(cap for cap, _ in rental_limits),
+                    non_capital_max_price=max(non_cap for _, non_cap in rental_limits),
                     max_exclusive_area_x100=8500,
                 )
             )

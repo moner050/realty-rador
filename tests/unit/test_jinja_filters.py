@@ -6,6 +6,7 @@ from realty_radar.web.jinja_filters import (
     korean_status,
     korean_tx_type,
     to_pyeong,
+    tojson_filter,
 )
 
 
@@ -51,3 +52,9 @@ def test_to_pyeong_filter():
     assert to_pyeong(84.67) == "약 25.6평"
     assert to_pyeong(105.80) == "약 32평"
     assert to_pyeong(None) == "-"
+
+
+def test_tojson_filter():
+    """tojson JSON 직렬화 커스텀 필터 테스트."""
+    assert tojson_filter([{"name": "홍길동", "amount": 100}]) == '[{"name": "홍길동", "amount": 100}]'
+    assert tojson_filter(None) == '[]'

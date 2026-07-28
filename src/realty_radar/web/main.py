@@ -8,6 +8,7 @@ from realty_radar.web.routes.auth import router as auth_router
 from realty_radar.web.routes.crawl_jobs import router as crawl_jobs_router
 from realty_radar.web.routes.home import router as home_router
 from realty_radar.web.routes.settings import router as settings_router
+from realty_radar.web.routes.user import router as user_router
 
 
 @asynccontextmanager
@@ -39,6 +40,7 @@ app.mount("/images", StaticFiles(directory=str(images_dir)), name="images")
 # 라우터 등록
 app.include_router(home_router)
 app.include_router(auth_router)
+app.include_router(user_router)
 app.include_router(crawl_jobs_router)
 app.include_router(settings_router)
 

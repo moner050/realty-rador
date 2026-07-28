@@ -73,8 +73,8 @@ def test_candidate_plan_separates_sale_and_rental_limits():
     assert [branch.trade_types for branch in plan.branches] == [(1,), (2, 3, 4)]
     assert plan.branches[0].capital_max_price == 600_000_000
     assert plan.branches[0].max_exclusive_area_x100 is None
-    assert plan.branches[1].capital_max_price == 500_000_000
-    assert plan.branches[1].non_capital_max_price == 400_000_000
+    assert plan.branches[1].capital_max_price == 400_000_000
+    assert plan.branches[1].non_capital_max_price == 300_000_000
     assert plan.branches[1].max_exclusive_area_x100 == 8500
 
 
@@ -154,10 +154,10 @@ def test_candidate_plan_never_excludes_a_property_the_evaluator_treats_as_capita
         ),
         (
             "evaluate_neonatal_purchase",
-            ApplicantProfile(annual_income=200_000_000, has_newborn=True),
+            ApplicantProfile(annual_income=130_000_000, has_newborn=True),
             TransactionType.SALE,
             900_000_000,
-            Decimal("120"),
+            Decimal("85"),
             "서울특별시 강서구",
             11,
             1,
@@ -186,7 +186,7 @@ def test_candidate_plan_never_excludes_a_property_the_evaluator_treats_as_capita
             "evaluate_beotimmok",
             ApplicantProfile(annual_income=75_000_000, is_newlywed=True),
             TransactionType.JEONSE,
-            500_000_000,
+            400_000_000,
             Decimal("85"),
             "인천광역시 연수구",
             28,
@@ -196,11 +196,21 @@ def test_candidate_plan_never_excludes_a_property_the_evaluator_treats_as_capita
             "evaluate_beotimmok",
             ApplicantProfile(annual_income=75_000_000, child_count=2),
             TransactionType.MONTHLY_RENT,
-            400_000_000,
+            300_000_000,
             Decimal("85"),
             "부산광역시 해운대구",
             26,
             4,
+        ),
+        (
+            "evaluate_neonatal_rent",
+            ApplicantProfile(annual_income=130_000_000, has_newborn=True),
+            TransactionType.JEONSE,
+            500_000_000,
+            Decimal("85"),
+            "서울특별시 강서구",
+            11,
+            2,
         ),
     ],
 )

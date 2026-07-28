@@ -108,13 +108,20 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 </style>
 
 {% macro single_slider(id, name, value, minimum, maximum, step, label, unit, scale=1, helper='') -%}
-<div data-single-slider data-scale="{{ scale }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-700/70 bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-600">
+<div data-single-slider data-scale="{{ scale }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100">
     <input id="{{ id }}-value" type="hidden" name="{{ name }}" data-slider-name="{{ name }}" value="{{ value if value is not none else '' }}">
-    <div class="flex items-center justify-between gap-3 mb-1.5">
-        <label for="{{ id }}" class="text-sm font-medium text-slate-200">{{ label }}</label>
-        <div class="flex items-center gap-2">
-            <output data-slider-output class="text-xs font-semibold text-indigo-300 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-800/40">{% if value is not none %}{{ value / scale }}{{ unit }}{% else %}제한 없음{% endif %}</output>
-            <button type="button" data-slider-clear class="min-h-9 rounded px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">초기화</button>
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+        <label for="{{ id }}" class="text-sm font-extrabold text-slate-900 dark:text-slate-200">{{ label }}</label>
+        <div class="flex items-center gap-1.5">
+            <div class="relative flex items-center">
+                <input type="number" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"
+                       value="{{ (value / scale) if value is not none else '' }}"
+                       placeholder="직접입력" data-single-num-input
+                       aria-label="{{ label }} 수치 직접 입력"
+                       class="w-16 sm:w-20 px-2 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700/80 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-right">
+                <span class="ml-1 text-xs text-slate-700 dark:text-slate-300 font-bold shrink-0">{{ unit }}</span>
+            </div>
+            <button type="button" data-slider-clear class="min-h-8 rounded px-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">초기화</button>
         </div>
     </div>
     <div class="relative pt-7 pb-3">
@@ -123,40 +130,53 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             {% if value is not none %}{{ value / scale }}{{ unit }}{% else %}{{ minimum }}{{ unit }}{% endif %}
         </output>
         <!-- 슬라이더 트랙 배경 & Progress Bar -->
-        <div class="relative w-full h-2.5 rounded-full bg-slate-800 overflow-hidden pointer-events-none my-0.5">
+        <div class="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden pointer-events-none my-0.5">
             <div data-slider-progress class="absolute top-0 left-0 h-full bg-indigo-500 rounded-full transition-all duration-75" style="width: 0%;"></div>
         </div>
         <!-- 실제 핸들 Input -->
         <input id="{{ id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ value / scale if value is not none else minimum }}" data-slider-handle aria-label="{{ label }}" class="range-handle-input z-10">
     </div>
-    <div class="flex justify-between text-[10px] text-slate-500 font-medium mt-1">
+    <div class="flex justify-between text-[11px] text-slate-700 dark:text-slate-300 font-bold mt-1">
         <span>{{ minimum }}{{ unit }}</span>
         <span>{{ maximum }}{{ unit }}</span>
     </div>
-    {% if helper %}<p class="mt-1 text-xs text-slate-400 leading-relaxed">{{ helper }}</p>{% endif %}
+    {% if helper %}<p class="mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold leading-relaxed">{{ helper }}</p>{% endif %}
 </div>
 {%- endmacro %}
 
 {% macro range_slider(key, min_id, min_name, min_value, max_id, max_name, max_value, minimum, maximum, step, label, unit, helper='') -%}
-<div data-range-slider="{{ key }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-700/70 bg-slate-950/60 p-4 shadow-sm transition-all hover:border-slate-600">
+<div data-range-slider="{{ key }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100">
     <input id="{{ min_id }}-value" type="hidden" name="{{ min_name }}" data-slider-name="{{ min_name }}" value="{{ min_value if min_value is not none else '' }}">
     <input id="{{ max_id }}-value" type="hidden" name="{{ max_name }}" data-slider-name="{{ max_name }}" value="{{ max_value if max_value is not none else '' }}">
     
-    <!-- 상단 요약 헤더 및 전체 초기화 -->
+    <!-- 상단 요약 헤더, 수치 직접 입력 폼 및 전체 초기화 -->
     <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
         <div class="flex flex-wrap items-center gap-2">
-            <p {% if key == 'price' %}data-price-label{% endif %} class="text-sm font-semibold text-slate-100">
+            <p {% if key == 'price' %}data-price-label{% endif %} class="text-sm font-extrabold text-slate-900 dark:text-slate-100">
                 <span>{{ label }}</span>
             </p>
-            <output data-range-summary class="text-xs font-semibold text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/50">
-                {% if min_value is not none or max_value is not none %}
-                    {% if min_value is not none %}{{ min_value }}{{ unit }}{% else %}최소{% endif %} ~ {% if max_value is not none %}{{ max_value }}{{ unit }}{% else %}최대{% endif %}
-                {% else %}
-                    전체 범위
-                {% endif %}
-            </output>
+            <!-- 최소 ~ 최대 수치 직접 입력 폼 -->
+            <div class="flex items-center gap-1 text-xs">
+                <div class="flex items-center gap-1">
+                    <input type="number" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"
+                           value="{{ min_value if min_value is not none else '' }}"
+                           placeholder="최소" data-range-num-input="min"
+                           aria-label="{{ label }} 최소 수치 직접 입력"
+                           class="w-16 sm:w-20 px-2 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700/80 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-right">
+                    <span class="text-slate-700 dark:text-slate-300 font-bold text-[11px] shrink-0">{{ unit }}</span>
+                </div>
+                <span class="text-slate-500 font-bold px-0.5">~</span>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"
+                           value="{{ max_value if max_value is not none else '' }}"
+                           placeholder="최대" data-range-num-input="max"
+                           aria-label="{{ label }} 최대 수치 직접 입력"
+                           class="w-16 sm:w-20 px-2 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700/80 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-right">
+                    <span class="text-slate-700 dark:text-slate-300 font-bold text-[11px] shrink-0">{{ unit }}</span>
+                </div>
+            </div>
             {% if key == 'exclusive-area' %}
-            <output data-range-pyeong="min" data-range-pyeong-summary class="text-xs text-slate-400 font-medium">
+            <output data-range-pyeong="min" data-range-pyeong-summary class="text-xs text-indigo-800 dark:text-indigo-300 font-bold">
                 {% if min_value is not none or max_value is not none %}
                     (약 {% if min_value is not none %}{{ (min_value * 10 / 33) | round(1) }}{% else %}0{% endif %}평 ~ {% if max_value is not none %}{{ (max_value * 10 / 33) | round(1) }}{% else %}최대{% endif %}평)
                 {% endif %}
@@ -164,7 +184,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             <span data-range-pyeong="max" class="hidden"></span>
             {% endif %}
         </div>
-        <button type="button" data-range-clear-all class="min-h-8 rounded px-2.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">초기화</button>
+        <button type="button" data-range-clear-all class="min-h-8 rounded px-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">초기화</button>
     </div>
 
     <!-- 단일 듀얼 핸들 트랙 영역 -->
@@ -179,7 +199,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         </output>
 
         <!-- 단일 레일 트랙 및 활성 채움 바 -->
-        <div class="relative w-full h-2.5 rounded-full bg-slate-800 pointer-events-none my-0.5">
+        <div class="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 pointer-events-none my-0.5">
             <div data-range-progress class="absolute top-0 h-full bg-indigo-500 rounded-full transition-all duration-75" style="left: 0%; width: 100%;"></div>
         </div>
 
@@ -189,11 +209,11 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
     </div>
 
     <!-- 하단 최소/최대 가이드 라벨 -->
-    <div class="flex justify-between text-[11px] text-slate-400 font-medium px-0.5">
+    <div class="flex justify-between text-[11px] text-slate-700 dark:text-slate-300 font-bold px-0.5">
         <span>최소: {{ minimum }}{{ unit }}</span>
         <span>최대: {{ maximum }}{{ unit }}</span>
     </div>
-    {% if helper %}<p class="mt-1 text-xs text-slate-400 leading-relaxed">{{ helper }}</p>{% endif %}
+    {% if helper %}<p class="mt-1 text-xs text-slate-700 dark:text-slate-300 font-semibold leading-relaxed">{{ helper }}</p>{% endif %}
 </div>
 {%- endmacro %}
 
@@ -205,21 +225,113 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 <div class="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
     {% include "settings/_inline_profile_modal.html" %}
     <div class="min-w-0 space-y-6">
-    <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between border-b border-slate-800 pb-4">
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
-            <h1 class="text-2xl font-bold text-white flex items-center gap-2">
-                <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <span>아파트 매물 검색</span>
             </h1>
-            <p class="mt-1 text-xs text-slate-400">조건을 바꾸면 자동으로 새 검색을 시작합니다. 전체 건수 대신 빠른 cursor 조회를 사용합니다.</p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">조건을 바꾸면 자동으로 새 검색을 시작합니다. 전체 건수 대신 빠른 cursor 조회를 사용합니다.</p>
         </div>
-        <a href="/" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 px-4 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white transition-all shadow-sm">전체 초기화</a>
+        <a href="/" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm">전체 초기화</a>
     </header>
 
-    <form id="listing-search-form" class="space-y-5 rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl backdrop-blur-sm" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#search-results" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
+    <form id="listing-search-form" class="theme-surface space-y-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xl backdrop-blur-sm transition-colors text-slate-900 dark:text-slate-100" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#search-results" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
         <input type="hidden" name="page_size" value="{{ filters.page_size }}">
+
+        <!-- 0. 원클릭 퀵 필터 (Quick Preset Chips) -->
+        <section class="rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/90 via-purple-50/40 to-slate-50 dark:from-slate-950 dark:via-indigo-950/30 dark:to-slate-950 p-4 shadow-md space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2 border-b border-indigo-200/60 dark:border-indigo-900/40 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center rounded-lg bg-indigo-600/10 dark:bg-indigo-600/30 p-1.5 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 dark:border-indigo-500/30">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                    </span>
+                    <h2 class="font-bold text-xs sm:text-sm text-indigo-900 dark:text-indigo-200">원클릭 퀵 필터 (맞춤 프리셋)</h2>
+                </div>
+                <span class="text-[11px] text-slate-500 dark:text-slate-400">클릭하면 조건이 자동으로 세팅 및 검색됩니다</span>
+            </div>
+
+            <!-- 그룹 1: 🌟 대출 + 주거환경 꿀조합 -->
+            <div class="space-y-1.5">
+                <div class="text-[11px] font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1">
+                    <span>🌟 대출 + 정돈된 주거환경 꿀조합</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-quick-preset="combo-didimdol-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
+                        <span>🌟 디딤돌+정돈된타운</span>
+                        <span class="text-[10px] opacity-80 font-normal">(매매 5억/85㎡ + 800세대)</span>
+                    </button>
+                    <button type="button" data-quick-preset="combo-bogeum-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
+                        <span>🌟 보금자리론+정돈된타운</span>
+                        <span class="text-[10px] opacity-80 font-normal">(매매 6억/전체평형 + 800세대)</span>
+                    </button>
+                    <button type="button" data-quick-preset="combo-newborn-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
+                        <span>🌟 신생아특례+정돈된타운</span>
+                        <span class="text-[10px] opacity-80 font-normal">(매매 9억/85㎡ + 800세대)</span>
+                    </button>
+                    <button type="button" data-quick-preset="combo-newborn-jeonse-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
+                        <span>🌟 신생아전세+정돈된타운</span>
+                        <span class="text-[10px] opacity-80 font-normal">(전세 5억/85㎡ + 800세대)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 그룹 2: 🏛️ 주택 구입자금 대출 -->
+            <div class="space-y-1.5 border-t border-indigo-200/50 dark:border-slate-800/80 pt-2.5">
+                <div class="text-[11px] font-bold text-sky-700 dark:text-sky-400 flex items-center gap-1">
+                    <span>🏛️ 주택 구입자금 정책대출</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-quick-preset="loan-didimdol" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
+                        <span>🏛️ 일반 디딤돌 (5억/85㎡)</span>
+                    </button>
+                    <button type="button" data-quick-preset="loan-bogeum" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
+                        <span>💒 보금자리론 (6억/전체평형)</span>
+                    </button>
+                    <button type="button" data-quick-preset="loan-bogeum-first" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
+                        <span>🏡 생애최초 보금자리론 (6억/전체평형)</span>
+                    </button>
+                    <button type="button" data-quick-preset="loan-newborn-buy" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
+                        <span>👶 신생아 특례 (9억/85㎡)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 그룹 3: 💵 전세자금 대출 -->
+            <div class="space-y-1.5 border-t border-slate-800/80 pt-2.5">
+                <div class="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                    <span>💵 전세자금 정책대출</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-quick-preset="loan-butimmok" class="min-h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1">
+                        <span>🏠 청년/일반 버팀목 (3억/85㎡)</span>
+                    </button>
+                    <button type="button" data-quick-preset="loan-shinhon-rent" class="min-h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1">
+                        <span>💍 신혼 버팀목 (4억/85㎡)</span>
+                    </button>
+                    <button type="button" data-quick-preset="loan-newborn-rent" class="min-h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1">
+                        <span>🍼 신생아 전세 (5억/85㎡)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 그룹 4: 🏘️ 대출 외 주거환경 중심 필터 (맨 아래에 정돈) -->
+            <div class="space-y-1.5 border-t border-slate-800/80 pt-2.5">
+                <div class="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                    <span>🏘️ 주거환경 중심 필터 (대출 외 조건)</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-quick-preset="tidy-town" class="theme-soft-emerald min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
+                        <span>🏘️ 정돈된 아파트 타운</span>
+                        <span class="text-[10px] opacity-75 font-normal">(800세대 이상 대단지)</span>
+                    </button>
+                </div>
+            </div>
+        </section>
 
         <!-- 1. 기본 검색 카드 (지역 및 키워드) -->
         <section class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 shadow-sm">
@@ -242,8 +354,8 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             <fieldset class="mt-4 border-t border-slate-800/80 pt-3"><legend class="text-xs font-semibold text-slate-200 mb-2 flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>거래</span></legend><div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">{% for code, label in [(1, '매매'), (2, '전세'), (3, '월세'), (4, '단기임대')] %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-lg border border-slate-700/80 bg-slate-900 px-3.5 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium"><input class="sr-only" type="checkbox" name="trade_types" value="{{ ['SALE', 'JEONSE', 'MONTHLY_RENT', 'SHORT_TERM'][loop.index0] }}" {% if code == 4 %}id="short-term-trade"{% endif %} {% if code in selected_trades %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
 
             <!-- 가격 및 면적 조건 -->
-            <details id="transaction-advanced-filters" class="group mt-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 transition-all" {% if filters.min_price is not none or filters.max_price is not none or filters.max_monthly_rent is not none or filters.min_exclusive_area is not none or filters.max_exclusive_area is not none %}open{% endif %}>
-                <summary class="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-white hover:text-indigo-300">
+            <details id="transaction-advanced-filters" class="theme-subtle-surface group mt-4 rounded-xl border p-4 transition-all">
+                <summary class="theme-primary-text flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">
                     <span class="flex items-center gap-2">
                         <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         <span>가격·면적 상세 조건</span>
@@ -278,8 +390,8 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         </section>
 
         <!-- 2. 고급 조건 카드 -->
-        <details class="group rounded-xl border border-slate-800 bg-slate-950/50 p-4 transition-all" {% if filters.min_construction_year or filters.min_households or filters.recent_days or filters.mortgage_codes or filters.exclude_unknown_mortgage or selected_directions or selected_floors or filters.region_code or filters.min_room_count or filters.min_bathroom_count or filters.parking_possible_only or filters.min_parking_per_household or filters.max_monthly_management_cost is not none or filters.move_in_by or filters.max_subway_walk_minutes is not none %}open{% endif %}>
-            <summary class="cursor-pointer font-semibold text-xs text-white hover:text-indigo-300 flex items-center justify-between">
+        <details class="theme-subtle-surface group rounded-xl border p-4 transition-all">
+            <summary class="theme-primary-text cursor-pointer font-semibold text-xs hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center justify-between">
                 <span class="flex items-center gap-2">
                     <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
                     <span>고급 상세 조건</span>
@@ -293,7 +405,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                     {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년') }}
                     {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대') }}
                     {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일') }}
-                    <label class="space-y-1 text-xs font-medium text-slate-300"><span>동 코드 직접 입력</span><input inputmode="numeric" name="region_code" value="{{ filters.region_code or '' }}" placeholder="고급: cortarNo" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"></label>
+                    <label class="theme-secondary-text space-y-1 text-xs font-medium"><span>동 코드 직접 입력</span><input inputmode="numeric" name="region_code" value="{{ filters.region_code or '' }}" placeholder="고급: cortarNo" class="theme-control w-full rounded-lg px-3 text-xs placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"></label>
                 </div>
 
                 <!-- 융자 상태 -->
@@ -383,9 +495,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
     </div>
 </div>
 
+<script type="application/json" id="region-options-data">{{ region_options | tojson | safe }}</script>
 <script>
 (() => {
-    const regions = {{ region_options | tojson | safe }};
+    const regions = JSON.parse(document.getElementById("region-options-data")?.textContent || "[]");
     const form = document.getElementById("listing-search-form");
     document.addEventListener("change", (event) => {
         if (event.target.matches("[data-result-sort]")) form.requestSubmit();
@@ -467,13 +580,14 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
     const displayValue = (value, unit) => `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit}`;
     const formatPyeong = (area) => `약 ${(Number(area) / 3.3).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}평`;
 
-    // 단일 슬라이더 동적 툴팁 및 프로그레스 바 제어
+    // 단일 슬라이더 동적 툴팁, 수치 숫자 입력창 및 프로그레스 바 제어
     document.querySelectorAll("[data-single-slider]").forEach((container) => {
         const hidden = container.querySelector("input[type=hidden]");
         const handle = container.querySelector("[data-slider-handle]");
         const output = container.querySelector("[data-slider-output]");
         const tooltip = container.querySelector("[data-slider-tooltip]");
         const progress = container.querySelector("[data-slider-progress]");
+        const numInput = container.querySelector("[data-single-num-input]");
         const scale = Number(container.dataset.scale);
         const unit = container.dataset.unit;
 
@@ -491,28 +605,65 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         const sync = (isActive) => {
             if (isActive) hidden.value = String(Math.round(Number(handle.value) * scale * 100) / 100);
             if (hidden.value === "") {
-                output.textContent = "제한 없음";
+                if (output) output.textContent = "제한 없음";
+                if (numInput) numInput.value = "";
                 updateVisuals(Number(handle.min));
                 return;
             }
             handle.value = Number(hidden.value) / scale;
-            output.textContent = displayValue(handle.value, unit);
+            if (output) output.textContent = displayValue(handle.value, unit);
+            if (numInput && document.activeElement !== numInput) numInput.value = handle.value;
             updateVisuals(Number(handle.value));
         };
         sync(false);
+
         handle.addEventListener("input", () => {
+            if (numInput) numInput.value = handle.value;
             updateVisuals(Number(handle.value));
             sync(true);
         });
+
+        if (numInput) {
+            const handleNumInputChange = (shouldSubmit = false) => {
+                const valStr = numInput.value.trim();
+                if (valStr === "") {
+                    hidden.value = "";
+                    handle.value = handle.min;
+                    sync(false);
+                } else {
+                    let val = Number(valStr);
+                    const minVal = Number(handle.min);
+                    const maxVal = Number(handle.max);
+                    if (!isNaN(val)) {
+                        val = Math.max(minVal, Math.min(maxVal, val));
+                        handle.value = val;
+                        hidden.value = String(Math.round(val * scale * 100) / 100);
+                        updateVisuals(val);
+                    }
+                }
+                if (shouldSubmit) form.requestSubmit();
+            };
+
+            numInput.addEventListener("input", () => handleNumInputChange(false));
+            numInput.addEventListener("change", () => handleNumInputChange(true));
+            numInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleNumInputChange(true);
+                }
+            });
+        }
+
         container.querySelector("[data-slider-clear]").addEventListener("click", () => {
             hidden.value = "";
             handle.value = handle.min;
+            if (numInput) numInput.value = "";
             sync(false);
             form.requestSubmit();
         });
     });
 
-    // 듀얼 핸들 트랙 min/max 조작 편의성 및 동적 Z-Index 스와핑
+    // 듀얼 핸들 트랙 min/max 조작 편의성, 수치 숫자 입력창 및 동적 Z-Index 스와핑
     const rangeSliders = new Map();
     document.querySelectorAll("[data-range-slider]").forEach((container) => {
         const key = container.dataset.rangeSlider;
@@ -525,6 +676,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         const handle = {
             min: container.querySelector('[data-range-handle="min"]'),
             max: container.querySelector('[data-range-handle="max"]'),
+        };
+        const numInputs = {
+            min: container.querySelector('[data-range-num-input="min"]'),
+            max: container.querySelector('[data-range-num-input="max"]'),
         };
         const tooltip = {
             min: container.querySelector('[data-range-tooltip="min"]'),
@@ -565,6 +720,13 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                 tooltip.max.style.left = `${maxPercent}%`;
                 tooltip.max.style.transform = isClose ? "translateX(-10%)" : "translateX(-50%)";
                 tooltip.max.textContent = hidden.max.value !== "" ? displayValue(maxVal, unit) : "최대";
+            }
+
+            if (numInputs.min && document.activeElement !== numInputs.min) {
+                numInputs.min.value = hidden.min.value !== "" ? handle.min.value : "";
+            }
+            if (numInputs.max && document.activeElement !== numInputs.max) {
+                numInputs.max.value = hidden.max.value !== "" ? handle.max.value : "";
             }
 
             if (summary) {
@@ -644,11 +806,72 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             updateVisuals();
         });
 
+        // 듀얼 수치 입력 폼 이벤트 핸들러 바인딩 (min/max)
+        if (numInputs.min) {
+            const handleMinInputChange = (shouldSubmit = false) => {
+                const valStr = numInputs.min.value.trim();
+                if (valStr === "") {
+                    hidden.min.value = "";
+                    handle.min.value = handle.min.min;
+                } else {
+                    let val = Number(valStr);
+                    const minLimit = Number(handle.min.min);
+                    const currentMax = Number(handle.max.value);
+                    if (!isNaN(val)) {
+                        val = Math.max(minLimit, Math.min(currentMax, val));
+                        handle.min.value = val;
+                        hidden.min.value = String(val);
+                    }
+                }
+                updateVisuals();
+                if (shouldSubmit) form.requestSubmit();
+            };
+            numInputs.min.addEventListener("input", () => handleMinInputChange(false));
+            numInputs.min.addEventListener("change", () => handleMinInputChange(true));
+            numInputs.min.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleMinInputChange(true);
+                }
+            });
+        }
+
+        if (numInputs.max) {
+            const handleMaxInputChange = (shouldSubmit = false) => {
+                const valStr = numInputs.max.value.trim();
+                if (valStr === "") {
+                    hidden.max.value = "";
+                    handle.max.value = handle.max.max;
+                } else {
+                    let val = Number(valStr);
+                    const currentMin = Number(handle.min.value);
+                    const maxLimit = Number(handle.max.max);
+                    if (!isNaN(val)) {
+                        val = Math.max(currentMin, Math.min(maxLimit, val));
+                        handle.max.value = val;
+                        hidden.max.value = String(val);
+                    }
+                }
+                updateVisuals();
+                if (shouldSubmit) form.requestSubmit();
+            };
+            numInputs.max.addEventListener("input", () => handleMaxInputChange(false));
+            numInputs.max.addEventListener("change", () => handleMaxInputChange(true));
+            numInputs.max.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleMaxInputChange(true);
+                }
+            });
+        }
+
         const clearBtn = container.querySelector("[data-range-clear-all]");
         if (clearBtn) {
             clearBtn.addEventListener("click", () => {
                 hidden.min.value = "";
                 hidden.max.value = "";
+                if (numInputs.min) numInputs.min.value = "";
+                if (numInputs.max) numInputs.max.value = "";
                 render();
                 form.requestSubmit();
             });
@@ -672,6 +895,577 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         slider.set("max", String(area + 1));
         form.requestSubmit();
     }));
+
+    // 퀵 필터 프리셋 버튼 이벤트 처리
+    const presets = {
+        "combo-didimdol-town": { trade: "SALE", maxPrice: "5", maxArea: "85", minHouseholds: "800" },
+        "combo-bogeum-town": { trade: "SALE", maxPrice: "6", maxArea: "", minHouseholds: "800" },
+        "combo-newborn-town": { trade: "SALE", maxPrice: "9", maxArea: "85", minHouseholds: "800" },
+        "combo-newborn-jeonse-town": { trade: "JEONSE", maxPrice: "5", maxArea: "85", minHouseholds: "800" },
+        "loan-didimdol": { trade: "SALE", maxPrice: "5", maxArea: "85" },
+        "loan-bogeum": { trade: "SALE", maxPrice: "6", maxArea: "" },
+        "loan-bogeum-first": { trade: "SALE", maxPrice: "6", maxArea: "" },
+        "loan-newborn-buy": { trade: "SALE", maxPrice: "9", maxArea: "85" },
+        "loan-butimmok": { trade: "JEONSE", maxPrice: "3", maxArea: "85" },
+        "loan-shinhon-rent": { trade: "JEONSE", maxPrice: "4", maxArea: "85" },
+        "loan-newborn-rent": { trade: "JEONSE", maxPrice: "5", maxArea: "85" },
+        "tidy-town": { minHouseholds: "800" }
+    };
+
+    document.querySelectorAll("[data-quick-preset]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const key = button.dataset.quickPreset;
+            const config = presets[key];
+            if (!config) return;
+
+            // 1. 거래 유형 (매매 / 전세) 체크박스 조정
+            if (config.trade) {
+                const tradeCheckboxes = form.querySelectorAll('input[name="trade_types"]');
+                tradeCheckboxes.forEach((cb) => {
+                    cb.checked = (cb.value === config.trade);
+                });
+            }
+
+            // 2. 가격/보증금 슬라이더 세팅
+            const priceSlider = rangeSliders.get("price");
+            if (priceSlider) {
+                priceSlider.set("min", config.minPrice || "");
+                priceSlider.set("max", config.maxPrice || "");
+            }
+
+            // 3. 전용면적 슬라이더 세팅
+            const areaSlider = rangeSliders.get("exclusive-area");
+            if (areaSlider) {
+                areaSlider.set("min", config.minArea || "");
+                areaSlider.set("max", config.maxArea || "");
+            }
+
+            // 4. 최소 세대수 슬라이더 세팅
+            const householdsHidden = document.getElementById("min-households-value");
+            const householdsHandle = document.getElementById("min-households");
+            if (householdsHidden && householdsHandle) {
+                if (config.minHouseholds) {
+                    householdsHidden.value = config.minHouseholds;
+                    householdsHandle.value = config.minHouseholds;
+                } else {
+                    householdsHidden.value = "";
+                    householdsHandle.value = householdsHandle.min || "0";
+                }
+                householdsHandle.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+
+            // 5. 접힌 details 영역 자동 열기
+            const priceDetails = document.getElementById("transaction-advanced-filters");
+            if (priceDetails && (config.maxPrice || config.maxArea)) {
+                priceDetails.open = true;
+            }
+            const advDetails = form.querySelector("details:not(#transaction-advanced-filters)");
+            if (advDetails && config.minHouseholds) {
+                advDetails.open = true;
+            }
+
+            // 6. 폼 비동기 자동 제출
+            form.requestSubmit();
+        });
+    });
 })();
+</script>
+
+<!-- ================================================================= -->
+<!-- ⭐ 우측 슬라이딩 즐겨찾기 사이드바 Drawer (오른쪽 패널) -->
+<!-- ================================================================= -->
+<div id="favorite-sidebar-overlay" onclick="toggleFavoriteSidebar(false)" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+<aside id="favorite-sidebar-drawer" class="theme-surface fixed top-0 right-0 z-50 h-full w-full max-w-md bg-white dark:bg-slate-950 border-l border-slate-200 dark:border-slate-800 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col text-slate-900 dark:text-slate-100">
+    <!-- 사이드바 헤더 -->
+    <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/90 dark:bg-slate-900/90 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <span class="p-1.5 rounded-lg bg-amber-500/20 text-amber-500 dark:text-amber-400">
+                <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+            </span>
+            <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>나의 보관 매물함</span>
+                    <span id="fav-drawer-count" class="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 text-xs font-extrabold">0</span>
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400">관심 있는 단지 및 개별 매물을 한곳에서 비교하세요.</p>
+            </div>
+        </div>
+        <button type="button" onclick="toggleFavoriteSidebar(false)" class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    </div>
+
+    <!-- 묶음 보기 (단지별 그룹화) Toggle 컨트롤 및 요약 통계 -->
+    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 space-y-3">
+        <!-- 묶음 보기 Toggle Switch -->
+        <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <span>단지별 묶음으로 보기</span>
+            </span>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="fav-group-toggle" onchange="toggleFavoriteGroupMode(this.checked)" class="sr-only peer">
+                <div class="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+        </div>
+
+        <!-- 요약 통계 피드 -->
+        <div id="fav-summary-stats" class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-white dark:bg-slate-900/80 p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-center shadow-sm">
+                <span class="text-slate-500 dark:text-slate-400 block text-[11px]">보관 총 예상가</span>
+                <strong id="fav-stat-total-price" class="text-emerald-600 dark:text-emerald-400 font-bold">0원</strong>
+            </div>
+            <div class="bg-white dark:bg-slate-900/80 p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-center shadow-sm">
+                <span class="text-slate-500 dark:text-slate-400 block text-[11px]">대출 가능 매물</span>
+                <strong id="fav-stat-loan-count" class="text-indigo-600 dark:text-indigo-400 font-bold">0개</strong>
+            </div>
+        </div>
+
+        <!-- 퀵 액션 버튼 그룹 -->
+        <div class="flex items-center gap-2 pt-1">
+            <button type="button" onclick="openFavoriteCompareModal()" class="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition-all">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                <span>한눈에 비교하기</span>
+            </button>
+            <button type="button" onclick="exportFavoritesToCSV()" class="py-1.5 px-2.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs flex items-center gap-1 transition-all border border-slate-300 dark:border-slate-700" title="CSV 파일 다운로드">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                <span>내보내기</span>
+            </button>
+            <button type="button" onclick="clearAllFavorites()" class="py-1.5 px-2.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-red-500/20 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-300 font-medium text-xs transition-all border border-slate-300 dark:border-slate-700" title="즐겨찾기 전체 비우기">
+                <span>비우기</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 즐겨찾기 목록 컨테이너 -->
+    <div id="favorite-sidebar-list" class="flex-1 overflow-y-auto p-4 space-y-3">
+        <!-- JS dynamic content -->
+    </div>
+</aside>
+
+<!-- ================================================================= -->
+<!-- ⚖️ 즐겨찾기 한눈에 비교하기 모달 (Comparison Modal) -->
+<!-- ================================================================= -->
+<dialog id="favorite-compare-modal" class="w-[min(64rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
+    <div class="max-h-[85vh] flex flex-col p-6">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div>
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span class="p-1 rounded bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">⚖️</span>
+                    <span>즐겨찾기 매물 한눈에 비교하기</span>
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">보관하신 매물들의 매매가, 전용면적, 층수, 정책대출 가능 여부를 비교합니다.</p>
+            </div>
+            <button type="button" onclick="document.getElementById('favorite-compare-modal').close()" class="rounded-lg p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+        </div>
+
+        <div class="mt-4 flex-1 overflow-x-auto overflow-y-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr id="compare-table-head" class="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                        <th class="p-3 font-semibold text-slate-600 dark:text-slate-400 min-w-[120px]">항목</th>
+                        <!-- Dynamic THs -->
+                    </tr>
+                </thead>
+                <tbody id="compare-table-body" class="divide-y divide-slate-200 dark:divide-slate-800/60">
+                    <!-- Dynamic TRs -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</dialog>
+
+<!-- ================================================================= -->
+<!-- 🧠 즐겨찾기 데이터 및 UX 인터렉션 자바스크립트 엔진 -->
+<!-- ================================================================= -->
+<script>
+const IS_USER_LOGGED_IN = Boolean(JSON.parse('{{ is_authenticated | tojson }}'));
+
+class FavoritesManager {
+    constructor() {
+        this.STORAGE_KEY_LISTINGS = "rr_favorite_listings_v1";
+        this.STORAGE_KEY_COMPLEXES = "rr_favorite_complexes_v1";
+        this.STORAGE_KEY_GROUP_MODE = "rr_favorite_group_mode_v1";
+
+        this.listings = this.load(this.STORAGE_KEY_LISTINGS, []);
+        this.complexes = this.load(this.STORAGE_KEY_COMPLEXES, []);
+        this.isGroupMode = this.load(this.STORAGE_KEY_GROUP_MODE, false);
+
+        this.init();
+    }
+
+    load(key, fallback) {
+        try {
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : fallback;
+        } catch(e) {
+            return fallback;
+        }
+    }
+
+    save() {
+        try {
+            localStorage.setItem(this.STORAGE_KEY_LISTINGS, JSON.stringify(this.listings));
+            localStorage.setItem(this.STORAGE_KEY_COMPLEXES, JSON.stringify(this.complexes));
+            localStorage.setItem(this.STORAGE_KEY_GROUP_MODE, JSON.stringify(this.isGroupMode));
+        } catch(e){}
+
+        if (IS_USER_LOGGED_IN) {
+            this.syncToServer();
+        }
+        this.updateUI();
+    }
+
+    async syncToServer() {
+        try {
+            await fetch("/api/user/preference", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    favorites: {
+                        listings: this.listings,
+                        complexes: this.complexes,
+                        isGroupMode: this.isGroupMode
+                    }
+                })
+            });
+        } catch(e){}
+    }
+
+    async loadFromServerAndMerge() {
+        if (!IS_USER_LOGGED_IN) return;
+        try {
+            const res = await fetch("/api/user/preference");
+            if (!res.ok) return;
+            const data = await res.json();
+            const serverFavs = data.favorites || {};
+
+            let mergedListings = serverFavs.listings || [];
+            let mergedComplexes = serverFavs.complexes || [];
+
+            // 비로그인 중 로컬스토리지에 보관해둔 항목 병합
+            const localListings = this.load(this.STORAGE_KEY_LISTINGS, []);
+            const localComplexes = this.load(this.STORAGE_KEY_COMPLEXES, []);
+
+            localListings.forEach(item => {
+                if (!mergedListings.some(x => String(x.article_id) === String(item.article_id))) {
+                    mergedListings.push(item);
+                }
+            });
+            localComplexes.forEach(c => {
+                if (!mergedComplexes.some(x => String(x.complex_id) === String(c.complex_id))) {
+                    mergedComplexes.push(c);
+                }
+            });
+
+            this.listings = mergedListings;
+            this.complexes = mergedComplexes;
+            if (typeof serverFavs.isGroupMode === "boolean") {
+                this.isGroupMode = serverFavs.isGroupMode;
+            }
+
+            // 병합 결과 보존 저장
+            this.save();
+        } catch(e){}
+    }
+
+    init() {
+        const toggleEl = document.getElementById("fav-group-toggle");
+        if (toggleEl) toggleEl.checked = this.isGroupMode;
+        if (IS_USER_LOGGED_IN) {
+            this.loadFromServerAndMerge();
+        }
+        this.updateUI();
+    }
+
+    isListingFav(id) {
+        return this.listings.some(x => String(x.article_id) === String(id));
+    }
+
+    isComplexFav(id) {
+        return this.complexes.some(x => String(x.complex_id) === String(id));
+    }
+
+    toggleListing(item) {
+        if (!item || !item.article_id) return;
+        const idx = this.listings.findIndex(x => String(x.article_id) === String(item.article_id));
+        if (idx >= 0) {
+            this.listings.splice(idx, 1);
+        } else {
+            this.listings.push(item);
+        }
+        this.save();
+    }
+
+    toggleComplex(group) {
+        if (!group || !group.complex_id) return;
+        const idx = this.complexes.findIndex(x => String(x.complex_id) === String(group.complex_id));
+        if (idx >= 0) {
+            this.complexes.splice(idx, 1);
+        } else {
+            this.complexes.push(group);
+        }
+        this.save();
+    }
+
+    updateUI() {
+        const count = this.listings.length + this.complexes.length;
+
+        const badge = document.getElementById("nav-favorite-count-badge");
+        if (badge) badge.textContent = count;
+
+        const drawerCount = document.getElementById("fav-drawer-count");
+        if (drawerCount) drawerCount.textContent = count;
+
+        document.querySelectorAll("[data-fav-btn-listing]").forEach(btn => {
+            const id = btn.getAttribute("data-fav-btn-listing");
+            if (this.isListingFav(id)) {
+                btn.className = "group/fav p-1.5 rounded-lg bg-amber-500/20 border border-amber-500/80 text-amber-400 transition-all shadow-sm";
+            } else {
+                btn.className = "group/fav p-1.5 rounded-lg bg-slate-900/80 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/50 text-slate-400 hover:text-amber-400 transition-all";
+            }
+        });
+
+        document.querySelectorAll("[data-fav-btn-complex]").forEach(btn => {
+            const id = btn.getAttribute("data-fav-btn-complex");
+            if (this.isComplexFav(id)) {
+                btn.className = "p-1 rounded bg-amber-500/20 border border-amber-500/80 text-amber-400 transition-all text-xs flex items-center gap-1 shadow-sm";
+            } else {
+                btn.className = "p-1 rounded bg-slate-900/80 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/50 text-slate-400 hover:text-amber-400 transition-all text-xs flex items-center gap-1";
+            }
+        });
+
+        let totalPrice = 0;
+        let eligibleLoanCount = 0;
+        this.listings.forEach(x => {
+            totalPrice += (x.primary_price || 0);
+            if (x.eligible_loans && x.eligible_loans.length > 0) eligibleLoanCount++;
+        });
+
+        const totalPriceEl = document.getElementById("fav-stat-total-price");
+        if (totalPriceEl) {
+            const billion = Math.floor(totalPrice / 100000000);
+            const remainder = Math.floor((totalPrice % 100000000) / 10000);
+            let textStr = "0원";
+            if (billion > 0 && remainder > 0) textStr = `${billion}억 ${remainder.toLocaleString()}만원`;
+            else if (billion > 0) textStr = `${billion}억원`;
+            else if (remainder > 0) textStr = `${remainder.toLocaleString()}만원`;
+            totalPriceEl.textContent = textStr;
+        }
+
+        const loanCountEl = document.getElementById("fav-stat-loan-count");
+        if (loanCountEl) loanCountEl.textContent = `${eligibleLoanCount}개`;
+
+        this.renderSidebarList();
+    }
+
+    renderSidebarList() {
+        const listContainer = document.getElementById("favorite-sidebar-list");
+        if (!listContainer) return;
+
+        if (this.listings.length === 0 && this.complexes.length === 0) {
+            listContainer.innerHTML = `
+                <div class="py-12 text-center text-slate-500 space-y-2">
+                    <svg class="mx-auto w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                    <p class="text-xs font-medium">보관된 단지나 매물이 없습니다.</p>
+                    <p class="text-[11px] text-slate-600">검색 카드에서 ⭐ 버튼을 눌러 보관해 보세요.</p>
+                </div>
+            `;
+            return;
+        }
+
+        let html = "";
+
+        if (this.isGroupMode) {
+            const grouped = {};
+            this.listings.forEach(item => {
+                const cName = item.complex_name || "기타 단지";
+                if (!grouped[cName]) grouped[cName] = { items: [], info: item };
+                grouped[cName].items.push(item);
+            });
+            this.complexes.forEach(c => {
+                const cName = c.complex_name || "기타 단지";
+                if (!grouped[cName]) grouped[cName] = { items: [], info: c };
+            });
+
+            Object.keys(grouped).forEach(cName => {
+                const g = grouped[cName];
+                html += `
+                    <details class="group/c rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs transition-all" open>
+                        <summary class="cursor-pointer flex items-center justify-between gap-2 font-bold text-slate-100">
+                            <span class="flex items-center gap-1.5 truncate">
+                                <span class="text-amber-400">🏢</span>
+                                <span>${cName}</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300">${g.items.length}개 매물</span>
+                            </span>
+                            <svg class="w-4 h-4 text-slate-400 transition-transform group-open/c:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </summary>
+                        <div class="mt-2.5 pt-2 border-t border-slate-800/80 space-y-2">
+                `;
+                if (g.items.length === 0) {
+                    html += `<p class="text-[11px] text-slate-500 py-1">단지 보관 등록됨 (${g.info.address || ''})</p>`;
+                } else {
+                    g.items.forEach(item => {
+                        html += this.renderListingItemHTML(item);
+                    });
+                }
+                html += `</div></details>`;
+            });
+        } else {
+            this.listings.forEach(item => {
+                html += this.renderListingItemHTML(item);
+            });
+            this.complexes.forEach(c => {
+                html += `
+                    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900 flex items-center justify-between gap-2 text-xs">
+                        <div class="min-w-0">
+                            <span class="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">단지 보관</span>
+                            <h4 class="font-bold text-white truncate mt-1">${c.complex_name}</h4>
+                            <p class="text-[11px] text-slate-400 truncate">${c.address || ''}</p>
+                        </div>
+                        <button type="button" onclick="favManager.toggleComplex({complex_id:'${c.complex_id}'})" class="p-1.5 text-slate-400 hover:text-red-400">✕</button>
+                    </div>
+                `;
+            });
+        }
+
+        listContainer.innerHTML = html;
+    }
+
+    renderListingItemHTML(item) {
+        const priceStr = item.primary_price ? `${Math.floor(item.primary_price/100000000)}억 ${(item.primary_price%100000000/10000).toLocaleString()}만` : '-';
+        const areaStr = item.exclusive_area_x100 ? `${item.exclusive_area_x100/100}㎡` : '';
+        const loanAvailable = item.eligible_loans && item.eligible_loans.length > 0;
+        const articleUrl = "https://fin.land." + "naver.com/articles/" + item.article_id;
+
+        return `
+            <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/90 hover:border-slate-700 transition-all text-xs space-y-1.5 relative group/item">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <span class="text-[10px] font-bold text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">${item.trade_type == 1 ? '매매' : '전세'}</span>
+                        <h4 class="font-bold text-slate-100 truncate inline ml-1">${item.complex_name}</h4>
+                    </div>
+                    <span class="font-bold text-emerald-400 text-sm shrink-0">${priceStr}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+                    <span>${areaStr}</span>
+                    <span>· ${item.floor_no || '-'}층</span>
+                    ${loanAvailable ? `<span class="text-emerald-400 font-semibold bg-emerald-500/10 px-1 rounded">대출 가능</span>` : ''}
+                </div>
+                <div class="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[11px]">
+                    <a href="${articleUrl}" target="_blank" rel="noopener" class="text-indigo-400 hover:text-indigo-300 font-medium">새창보기 ↗</a>
+                    <button type="button" onclick="favManager.toggleListing({article_id:'${item.article_id}'})" class="text-slate-500 hover:text-red-400 font-medium">제거</button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// 전역 싱글톤 인스턴스 가동
+const favManager = new FavoritesManager();
+
+function toggleFavoriteSidebar(show) {
+    const drawer = document.getElementById("favorite-sidebar-drawer");
+    const overlay = document.getElementById("favorite-sidebar-overlay");
+    if (!drawer || !overlay) return;
+
+    const isShowing = !drawer.classList.contains("translate-x-full");
+    const targetShow = (typeof show === "boolean") ? show : !isShowing;
+
+    if (targetShow) {
+        drawer.classList.remove("translate-x-full");
+        overlay.classList.remove("opacity-0", "pointer-events-none");
+    } else {
+        drawer.classList.add("translate-x-full");
+        overlay.classList.add("opacity-0", "pointer-events-none");
+    }
+}
+
+function toggleListingFavorite(item) {
+    favManager.toggleListing(item);
+}
+
+function toggleComplexFavorite(group) {
+    favManager.toggleComplex(group);
+}
+
+function toggleFavoriteGroupMode(checked) {
+    favManager.isGroupMode = checked;
+    favManager.save();
+}
+
+function clearAllFavorites() {
+    if (confirm("즐겨찾기 보관함을 전체 삭제하시겠습니까?")) {
+        favManager.listings = [];
+        favManager.complexes = [];
+        favManager.save();
+    }
+}
+
+function openFavoriteCompareModal() {
+    if (favManager.listings.length === 0) {
+        alert("비교할 보관 매물이 없습니다. 매물 카드에서 ⭐ 버튼을 눌러 추가해 보세요.");
+        return;
+    }
+
+    const modal = document.getElementById("favorite-compare-modal");
+    const head = document.getElementById("compare-table-head");
+    const body = document.getElementById("compare-table-body");
+    if (!modal || !head || !body) return;
+
+    let headHTML = `<th class="p-3 font-semibold text-slate-400 min-w-[110px] sticky left-0 bg-slate-900 border-r border-slate-800">비교 항목</th>`;
+    favManager.listings.forEach((item, i) => {
+        headHTML += `<th class="p-3 font-bold text-white min-w-[160px] text-center border-r border-slate-800/60">매물 #${i+1}<br><span class="text-xs text-indigo-300 font-medium">${item.complex_name}</span></th>`;
+    });
+    head.innerHTML = headHTML;
+
+    const rows = [
+        { label: "거래 구분", fn: x => x.trade_type == 1 ? "매매" : "전세" },
+        { label: "매물 가격", fn: x => x.primary_price ? `${Math.floor(x.primary_price/100000000)}억 ${(x.primary_price%100000000/10000).toLocaleString()}만원` : "-" },
+        { label: "전용면적", fn: x => x.exclusive_area_x100 ? `${x.exclusive_area_x100/100}㎡ (약 ${Math.round(x.exclusive_area_x100/100*0.3025)}평)` : "-" },
+        { label: "층 / 방향", fn: x => `${x.floor_no || '-'}층 / ${x.direction_code == 1 ? '남향' : '기타'}` },
+        { label: "세대수 / 준공년도", fn: x => `${x.household_count || '-'}세대 (${x.construction_year || '-'}년)` },
+        { label: "정책대출 가능여부", fn: x => (x.eligible_loans && x.eligible_loans.length > 0) ? `✅ ${x.eligible_loans.map(l=>l.loan_type_name).join(', ')}` : "❌ 불가/확인필요" },
+        { label: "네이버 바로가기", fn: x => `<a href="${'https://fin.land.' + 'naver.com/articles/' + x.article_id}" target="_blank" class="text-indigo-400 underline font-bold">링크 이동 ↗</a>` }
+    ];
+
+    let bodyHTML = "";
+    rows.forEach(r => {
+        bodyHTML += `<tr class="hover:bg-slate-900/50">`;
+        bodyHTML += `<td class="p-3 font-semibold text-slate-300 sticky left-0 bg-slate-950 border-r border-slate-800">${r.label}</td>`;
+        favManager.listings.forEach(item => {
+            bodyHTML += `<td class="p-3 text-center border-r border-slate-800/60 text-slate-200">${r.fn(item)}</td>`;
+        });
+        bodyHTML += `</tr>`;
+    });
+
+    body.innerHTML = bodyHTML;
+    modal.showModal();
+}
+
+function exportFavoritesToCSV() {
+    if (favManager.listings.length === 0) {
+        alert("내보낼 즐겨찾기 매물이 없습니다.");
+        return;
+    }
+
+    let csv = "단지명,주소,거래유형,가격(원),전용면적(㎡),층,대출가능여부,네이버링크\n";
+    favManager.listings.forEach(x => {
+        const trade = x.trade_type == 1 ? "매매" : "전세";
+        const area = x.exclusive_area_x100 ? x.exclusive_area_x100/100 : "";
+        const loans = (x.eligible_loans && x.eligible_loans.length > 0) ? "가능" : "불가";
+        const link = "https://fin.land." + "naver.com/articles/" + x.article_id;
+        csv += `"${x.complex_name || ''}","${x.address || ''}","${trade}",${x.primary_price || 0},${area},"${x.floor_no || ''}","${loans}","${link}"\n`;
+    });
+
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.getElementById("a") || document.createElement("a");
+    a.href = url;
+    a.download = `realty_radar_favorites_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
 </script>
 {% endblock %}

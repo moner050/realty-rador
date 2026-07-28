@@ -36,22 +36,30 @@ class LoanRuleEvaluator:
                 reason="매매가 또는 전용면적 정보가 부족합니다.",
             )
 
-        # 1. 면적 조건 (85㎡ 이하)
-        if exclusive_area > Decimal("85.0"):
+        is_newlywed = applicant and applicant.is_newlywed
+        has_multi_children = applicant and applicant.child_count >= 2
+        is_first_buyer = applicant and applicant.is_first_home_buyer
+        is_single_household = applicant and applicant.is_single_household
+        is_capital = self._is_capital_area(address)
+
+        # 1. 면적 조건 (미혼 단독세대주 60㎡, 일반 85㎡ 이하)
+        max_area_limit = Decimal("60.0") if is_single_household else Decimal("85.0")
+        if exclusive_area > max_area_limit:
             return LoanEvaluationResult(
                 product_code="DIDIMDOL",
                 product_name="내집마련 디딤돌대출",
                 status=LoanEligibilityStatus.INELIGIBLE,
-                reason="전용면적 85㎡를 초과합니다.",
+                reason=f"전용면적 {max_area_limit}㎡를 초과합니다.",
             )
 
-        is_newlywed = applicant and applicant.is_newlywed
-        has_multi_children = applicant and applicant.child_count >= 2
-        is_first_buyer = applicant and applicant.is_first_home_buyer
-        is_capital = self._is_capital_area(address)
+        # 2. 대상 주택가 상한 (미혼 단독 3억 원, 신혼/다자녀 6억 원, 일반 5억 원)
+        if is_single_household:
+            max_price_limit = 300_000_000
+        elif is_newlywed or has_multi_children:
+            max_price_limit = 600_000_000
+        else:
+            max_price_limit = 500_000_000
 
-        # 2. 대상 주택가 상한 (신혼/다자녀 6억 원, 일반/생애최초 5억 원)
-        max_price_limit = 600_000_000 if (is_newlywed or has_multi_children) else 500_000_000
         if price > max_price_limit:
             return LoanEvaluationResult(
                 product_code="DIDIMDOL",
@@ -69,8 +77,10 @@ class LoanRuleEvaluator:
         deduction = 55_000_000 if is_capital else 0
         possible_ltv_loan = max(0, raw_ltv_loan - deduction)
 
-        # 디딤돌 규격 한도 (일반 2억, 생애최초 2.4억, 신혼/다자녀 3.2억 원)
-        if is_newlywed or has_multi_children:
+        # 디딤돌 규격 한도 (미혼 단독 1.5억/생초2억, 일반 2억, 생애최초 2.4억, 신혼/다자녀 3.2억 원)
+        if is_single_household:
+            spec_max_loan = 200_000_000 if is_first_buyer else 150_000_000
+        elif is_newlywed or has_multi_children:
             spec_max_loan = 320_000_000
         elif is_first_buyer:
             spec_max_loan = 240_000_000
@@ -146,7 +156,7 @@ class LoanRuleEvaluator:
         address: str | None = None,
         applicant: ApplicantProfile | None = None,
     ) -> LoanEvaluationResult:
-        """보금자리론 조건 평가 (방공제 미차감, 6억 이하 주택, 최대 4.2억 원)."""
+        """보금자리론 조건 평가 (방공제 미차감, 6억 이하 주택, 면적제한 없음, 최대 4.2억 원)."""
         if transaction_type != TransactionType.SALE or not price:
             return LoanEvaluationResult(
                 product_code="BOGUMJARI",
@@ -237,16 +247,25 @@ class LoanRuleEvaluator:
         address: str | None = None,
         applicant: ApplicantProfile | None = None,
     ) -> LoanEvaluationResult:
-        """신생아 특례대출(구입) 조건 평가 (9억 이하 주택, 소득 2.0억 원 이하, 최대 5.0억 원)."""
-        if transaction_type != TransactionType.SALE or not price:
+        """신생아 특례 디딤돌대출(구입) 조건 평가 (9억 이하 주택, 85㎡ 이하, 소득 1.3억/맞벌이 2.0억 이하, 최대 4.0억 원)."""
+        if transaction_type != TransactionType.SALE or not price or not exclusive_area:
             return LoanEvaluationResult(
                 product_code="NEONATAL_PURCHASE",
                 product_name="신생아 특례대출(구입)",
                 status=LoanEligibilityStatus.UNKNOWN,
-                reason="매매가 정보가 부족합니다.",
+                reason="매매가 또는 전용면적 정보가 부족합니다.",
             )
 
-        # 1. 대상 주택가 상한 (9억 원 이하)
+        # 1. 전용면적 조건 (85㎡ 이하)
+        if exclusive_area > Decimal("85.0"):
+            return LoanEvaluationResult(
+                product_code="NEONATAL_PURCHASE",
+                product_name="신생아 특례대출(구입)",
+                status=LoanEligibilityStatus.INELIGIBLE,
+                reason="전용면적 85㎡를 초과합니다.",
+            )
+
+        # 2. 대상 주택가 상한 (9억 원 이하)
         if price > 900_000_000:
             return LoanEvaluationResult(
                 product_code="NEONATAL_PURCHASE",
@@ -263,7 +282,8 @@ class LoanRuleEvaluator:
             ltv_ratio = 0.80
 
         possible_ltv_loan = int(int(price) * ltv_ratio)
-        final_loan_amount = min(500_000_000, possible_ltv_loan)
+        # 최신 기준 신생아 특례 디딤돌 구입자금 한도는 4.0억 원 (2025.06.28 개정)
+        final_loan_amount = min(400_000_000, possible_ltv_loan)
 
         if not applicant:
             rate = 2.50
@@ -278,7 +298,7 @@ class LoanRuleEvaluator:
                 estimated_monthly_interest=monthly,
             )
 
-        # 2. 2년 이내 출산 가구 조건 및 소득 기준 (2.0억 원 이하)
+        # 3. 2년 이내 출산 가구 조건 및 소득 기준 (외벌이 1.3억 / 맞벌이 2.0억 원 이하)
         if not applicant.has_newborn:
             return LoanEvaluationResult(
                 product_code="NEONATAL_PURCHASE",
@@ -287,12 +307,13 @@ class LoanRuleEvaluator:
                 reason="2년 이내 출산(신생아) 가구 조건 미충족",
             )
 
-        if applicant.annual_income > 200_000_000:
+        income_limit = 200_000_000 if applicant.is_dual_income else 130_000_000
+        if applicant.annual_income > income_limit:
             return LoanEvaluationResult(
                 product_code="NEONATAL_PURCHASE",
                 product_name="신생아 특례대출(구입)",
                 status=LoanEligibilityStatus.INELIGIBLE,
-                reason="소득 기준(2.0억 원)을 초과합니다.",
+                reason=f"소득 기준({income_limit // 10_000}만 원)을 초과합니다.",
             )
 
         rate = 2.50
@@ -308,6 +329,89 @@ class LoanRuleEvaluator:
             estimated_monthly_interest=monthly_interest,
         )
 
+    def evaluate_neonatal_rent(
+        self,
+        transaction_type: TransactionType,
+        deposit: int | None,
+        exclusive_area: Decimal | None,
+        address: str | None = None,
+        applicant: ApplicantProfile | None = None,
+    ) -> LoanEvaluationResult:
+        """신생아 특례 버팀목대출(전세) 조건 평가 (수도권 보증금 5억/비수도권 4억 이하, 85㎡ 이하, 최대한도 2.4억 원)."""
+        if transaction_type not in [TransactionType.JEONSE, TransactionType.MONTHLY_RENT] or not deposit or not exclusive_area:
+            return LoanEvaluationResult(
+                product_code="NEONATAL_RENT",
+                product_name="신생아 특례 버팀목대출(전세)",
+                status=LoanEligibilityStatus.UNKNOWN,
+                reason="보증금 또는 면적 정보가 부족합니다.",
+            )
+
+        if exclusive_area > Decimal("85.0"):
+            return LoanEvaluationResult(
+                product_code="NEONATAL_RENT",
+                product_name="신생아 특례 버팀목대출(전세)",
+                status=LoanEligibilityStatus.INELIGIBLE,
+                reason="전용면적 85㎡를 초과합니다.",
+            )
+
+        is_capital = self._is_capital_area(address)
+        max_deposit_limit = 500_000_000 if is_capital else 400_000_000
+
+        if deposit > max_deposit_limit:
+            return LoanEvaluationResult(
+                product_code="NEONATAL_RENT",
+                product_name="신생아 특례 버팀목대출(전세)",
+                status=LoanEligibilityStatus.INELIGIBLE,
+                reason=f"보증금이 대출 기준({max_deposit_limit // 100_000_000}억 원)을 초과합니다.",
+            )
+
+        # 보증금의 80% 이내 & 최대한도 2.4억 원 (2025.06.28 개정)
+        loan_by_ratio = int(deposit * 0.80)
+        final_loan_amount = min(240_000_000, loan_by_ratio)
+
+        if not applicant:
+            rate = 2.0
+            monthly = int(final_loan_amount * rate / 100 / 12)
+            return LoanEvaluationResult(
+                product_code="NEONATAL_RENT",
+                product_name="신생아 특례 버팀목대출(전세)",
+                status=LoanEligibilityStatus.PROPERTY_ELIGIBLE,
+                max_loan_amount=final_loan_amount,
+                reason="매물 조건 충족 (2년 이내 출산 가구 확인 필요)",
+                interest_rate=rate,
+                estimated_monthly_interest=monthly,
+            )
+
+        if not applicant.has_newborn:
+            return LoanEvaluationResult(
+                product_code="NEONATAL_RENT",
+                product_name="신생아 특례 버팀목대출(전세)",
+                status=LoanEligibilityStatus.INELIGIBLE,
+                reason="2년 이내 출산(신생아) 가구 조건 미충족",
+            )
+
+        income_limit = 200_000_000 if applicant.is_dual_income else 130_000_000
+        if applicant.annual_income > income_limit:
+            return LoanEvaluationResult(
+                product_code="NEONATAL_RENT",
+                product_name="신생아 특례 버팀목대출(전세)",
+                status=LoanEligibilityStatus.INELIGIBLE,
+                reason=f"소득 기준({income_limit // 10_000}만 원)을 초과합니다.",
+            )
+
+        rate = 2.0
+        monthly_interest = int(final_loan_amount * rate / 100 / 12)
+
+        return LoanEvaluationResult(
+            product_code="NEONATAL_RENT",
+            product_name="신생아 특례 버팀목대출(전세)",
+            status=LoanEligibilityStatus.ELIGIBLE,
+            max_loan_amount=final_loan_amount,
+            reason="정책대출 신청 적격 조건 충족",
+            interest_rate=rate,
+            estimated_monthly_interest=monthly_interest,
+        )
+
     def evaluate_beotimmok(
         self,
         transaction_type: TransactionType,
@@ -316,7 +420,7 @@ class LoanRuleEvaluator:
         address: str | None = None,
         applicant: ApplicantProfile | None = None,
     ) -> LoanEvaluationResult:
-        """버팀목 전세자금 대출 조건 평가."""
+        """버팀목 전세자금 대출 조건 평가 (일반/신혼 세분화 적용)."""
         if transaction_type not in [TransactionType.JEONSE, TransactionType.MONTHLY_RENT] or not deposit or not exclusive_area:
             return LoanEvaluationResult(
                 product_code="BEOTIMMOK",
@@ -335,11 +439,12 @@ class LoanRuleEvaluator:
 
         is_newlywed = applicant and applicant.is_newlywed
         has_multi_children = applicant and applicant.child_count >= 2
+        is_special = is_newlywed or has_multi_children
         is_capital = self._is_capital_area(address)
 
-        # 보증금 한도: 신혼/다자녀 수도권 5억(비수도권 4억), 일반 수도권 3억(비수도권 2억)
-        if is_newlywed or has_multi_children:
-            max_deposit_limit = 500_000_000 if is_capital else 400_000_000
+        # 보증금 상한: 신혼/다자녀 수도권 4억(비수도권 3억), 일반 수도권 3억(비수도권 2억)
+        if is_special:
+            max_deposit_limit = 400_000_000 if is_capital else 300_000_000
         else:
             max_deposit_limit = 300_000_000 if is_capital else 200_000_000
 
@@ -351,22 +456,32 @@ class LoanRuleEvaluator:
                 reason=f"보증금이 기준({max_deposit_limit // 100_000_000}억 원)을 초과합니다.",
             )
 
+        # 최대한도 및 보증금 비율: 신혼/다자녀 (80%, 수도권 2.5억/비수도권 1.6억), 일반 (70%, 수도권 1.2억/비수도권 8천만)
+        deposit_ratio = 0.80 if is_special else 0.70
+        loan_by_ratio = int(deposit * deposit_ratio)
+
+        if is_special:
+            max_spec_loan = 250_000_000 if is_capital else 160_000_000
+        else:
+            max_spec_loan = 120_000_000 if is_capital else 80_000_000
+
+        final_loan_amount = min(max_spec_loan, loan_by_ratio)
+
         if not applicant:
-            base_loan = 120_000_000
             rate = 2.1
-            monthly = int(base_loan * rate / 100 / 12)
+            monthly = int(final_loan_amount * rate / 100 / 12)
             return LoanEvaluationResult(
                 product_code="BEOTIMMOK",
                 product_name="버팀목 전세자금대출",
                 status=LoanEligibilityStatus.PROPERTY_ELIGIBLE,
-                max_loan_amount=base_loan,
+                max_loan_amount=final_loan_amount,
                 reason="매물 조건 충족 (개인 자격 확인 필요)",
                 interest_rate=rate,
                 estimated_monthly_interest=monthly,
             )
 
         # 소득 한도: 신혼/다자녀 7.5천만 원 이하, 일반 5.0천만 원 이하
-        income_limit = 75_000_000 if (is_newlywed or has_multi_children) else 50_000_000
+        income_limit = 75_000_000 if is_special else 50_000_000
         if applicant.annual_income > income_limit:
             return LoanEvaluationResult(
                 product_code="BEOTIMMOK",
@@ -375,9 +490,6 @@ class LoanRuleEvaluator:
                 reason=f"소득 기준({income_limit // 10_000}만 원)을 초과합니다.",
             )
 
-        # 한도: 신혼 3억, 일반 1.2억 (수도권)
-        beotimmok_max_loan = 300_000_000 if is_newlywed else 120_000_000
-
         if applicant.annual_income <= 20_000_000:
             beotimmok_rate = 1.8
         elif applicant.annual_income <= 40_000_000:
@@ -385,13 +497,13 @@ class LoanRuleEvaluator:
         else:
             beotimmok_rate = 2.4
 
-        beotimmok_monthly = int(beotimmok_max_loan * beotimmok_rate / 100 / 12)
+        beotimmok_monthly = int(final_loan_amount * beotimmok_rate / 100 / 12)
 
         return LoanEvaluationResult(
             product_code="BEOTIMMOK",
             product_name="버팀목 전세자금대출",
             status=LoanEligibilityStatus.ELIGIBLE,
-            max_loan_amount=beotimmok_max_loan,
+            max_loan_amount=final_loan_amount,
             reason="정책대출 신청 적격 조건 충족",
             interest_rate=beotimmok_rate,
             estimated_monthly_interest=beotimmok_monthly,

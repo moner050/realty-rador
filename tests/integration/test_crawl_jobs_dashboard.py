@@ -7,8 +7,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from realty_radar.infrastructure.database.models import Base
+from realty_radar.infrastructure.database.models.v2 import UserAccount
 from realty_radar.infrastructure.database.session import get_db
-from realty_radar.web.auth import SESSION_COOKIE_NAME, create_session_token
+from realty_radar.web.auth import SESSION_COOKIE_NAME, create_session_token, hash_password
 from realty_radar.web.main import app
 
 
@@ -21,6 +22,15 @@ def jobs_client() -> Generator[TestClient, None, None]:
     )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
+
+    with factory() as session:
+        admin_user = UserAccount(
+            username="dashboard-test",
+            password_hash=hash_password("admin1234"),
+            role="ADMIN",
+        )
+        session.add(admin_user)
+        session.commit()
 
     def override_db():
         with factory() as session:
@@ -75,3 +85,37 @@ def test_jobs_dashboard_renders_disabled_metro_button_and_sigungu_statuses(jobs_
     assert "시/군/구별 진행 현황" in response.text
     assert "disabled" in response.text
     assert 'hx-trigger="every 5s"' in response.text
+
+
+def test_user_role_blocked_from_jobs_dashboard():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    with factory() as session:
+        normal_user = UserAccount(
+            username="normal-user",
+            password_hash=hash_password("user1234"),
+            role="USER",
+        )
+        session.add(normal_user)
+        session.commit()
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    client = TestClient(app)
+    client.cookies.set(SESSION_COOKIE_NAME, create_session_token("normal-user"))
+
+    try:
+        response = client.get("/jobs")
+        assert response.status_code == 403
+        assert "관리자(ADMIN) 권한이 필요합니다." in response.text
+    finally:
+        app.dependency_overrides.clear()

@@ -29,6 +29,8 @@ def test_v2_schema_contains_only_the_five_domain_tables():
         "listing_history",
         "crawl_job",
         "crawl_scope",
+        "user_account",
+        "user_preference",
     }
 
 

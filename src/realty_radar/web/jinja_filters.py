@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from typing import Any
 
@@ -116,8 +117,18 @@ def to_pyeong(area_val: Any) -> str:
         return "-"
 
 
+def tojson_filter(val: Any) -> str:
+    """객체/리스트/딕셔너리를 안전한 JSON 문자열로 직렬화."""
+    if val is None:
+        return "[]"
+    try:
+        return json.dumps(val, ensure_ascii=False)
+    except Exception:
+        return "[]"
+
+
 def register_jinja_filters(templates: Any) -> None:
-    """Jinja2Templates 객체에 한글 변환 및 평수 변환 커스텀 필터 일괄 등록."""
+    """Jinja2Templates 객체에 한글 변환, 평수 변환 커스텀 필터 일괄 등록."""
     templates.env.filters["korean_tx_type"] = korean_tx_type
     templates.env.filters["korean_mortgage"] = korean_mortgage
     templates.env.filters["korean_status"] = korean_status
@@ -126,3 +137,4 @@ def register_jinja_filters(templates: Any) -> None:
     templates.env.filters["korean_money"] = korean_money
     templates.env.filters["comma_number"] = comma_number
     templates.env.filters["to_pyeong"] = to_pyeong
+    templates.env.filters["tojson"] = tojson_filter

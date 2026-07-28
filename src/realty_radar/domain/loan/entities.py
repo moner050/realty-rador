@@ -39,6 +39,8 @@ class ApplicantProfile:
     is_first_home_buyer: bool = False  # 생애최초 주택구입 여부
     child_count: int = 0  # 미성년 자녀 수
     has_newborn: bool = False  # 2년 이내 출산(신생아) 여부
+    is_dual_income: bool = False  # 맞벌이 여부
+    is_single_household: bool = False  # 단독세대주 여부 (미혼 만 30세 이상 등)
     use_promissory_note: bool = False  # 차용증 작성 활용 여부
     promissory_note_person_count: int = 0  # 하위 호환 인원 수
     promissory_note_amount: int = 0  # 하위 호환 단일 지정 금액 (원)
@@ -70,6 +72,8 @@ class ApplicantProfile:
             "is_first_home_buyer": self.is_first_home_buyer,
             "child_count": self.child_count,
             "has_newborn": self.has_newborn,
+            "is_dual_income": self.is_dual_income,
+            "is_single_household": self.is_single_household,
             "use_promissory_note": self.use_promissory_note,
             "promissory_note_person_count": self.promissory_note_person_count,
             "promissory_note_amount": self.promissory_note_amount,
@@ -89,6 +93,8 @@ class ApplicantProfile:
             is_first_home_buyer=data.get("is_first_home_buyer", False),
             child_count=data.get("child_count", 0),
             has_newborn=data.get("has_newborn", False),
+            is_dual_income=data.get("is_dual_income", False),
+            is_single_household=data.get("is_single_household", False),
             use_promissory_note=data.get("use_promissory_note", False),
             promissory_note_person_count=data.get("promissory_note_person_count", 0),
             promissory_note_amount=data.get("promissory_note_amount", 0),

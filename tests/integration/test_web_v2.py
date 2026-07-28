@@ -22,6 +22,25 @@ def test_listing_cards_link_to_fin_land_article_pages():
     assert 'href="https://fin.land.naver.com/articles/{{ item.article_id }}"' in template
 
 
+def test_favorite_buttons_use_explicit_serializable_payloads():
+    cards = Path("src/realty_radar/web/templates/listings/_listing_cards.html").read_text(encoding="utf-8")
+    partial = Path("src/realty_radar/web/templates/listings/list_partial.html").read_text(encoding="utf-8")
+
+    assert "favorite_payload | tojson" in cards
+    assert "favorite_complex_payloads" in partial
+    assert "{{ item | tojson }}" not in cards
+    assert "{{ group | tojson }}" not in cards
+
+
+def test_settings_url_redirects_to_search_and_header_has_no_settings_link():
+    response = TestClient(app).get("/settings", follow_redirects=False)
+    base = Path("src/realty_radar/web/templates/base.html").read_text(encoding="utf-8")
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert 'href="/settings"' not in base
+
+
 def test_search_filter_parses_all_apartment_search_controls_and_legacy_deposit_aliases():
     filters = parse_search_filter(
         region_code="1168000010",

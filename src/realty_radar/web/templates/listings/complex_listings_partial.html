@@ -1,7 +1,7 @@
 {% import "listings/_listing_cards.html" as cards %}
 <template data-search-mode="complex-detail"></template>
 {% for item in listings %}
-{{ cards.listing_card(item) }}
+{{ cards.listing_card(item, favorite_listing_payloads[item.article_id]) }}
 {% else %}
 <p class="rounded-lg border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-400">조건에 맞는 매물이 없습니다.</p>
 {% endfor %}
