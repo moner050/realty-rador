@@ -47,6 +47,8 @@ SORT_SPECS = {
     "area_desc": _SortSpec("exclusive_area_x100", True, "int"),
     "households_asc": _SortSpec("household_count", False, "int"),
     "households_desc": _SortSpec("household_count", True, "int"),
+    "construction_year_desc": _SortSpec("construction_year", True, "int"),
+    "construction_year_asc": _SortSpec("construction_year", False, "int"),
 }
 
 

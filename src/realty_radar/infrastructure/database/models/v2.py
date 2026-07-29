@@ -101,6 +101,7 @@ class ListingCurrent(Base):
         Index("ix_listing_recent", "lifecycle", "is_short_term", "first_seen_at", "article_id"),
         Index("ix_listing_area", "lifecycle", "is_short_term", "exclusive_area_x100", "article_id"),
         Index("ix_listing_households", "lifecycle", "is_short_term", "household_count", "article_id"),
+        Index("ix_listing_construction_year", "lifecycle", "is_short_term", "construction_year", "article_id"),
         Index("ix_listing_complex", "complex_id", "lifecycle", "is_short_term", "primary_price", "article_id"),
         Index(
             "ix_listing_group_cover",

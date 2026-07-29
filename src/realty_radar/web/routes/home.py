@@ -42,6 +42,8 @@ SORT_OPTIONS = (
     ("area_desc", "전용면적 넓은순"),
     ("households_asc", "세대수 적은순"),
     ("households_desc", "세대수 많은순"),
+    ("construction_year_desc", "준공년도 최신순"),
+    ("construction_year_asc", "준공년도 과거순"),
 )
 
 

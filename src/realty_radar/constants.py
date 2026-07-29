@@ -37,6 +37,8 @@ class SortBy(str, Enum):
     AREA_ASC = "area_asc"
     HOUSEHOLDS_DESC = "households_desc"
     HOUSEHOLDS_ASC = "households_asc"
+    CONSTRUCTION_YEAR_DESC = "construction_year_desc"
+    CONSTRUCTION_YEAR_ASC = "construction_year_asc"
 
 
 class CrawlJobStatus(str, Enum):
