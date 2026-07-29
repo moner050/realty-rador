@@ -24,7 +24,6 @@ class TaskScheduler:
             replace_existing=True,
             misfire_grace_time=3600,
             coalesce=True,
-            kwargs={"scope_code": 1100000000},
         )
 
         self.scheduler.start()

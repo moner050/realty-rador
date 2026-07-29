@@ -5,7 +5,7 @@
         <h2 class="text-lg font-bold text-indigo-950 dark:text-white">수도권 아파트 수동 수집</h2>
         <p class="mt-1 text-sm text-indigo-900/80 dark:text-slate-300">지역을 고르면 해당 시/군/구만, 선택하지 않으면 서울·경기·인천 전체를 각각 수집 job으로 등록합니다.</p>
       </div>
-      <form id="metro-crawl-form" action="/api/crawl-jobs/metro" method="post" hx-post="/api/crawl-jobs/metro" hx-target="#metro-progress" hx-swap="outerHTML" class="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2 lg:grid-cols-4">
+      <form id="metro-crawl-form" action="/api/crawl-jobs/metro" method="post" hx-post="/api/crawl-jobs/metro" hx-target="#metro-progress" hx-swap="outerHTML" hx-on::before-request="showCrawlToast()" class="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2 lg:grid-cols-4">
         <select id="metro-sido-select" name="sido_code" aria-label="수집할 시도" class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-sm text-slate-900 dark:text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:text-slate-400 dark:disabled:text-slate-500"><option value="">수도권 전체</option>{% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}</select>
         <select id="metro-municipality-select" name="municipality" aria-label="수집할 시 또는 군" disabled class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-sm text-slate-900 dark:text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:text-slate-400 dark:disabled:text-slate-500"><option value="">시도를 먼저 선택하세요</option></select>
         <select id="metro-district-select" name="sigungu_code" aria-label="수집할 구" disabled class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-sm text-slate-900 dark:text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:text-slate-400 dark:disabled:text-slate-500"><option value="">시/군을 먼저 선택하세요</option></select>
@@ -15,6 +15,18 @@
       </form>
     </div>
   </div>
+
+  {% if metro_progress.is_active %}
+  <div class="flex items-center gap-3 rounded-xl border border-sky-300 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10 p-4 shadow-sm animate-pulse">
+    <svg class="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    <p class="text-sm font-semibold text-sky-900 dark:text-sky-100">
+      🚀 수동 수집 작업이 진행 중입니다. Worker가 매물을 순차 수집 중이며 5초마다 자동 갱신됩니다.
+    </p>
+  </div>
+  {% endif %}
   <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm">
     <p>전체 job: {{ summary.total_jobs }} · 대기: {{ summary.pending_jobs }} · 수집 중: {{ summary.running_jobs }} · 완료: {{ summary.completed_jobs }} · 실패: {{ summary.failed_jobs }}</p>
   </div>
@@ -47,7 +59,8 @@
     {% if metro_progress.has_batch %}
     <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" aria-label="수도권 수집 진행률">
       {% set completed = metro_progress.completed_count + metro_progress.failed_count %}
-      <div class="h-full bg-indigo-600 dark:bg-indigo-500 transition-all" style="width: {{ (completed * 100 / metro_progress.total_sigungu) | round(0) }}%"></div>
+      {% set pct = (completed * 100 / metro_progress.total_sigungu) | round(0) if metro_progress.total_sigungu else 0 %}
+      <div class="h-full bg-indigo-600 dark:bg-indigo-500 transition-all" style="width: {{ pct }}%"></div>
     </div>
 
     <div class="mt-5 grid gap-4 xl:grid-cols-3">
@@ -74,3 +87,41 @@
     {% endif %}
   </div>
 </section>
+
+<!-- 수동 수집 시작 토스트 알림 -->
+<div id="crawl-toast" class="fixed top-6 right-6 z-50 hidden max-w-sm transform transition-all duration-500 ease-out translate-y-[-1rem] opacity-0">
+  <div class="flex items-start gap-3 rounded-xl border border-emerald-300 dark:border-emerald-500/30 bg-white dark:bg-slate-800 p-4 shadow-xl">
+    <span class="text-2xl leading-none">🚀</span>
+    <div>
+      <p class="text-sm font-bold text-slate-900 dark:text-white">수동 수집 작업이 등록되었습니다!</p>
+      <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">백그라운드 Worker 프로세스가 선택된 지역의 매물을 순차적으로 수집합니다.</p>
+    </div>
+    <button onclick="hideCrawlToast()" class="ml-auto shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" aria-label="닫기">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+function showCrawlToast() {
+  var toast = document.getElementById('crawl-toast');
+  if (!toast) return;
+  toast.classList.remove('hidden');
+  /* 리플로우 후 애니메이션 활성화 */
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      toast.classList.remove('translate-y-[-1rem]', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+    });
+  });
+  /* 5초 후 자동 숨김 */
+  setTimeout(hideCrawlToast, 5000);
+}
+function hideCrawlToast() {
+  var toast = document.getElementById('crawl-toast');
+  if (!toast) return;
+  toast.classList.remove('translate-y-0', 'opacity-100');
+  toast.classList.add('translate-y-[-1rem]', 'opacity-0');
+  setTimeout(function() { toast.classList.add('hidden'); }, 500);
+}
+</script>

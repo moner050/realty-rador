@@ -17,12 +17,12 @@ SessionLocal = SessionFactory
 
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI 및 비즈니스 로직용 데이터베이스 세션 제너레이터 (웹 세션 락 무한 대기 방지)."""
+    """FastAPI 및 비즈니스 로직용 데이터베이스 세션 제너레이터 (웹 세션 락 무한 대기 방지 및 15초 타임아웃 보장)."""
     db = SessionFactory()
     try:
         if db.bind is not None and db.bind.dialect.name == "mysql":
             try:
-                db.execute(text("SET SESSION innodb_lock_wait_timeout = 3"))
+                db.execute(text("SET SESSION innodb_lock_wait_timeout = 15"))
             except Exception:
                 pass
         yield db
