@@ -351,21 +351,10 @@ def _favorite_listing_payload(item) -> dict[str, object]:
     }
 
 
-def _favorite_complex_payload(group) -> dict[str, object]:
-    return {
-        "complex_id": group.complex_id,
-        "complex_name": group.complex_name,
-        "address": group.address,
-    }
-
-
 def _favorite_payload_context(result) -> dict[str, dict[int, dict[str, object]]]:
     return {
         "favorite_listing_payloads": {
             item.article_id: _favorite_listing_payload(item) for item in _listing_items(result)
-        },
-        "favorite_complex_payloads": {
-            group.complex_id: _favorite_complex_payload(group) for group in result.grouped_items
         },
     }
 

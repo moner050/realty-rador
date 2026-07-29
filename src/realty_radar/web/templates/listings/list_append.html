@@ -1,5 +1,5 @@
 {% import "listings/_listing_cards.html" as cards %}
-{{ cards.render(result, listings, complex_urls, favorite_listing_payloads, favorite_complex_payloads) }}
+{{ cards.render(result, listings, complex_urls, favorite_listing_payloads) }}
 <div id="listing-pager" hx-swap-oob="true" class="mt-4 text-center">
     {{ cards.pager(result, previous_url, next_url) }}
 </div>

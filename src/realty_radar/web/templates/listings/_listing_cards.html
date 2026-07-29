@@ -133,7 +133,7 @@
 </article>
 {%- endmacro %}
 
-{% macro render(result, listings, complex_urls, favorite_listing_payloads, favorite_complex_payloads) -%}
+{% macro render(result, listings, complex_urls, favorite_listing_payloads) -%}
     {% if result.is_grouped %}
         {% for group in result.grouped_items %}
         <details class="complex-group theme-surface group rounded-xl border border-slate-300/80 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 transition-all shadow-sm hover:shadow-md hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100" data-complex-group
@@ -144,14 +144,7 @@
         >
             <summary class="grid cursor-pointer list-none gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                 <div class="min-w-0">
-                    <div class="flex items-center gap-2">
-                        <h2 class="truncate font-extrabold text-slate-900 dark:text-white">{{ group.complex_name }}</h2>
-                        <!-- 단지 전체 즐겨찾기 버튼 -->
-                        <button type="button" onclick="event.preventDefault(); event.stopPropagation(); toggleComplexFavorite({{ favorite_complex_payloads[group.complex_id] | tojson }});" class="p-1 rounded bg-slate-100 dark:bg-slate-900/80 hover:bg-amber-500/20 border border-slate-300 dark:border-slate-700 hover:border-amber-500/50 text-slate-700 dark:text-slate-400 hover:text-amber-500 transition-all text-xs flex items-center gap-1" title="이 단지 전체 즐겨찾기 추가/제거" data-fav-btn-complex="{{ group.complex_id }}">
-                            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-                            <span class="text-[11px] font-bold">단지 보관</span>
-                        </button>
-                    </div>
+                    <h2 class="truncate font-extrabold text-slate-900 dark:text-white">{{ group.complex_name }}</h2>
                     <div class="mt-1 flex flex-wrap gap-1.5 text-xs font-bold">
                         <span class="max-w-full truncate text-slate-700 dark:text-slate-400">{{ group.address }}</span>
                         <span class="whitespace-nowrap text-sky-900 dark:text-sky-300 bg-sky-100 dark:bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-300 dark:border-sky-500/20">{{ group.household_count | comma_number }}세대</span>

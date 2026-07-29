@@ -54,7 +54,7 @@
     </div>
 </div>
     <div id="listing-cards" class="space-y-3">
-        {{ cards.render(result, listings, complex_urls, favorite_listing_payloads, favorite_complex_payloads) }}
+        {{ cards.render(result, listings, complex_urls, favorite_listing_payloads) }}
     </div>
     <div id="listing-pager" class="mt-4 text-center">
         {{ cards.pager(result, previous_url, next_url) }}

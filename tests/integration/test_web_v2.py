@@ -22,14 +22,16 @@ def test_listing_cards_link_to_fin_land_article_pages():
     assert 'href="https://fin.land.naver.com/articles/{{ item.article_id }}"' in template
 
 
-def test_favorite_buttons_use_explicit_serializable_payloads():
+def test_favorite_buttons_keep_listing_payloads_without_complex_favorites():
     cards = Path("src/realty_radar/web/templates/listings/_listing_cards.html").read_text(encoding="utf-8")
     partial = Path("src/realty_radar/web/templates/listings/list_partial.html").read_text(encoding="utf-8")
+    index = Path("src/realty_radar/web/templates/listings/index.html").read_text(encoding="utf-8")
 
     assert "favorite_payload | tojson" in cards
-    assert "favorite_complex_payloads" in partial
+    assert "toggleComplexFavorite" not in cards
+    assert "favorite_complex_payloads" not in partial
+    assert "STORAGE_KEY_COMPLEXES" not in index
     assert "{{ item | tojson }}" not in cards
-    assert "{{ group | tojson }}" not in cards
 
 
 def test_settings_url_redirects_to_search_and_header_has_no_settings_link():

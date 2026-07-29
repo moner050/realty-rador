@@ -1085,11 +1085,9 @@ const IS_USER_LOGGED_IN = Boolean(JSON.parse('{{ is_authenticated | tojson }}'))
 class FavoritesManager {
     constructor() {
         this.STORAGE_KEY_LISTINGS = "rr_favorite_listings_v1";
-        this.STORAGE_KEY_COMPLEXES = "rr_favorite_complexes_v1";
         this.STORAGE_KEY_GROUP_MODE = "rr_favorite_group_mode_v1";
 
         this.listings = this.load(this.STORAGE_KEY_LISTINGS, []);
-        this.complexes = this.load(this.STORAGE_KEY_COMPLEXES, []);
         this.isGroupMode = this.load(this.STORAGE_KEY_GROUP_MODE, false);
 
         this.init();
@@ -1107,7 +1105,6 @@ class FavoritesManager {
     save() {
         try {
             localStorage.setItem(this.STORAGE_KEY_LISTINGS, JSON.stringify(this.listings));
-            localStorage.setItem(this.STORAGE_KEY_COMPLEXES, JSON.stringify(this.complexes));
             localStorage.setItem(this.STORAGE_KEY_GROUP_MODE, JSON.stringify(this.isGroupMode));
         } catch(e){}
 
@@ -1125,7 +1122,6 @@ class FavoritesManager {
                 body: JSON.stringify({
                     favorites: {
                         listings: this.listings,
-                        complexes: this.complexes,
                         isGroupMode: this.isGroupMode
                     }
                 })
@@ -1142,25 +1138,16 @@ class FavoritesManager {
             const serverFavs = data.favorites || {};
 
             let mergedListings = serverFavs.listings || [];
-            let mergedComplexes = serverFavs.complexes || [];
 
             // 비로그인 중 로컬스토리지에 보관해둔 항목 병합
             const localListings = this.load(this.STORAGE_KEY_LISTINGS, []);
-            const localComplexes = this.load(this.STORAGE_KEY_COMPLEXES, []);
 
             localListings.forEach(item => {
                 if (!mergedListings.some(x => String(x.article_id) === String(item.article_id))) {
                     mergedListings.push(item);
                 }
             });
-            localComplexes.forEach(c => {
-                if (!mergedComplexes.some(x => String(x.complex_id) === String(c.complex_id))) {
-                    mergedComplexes.push(c);
-                }
-            });
-
             this.listings = mergedListings;
-            this.complexes = mergedComplexes;
             if (typeof serverFavs.isGroupMode === "boolean") {
                 this.isGroupMode = serverFavs.isGroupMode;
             }
@@ -1171,6 +1158,7 @@ class FavoritesManager {
     }
 
     init() {
+        localStorage.removeItem("rr_favorite_complexes_v1");
         const toggleEl = document.getElementById("fav-group-toggle");
         if (toggleEl) toggleEl.checked = this.isGroupMode;
         if (IS_USER_LOGGED_IN) {
@@ -1181,10 +1169,6 @@ class FavoritesManager {
 
     isListingFav(id) {
         return this.listings.some(x => String(x.article_id) === String(id));
-    }
-
-    isComplexFav(id) {
-        return this.complexes.some(x => String(x.complex_id) === String(id));
     }
 
     toggleListing(item) {
@@ -1198,19 +1182,8 @@ class FavoritesManager {
         this.save();
     }
 
-    toggleComplex(group) {
-        if (!group || !group.complex_id) return;
-        const idx = this.complexes.findIndex(x => String(x.complex_id) === String(group.complex_id));
-        if (idx >= 0) {
-            this.complexes.splice(idx, 1);
-        } else {
-            this.complexes.push(group);
-        }
-        this.save();
-    }
-
     updateUI() {
-        const count = this.listings.length + this.complexes.length;
+        const count = this.listings.length;
 
         const badge = document.getElementById("nav-favorite-count-badge");
         if (badge) badge.textContent = count;
@@ -1224,15 +1197,6 @@ class FavoritesManager {
                 btn.className = "group/fav p-1.5 rounded-lg bg-amber-500/20 border border-amber-500/80 text-amber-400 transition-all shadow-sm";
             } else {
                 btn.className = "group/fav p-1.5 rounded-lg bg-slate-900/80 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/50 text-slate-400 hover:text-amber-400 transition-all";
-            }
-        });
-
-        document.querySelectorAll("[data-fav-btn-complex]").forEach(btn => {
-            const id = btn.getAttribute("data-fav-btn-complex");
-            if (this.isComplexFav(id)) {
-                btn.className = "p-1 rounded bg-amber-500/20 border border-amber-500/80 text-amber-400 transition-all text-xs flex items-center gap-1 shadow-sm";
-            } else {
-                btn.className = "p-1 rounded bg-slate-900/80 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/50 text-slate-400 hover:text-amber-400 transition-all text-xs flex items-center gap-1";
             }
         });
 
@@ -1264,7 +1228,7 @@ class FavoritesManager {
         const listContainer = document.getElementById("favorite-sidebar-list");
         if (!listContainer) return;
 
-        if (this.listings.length === 0 && this.complexes.length === 0) {
+        if (this.listings.length === 0) {
             listContainer.innerHTML = `
                 <div class="py-12 text-center text-slate-500 space-y-2">
                     <svg class="mx-auto w-10 h-10 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
@@ -1281,12 +1245,8 @@ class FavoritesManager {
             const grouped = {};
             this.listings.forEach(item => {
                 const cName = item.complex_name || "기타 단지";
-                if (!grouped[cName]) grouped[cName] = { items: [], info: item };
+                if (!grouped[cName]) grouped[cName] = { items: [] };
                 grouped[cName].items.push(item);
-            });
-            this.complexes.forEach(c => {
-                const cName = c.complex_name || "기타 단지";
-                if (!grouped[cName]) grouped[cName] = { items: [], info: c };
             });
 
             Object.keys(grouped).forEach(cName => {
@@ -1303,30 +1263,14 @@ class FavoritesManager {
                         </summary>
                         <div class="mt-2.5 pt-2 border-t border-slate-800/80 space-y-2">
                 `;
-                if (g.items.length === 0) {
-                    html += `<p class="text-[11px] text-slate-500 py-1">단지 보관 등록됨 (${g.info.address || ''})</p>`;
-                } else {
-                    g.items.forEach(item => {
-                        html += this.renderListingItemHTML(item);
-                    });
-                }
+                g.items.forEach(item => {
+                    html += this.renderListingItemHTML(item);
+                });
                 html += `</div></details>`;
             });
         } else {
             this.listings.forEach(item => {
                 html += this.renderListingItemHTML(item);
-            });
-            this.complexes.forEach(c => {
-                html += `
-                    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900 flex items-center justify-between gap-2 text-xs">
-                        <div class="min-w-0">
-                            <span class="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">단지 보관</span>
-                            <h4 class="font-bold text-white truncate mt-1">${c.complex_name}</h4>
-                            <p class="text-[11px] text-slate-400 truncate">${c.address || ''}</p>
-                        </div>
-                        <button type="button" onclick="favManager.toggleComplex({complex_id:'${c.complex_id}'})" class="p-1.5 text-slate-400 hover:text-red-400">✕</button>
-                    </div>
-                `;
             });
         }
 
@@ -1386,10 +1330,6 @@ function toggleListingFavorite(item) {
     favManager.toggleListing(item);
 }
 
-function toggleComplexFavorite(group) {
-    favManager.toggleComplex(group);
-}
-
 function toggleFavoriteGroupMode(checked) {
     favManager.isGroupMode = checked;
     favManager.save();
@@ -1398,7 +1338,6 @@ function toggleFavoriteGroupMode(checked) {
 function clearAllFavorites() {
     if (confirm("즐겨찾기 보관함을 전체 삭제하시겠습니까?")) {
         favManager.listings = [];
-        favManager.complexes = [];
         favManager.save();
     }
 }

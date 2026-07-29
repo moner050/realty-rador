@@ -52,4 +52,7 @@ def test_authenticated_preference_persists_favorites_across_requests(preference_
 
     assert saved.status_code == 200
     assert loaded.status_code == 200
-    assert loaded.json()["favorites"] == favorites
+    assert loaded.json()["favorites"] == {
+        "listings": favorites["listings"],
+        "isGroupMode": True,
+    }

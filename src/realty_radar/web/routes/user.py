@@ -16,6 +16,14 @@ class PreferencePayload(BaseModel):
     loan_profile: Optional[Dict[str, Any]] = None
 
 
+def _listing_favorites(favorites: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    source = favorites or {}
+    return {
+        "listings": source.get("listings") if isinstance(source.get("listings"), list) else [],
+        "isGroupMode": bool(source.get("isGroupMode", False)),
+    }
+
+
 def get_current_user_account(request: Request, db: Session = Depends(get_db)) -> UserAccount:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     username = verify_session_token(token)
@@ -39,14 +47,14 @@ def get_user_preference(
     if not pref:
         return {
             "username": user.username,
-            "favorites": {"listings": [], "complexes": []},
+            "favorites": _listing_favorites(None),
             "filters": {},
             "loan_profile": {},
         }
 
     return {
         "username": user.username,
-        "favorites": pref.favorites_json or {"listings": [], "complexes": []},
+        "favorites": _listing_favorites(pref.favorites_json),
         "filters": pref.filters_json or {},
         "loan_profile": pref.loan_profile_json or {},
     }
@@ -65,7 +73,7 @@ def save_user_preference(
         db.add(pref)
 
     if payload.favorites is not None:
-        pref.favorites_json = payload.favorites
+        pref.favorites_json = _listing_favorites(payload.favorites)
     if payload.filters is not None:
         pref.filters_json = payload.filters
     if payload.loan_profile is not None:
