@@ -50,6 +50,7 @@ def test_metro_post_enqueues_batch_and_returns_progress_fragment(jobs_client: Te
 
     assert response.status_code == 200
     assert 'id="metro-progress"' in response.text
+    assert 'id="crawl-toast"' not in response.text
     assert "worker 대기 중" in response.text
     assert "서울" in response.text
     assert 'disabled aria-disabled="true"' in response.text
@@ -85,6 +86,8 @@ def test_jobs_dashboard_renders_disabled_metro_button_and_sigungu_statuses(jobs_
     assert "시/군/구별 진행 현황" in response.text
     assert "disabled" in response.text
     assert 'hx-trigger="every 5s"' in response.text
+    assert response.text.count('id="crawl-toast"') == 1
+    assert "setTimeout(hideCrawlToast, 5000)" in response.text
 
 
 def test_user_role_blocked_from_jobs_dashboard():

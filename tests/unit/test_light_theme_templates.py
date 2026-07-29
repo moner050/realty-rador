@@ -63,3 +63,12 @@ def test_housing_quick_filter_uses_soft_emerald_contrast():
     assert ".theme-soft-emerald" in base
     assert 'data-quick-preset="tidy-town" class="theme-soft-emerald' in listings
     assert "bg-emerald-950/40" not in listings
+
+
+def test_listing_filter_choices_define_visible_checked_state_for_both_themes():
+    base = (TEMPLATE_ROOT / "base.html").read_text(encoding="utf-8")
+    listings = (TEMPLATE_ROOT / "listings" / "index.html").read_text(encoding="utf-8")
+
+    assert 'html:not(.dark) #listing-search-form.theme-filter-choice label:has(input[type="checkbox"]:checked)' in base
+    assert 'html.dark .theme-filter-choice label:has(input[type="checkbox"]:checked)' in base
+    assert '<form id="listing-search-form" class="theme-filter-choice' in listings

@@ -238,7 +238,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         <a href="/" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm">전체 초기화</a>
     </header>
 
-    <form id="listing-search-form" class="theme-surface space-y-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xl backdrop-blur-sm transition-colors text-slate-900 dark:text-slate-100" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#search-results" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
+    <form id="listing-search-form" class="theme-filter-choice theme-surface space-y-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xl backdrop-blur-sm transition-colors text-slate-900 dark:text-slate-100" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#search-results" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
         <input type="hidden" name="page_size" value="{{ filters.page_size }}">
 
         <!-- 0. 원클릭 퀵 필터 (Quick Preset Chips) -->
