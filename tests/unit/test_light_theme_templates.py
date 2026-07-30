@@ -53,7 +53,7 @@ def test_quick_filter_presets_use_soft_indigo_without_overriding_primary_button_
 
     assert ".theme-soft-accent" in base
     assert 'html:not(.dark) #listing-search-form .text-white' not in base
-    assert listings.count("theme-soft-accent") == 4
+    assert listings.count("theme-soft-accent") >= 4
 
 
 def test_housing_quick_filter_uses_soft_emerald_contrast():

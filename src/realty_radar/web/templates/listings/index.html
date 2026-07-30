@@ -331,7 +331,25 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                     </button>
                 </div>
             </div>
+
+            <!-- 그룹 5: ⚡ 강남역 대중교통 통근시간 퀵 필터 -->
+            <div class="space-y-1.5 border-t border-indigo-200/50 dark:border-slate-800/80 pt-2.5">
+                <div class="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <span>⚡ 강남역 대중교통 통근시간 퀵 필터</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-quick-preset="commute-gangnam-60" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm {% if filters.max_commute_gangnam == 60 %}is-active !border-amber-500 !bg-amber-100 !text-amber-950 dark:!bg-amber-950/70 dark:!text-amber-200 ring-2 ring-amber-500 font-bold shadow-md{% endif %}">
+                        <span>⚡ 강남까지 1시간 이내</span>
+                        <span class="text-[10px] opacity-80 font-normal">(강남/서초/송파/마포/분당/수지 등)</span>
+                    </button>
+                    <button type="button" data-quick-preset="commute-gangnam-90" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm {% if filters.max_commute_gangnam == 90 %}is-active !border-amber-500 !bg-amber-100 !text-amber-950 dark:!bg-amber-950/70 dark:!text-amber-200 ring-2 ring-amber-500 font-bold shadow-md{% endif %}">
+                        <span>⚡ 강남까지 1시간 30분 이내</span>
+                        <span class="text-[10px] opacity-80 font-normal">(수원/일산/동탄/부천/하남 등)</span>
+                    </button>
+                </div>
+            </div>
         </section>
+        <input type="hidden" name="max_commute_gangnam" id="input-max-commute-gangnam" value="{{ filters.max_commute_gangnam or '' }}">
 
         <!-- 1. 기본 검색 카드 (지역 및 키워드) -->
         <section class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 shadow-sm">
@@ -348,6 +366,30 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                 <label class="space-y-1 text-xs font-medium text-slate-300"><span>시/군</span><select id="municipality-select" name="municipality" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시도를 먼저 선택하세요</option></select></label>
                 <label class="space-y-1 text-xs font-medium text-slate-300"><span>구</span><select id="district-select" name="sigungu_code" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시/군을 먼저 선택하세요</option></select></label>
                 <label class="space-y-1 text-xs font-medium text-slate-300"><span>단지명·주소</span><input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="예: 래미안, 강남구" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"></label>
+            </div>
+
+            <!-- 다중 선택된 지역 칩 및 퀵 묶음 프리셋 -->
+            <div id="multi-region-container" class="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                        <span>선택된 다중 지역:</span>
+                        <span class="text-[11px] text-slate-400 font-normal">(여러 지역을 함께 추가/삭제 가능)</span>
+                    </span>
+                    <!-- 주요 권역 묶음 단축 버튼 -->
+                    <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span class="text-slate-400 font-medium">인기 묶음:</span>
+                        <button type="button" data-region-bundle="gangnam3" class="px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-all font-medium">강남3구</button>
+                        <button type="button" data-region-bundle="mayongseong" class="px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-all font-medium">마용성</button>
+                        <button type="button" data-region-bundle="suyongseong" class="px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-all font-medium">수용성</button>
+                        <button type="button" id="btn-clear-regions" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all font-medium">지역 초기화</button>
+                    </div>
+                </div>
+                <!-- 칩 태그 영역 -->
+                <div id="selected-region-chips" class="flex flex-wrap gap-1.5 min-h-7 p-1 rounded-lg bg-slate-900/60 border border-slate-800">
+                    <span class="text-xs text-slate-500 italic p-1 text-[11px]" id="no-region-msg">선택된 추가 지역이 없습니다.</span>
+                </div>
+                <div id="hidden-sigungu-inputs"></div>
+                <div id="hidden-sido-inputs"></div>
             </div>
 
             <!-- 거래 유형 -->
@@ -496,6 +538,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 </div>
 
 <script type="application/json" id="region-options-data">{{ region_options | tojson | safe }}</script>
+<script type="application/json" id="selected-sido-codes-data">{{ selected_sido_codes | tojson | safe }}</script>
 <script>
 (() => {
     const regions = JSON.parse(document.getElementById("region-options-data")?.textContent || "[]");
@@ -968,6 +1011,245 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             form.requestSubmit();
         });
     });
+
+    // 강남역 통근시간 퀵 필터 버튼 처리 (60분 / 90분)
+    const gangnamButtons = document.querySelectorAll('[data-quick-preset^="commute-gangnam-"]');
+    const gangnamInput = document.getElementById("input-max-commute-gangnam");
+    const activeClasses = ["is-active", "!border-amber-500", "!bg-amber-100", "!text-amber-950", "dark:!bg-amber-950/70", "dark:!text-amber-200", "ring-2", "ring-amber-500", "font-bold", "shadow-md"];
+
+    const updateGangnamButtonsUI = (activeMinutes) => {
+        gangnamButtons.forEach((btn) => {
+            const minutes = btn.dataset.quickPreset.replace("commute-gangnam-", "");
+            if (String(minutes) === String(activeMinutes)) {
+                btn.classList.add(...activeClasses);
+            } else {
+                btn.classList.remove(...activeClasses);
+            }
+        });
+    };
+
+    gangnamButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const minutes = button.dataset.quickPreset.replace("commute-gangnam-", "");
+            const currentVal = gangnamInput ? gangnamInput.value : "";
+            const nextVal = currentVal === minutes ? "" : minutes;
+            if (gangnamInput) {
+                gangnamInput.value = nextVal;
+            }
+            // 새로고침 없이 클릭 즉시 DOM 클래스 및 요약 칩 갱신
+            updateGangnamButtonsUI(nextVal);
+            renderRegionChips();
+            form.requestSubmit();
+        });
+    });
+
+    // --- 다중 지역 칩(Region Chips UI) & 묶음 프리셋 제어 ---
+    const regionChipsContainer = document.getElementById("selected-region-chips");
+    const hiddenSigunguContainer = document.getElementById("hidden-sigungu-inputs");
+    const hiddenSidoContainer = document.getElementById("hidden-sido-inputs");
+    const noRegionMsg = document.getElementById("no-region-msg");
+    const clearRegionsBtn = document.getElementById("btn-clear-regions");
+
+    // 시/도 전체 코드(2자리) 및 개별 시군구 코드(5자리) 이원 상태
+    let selectedSidoCodes = (JSON.parse(document.getElementById("selected-sido-codes-data")?.textContent || "[]") || []).map(Number);
+    let selectedSigunguCodes = (JSON.parse(district?.dataset?.selectedCodes || "[]") || []).map(Number);
+    if (district?.dataset?.selected && !selectedSigunguCodes.includes(Number(district.dataset.selected))) {
+        const sel = Number(district.dataset.selected);
+        if (sel) selectedSigunguCodes.push(sel);
+    }
+
+    // 시/도 코드 -> 시/도 명칭 맵 생성
+    const sidoNameMap = {};
+    regions.forEach(region => { sidoNameMap[region.code] = region.name; });
+
+    // 시군구 5자리 코드 -> 명칭 맵 생성
+    const sigunguNameMap = {};
+    regions.forEach(region => {
+        (region.municipalities || []).forEach(m => {
+            (m.codes || []).forEach(c => { sigunguNameMap[c] = `${region.name} ${m.name}`; });
+            (m.districts || []).forEach(d => { sigunguNameMap[d.code] = `${region.name} ${m.name} ${d.name}`; });
+        });
+        (region.districts || []).forEach(d => {
+            sigunguNameMap[d.code] = `${region.name} ${d.name}`;
+        });
+    });
+
+    // 시군구 코드 -> 해당 시/도 코드 매핑
+    const sigunguToSido = {};
+    regions.forEach(region => {
+        (region.municipalities || []).forEach(m => {
+            (m.codes || []).forEach(c => { sigunguToSido[c] = region.code; });
+            (m.districts || []).forEach(d => { sigunguToSido[d.code] = region.code; });
+        });
+        (region.districts || []).forEach(d => {
+            sigunguToSido[d.code] = region.code;
+        });
+    });
+
+    // 칩 생성 헬퍼
+    const createChip = (label, onRemove, type = "district") => {
+        const chip = document.createElement("span");
+        let bgClass = "bg-indigo-900/80 text-indigo-200 border-indigo-700/80";
+        if (type === "sido") {
+            bgClass = "bg-emerald-900/80 text-emerald-200 border-emerald-700/80";
+        } else if (type === "commute") {
+            bgClass = "bg-amber-900/80 text-amber-200 border-amber-700/80 shadow-md";
+        }
+        chip.className = `inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border shadow-sm ${bgClass}`;
+        chip.innerHTML = `<span>${label}</span><button type="button" class="hover:text-red-400 font-bold ml-1 text-sm">&times;</button>`;
+        chip.querySelector("button").addEventListener("click", onRemove);
+        return chip;
+    };
+
+    const renderRegionChips = () => {
+        if (!regionChipsContainer || !hiddenSigunguContainer || !hiddenSidoContainer) return;
+        regionChipsContainer.innerHTML = "";
+        hiddenSigunguContainer.innerHTML = "";
+        hiddenSidoContainer.innerHTML = "";
+
+        const commuteVal = gangnamInput ? gangnamInput.value : "";
+        const hasCommute = Boolean(commuteVal);
+        const hasAny = selectedSidoCodes.length > 0 || selectedSigunguCodes.length > 0 || hasCommute;
+
+        if (!hasAny) {
+            if (noRegionMsg) regionChipsContainer.appendChild(noRegionMsg);
+            return;
+        }
+
+        // 1. 강남역 통근시간 퀵필터 단일 요약 칩 (1개만 표시하여 랙 0.000초 보장)
+        if (hasCommute) {
+            const commuteLabel = commuteVal === "60" ? "⚡ 강남역 1시간 이내 통근권" : commuteVal === "90" ? "⚡ 강남역 1시간 30분 이내 통근권" : `⚡ 강남역 ${commuteVal}분 이내 통근권`;
+            regionChipsContainer.appendChild(
+                createChip(commuteLabel, () => {
+                    if (gangnamInput) gangnamInput.value = "";
+                    updateGangnamButtonsUI("");
+                    renderRegionChips();
+                    form.requestSubmit();
+                }, "commute")
+            );
+        }
+
+        // 2. 시/도 전체 칩 렌더링
+        selectedSidoCodes.forEach(code => {
+            const name = sidoNameMap[code] || `시도코드 ${code}`;
+            regionChipsContainer.appendChild(
+                createChip(`${name} 전체`, () => removeSidoCode(code), "sido")
+            );
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "sido_codes";
+            input.value = code;
+            hiddenSidoContainer.appendChild(input);
+        });
+
+        // 3. 개별 시군구 칩 렌더링
+        selectedSigunguCodes.forEach(code => {
+            const name = sigunguNameMap[code] || `지역코드 ${code}`;
+            regionChipsContainer.appendChild(
+                createChip(name, () => removeSigunguCode(code), "district")
+            );
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "sigungu_codes";
+            input.value = code;
+            hiddenSigunguContainer.appendChild(input);
+        });
+    };
+
+    // 시/도 전체 추가 → 해당 시/도 하위 개별 구 칩 모두 제거 후 전체 칩으로 교체
+    const addSidoCode = (sidoCode) => {
+        const num = Number(sidoCode);
+        if (!num) return;
+        // 이미 해당 시/도 전체가 선택된 상태면 무시
+        if (selectedSidoCodes.includes(num)) return;
+        // 해당 시/도 하위 개별 시군구 칩 모두 제거
+        selectedSigunguCodes = selectedSigunguCodes.filter(c => sigunguToSido[c] !== num);
+        selectedSidoCodes.push(num);
+        renderRegionChips();
+        form.requestSubmit();
+    };
+
+    // 시/도 전체 제거
+    const removeSidoCode = (code) => {
+        selectedSidoCodes = selectedSidoCodes.filter(c => c !== Number(code));
+        renderRegionChips();
+        form.requestSubmit();
+    };
+
+    // 개별 시군구 추가 → 해당 시/도 전체 칩이 있으면 제거 후 개별 구로 전환
+    const addSigunguCodes = (codes) => {
+        let changed = false;
+        codes.forEach(code => {
+            const num = Number(code);
+            if (!num) return;
+            const parentSido = sigunguToSido[num];
+            // 해당 시/도 전체 칩이 있으면 제거 (전체 → 개별 전환)
+            if (parentSido && selectedSidoCodes.includes(parentSido)) {
+                selectedSidoCodes = selectedSidoCodes.filter(c => c !== parentSido);
+                changed = true;
+            }
+            if (!selectedSigunguCodes.includes(num)) {
+                selectedSigunguCodes.push(num);
+                changed = true;
+            }
+        });
+        if (changed) {
+            renderRegionChips();
+            form.requestSubmit();
+        }
+    };
+
+    // 개별 시군구 제거
+    const removeSigunguCode = (code) => {
+        selectedSigunguCodes = selectedSigunguCodes.filter(c => c !== Number(code));
+        renderRegionChips();
+        form.requestSubmit();
+    };
+
+    // 전체 초기화 (지역 + 통근 퀵필터 동시 해제)
+    if (clearRegionsBtn) {
+        clearRegionsBtn.addEventListener("click", () => {
+            selectedSidoCodes = [];
+            selectedSigunguCodes = [];
+            if (gangnamInput) gangnamInput.value = "";
+            updateGangnamButtonsUI("");
+            renderRegionChips();
+            form.requestSubmit();
+        });
+    }
+
+    // 구 선택 드롭다운: '전체' 선택 시 시/도 전체, 개별 구 선택 시 시군구 추가
+    if (district) {
+        district.addEventListener("change", () => {
+            const val = district.value;
+            const numVal = Number(val);
+            // 값이 비어있거나 숫자가 아님 → "전체" 선택
+            if (!numVal) {
+                const currentSidoCode = Number(sido.value);
+                if (currentSidoCode) addSidoCode(currentSidoCode);
+            } else {
+                addSigunguCodes([numVal]);
+            }
+        });
+    }
+
+    // 권역 묶음 프리셋
+    const BUNDLES = {
+        "gangnam3": [11680, 11650, 11710], // 강남구, 서초구, 송파구
+        "mayongseong": [11440, 11170, 11200], // 마포구, 용산구, 성동구
+        "suyongseong": [41111, 41113, 41115, 41117, 41463, 41461, 41465, 41135, 41131, 41133] // 수원, 용인, 성남
+    };
+
+    document.querySelectorAll("[data-region-bundle]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bundleKey = btn.dataset.regionBundle;
+            if (BUNDLES[bundleKey]) {
+                addSigunguCodes(BUNDLES[bundleKey]);
+            }
+        });
+    });
+
+    renderRegionChips();
 })();
 </script>
 

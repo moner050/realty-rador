@@ -68,6 +68,7 @@ _MORTGAGE_CODES = {
 class ListingSearchFilter:
     region_code: int | None = None
     sido_code: int | None = None
+    sido_codes: list[int] | None = None
     sigungu_code: int | None = None
     sigungu_codes: list[int] | None = None
     invalid_municipality: bool = False
@@ -89,6 +90,7 @@ class ListingSearchFilter:
     max_monthly_management_cost: int | None = None
     move_in_by: date | None = None
     max_subway_walk_minutes: int | None = None
+    max_commute_gangnam: int | None = None
     min_exclusive_area: Decimal | None = None
     max_exclusive_area: Decimal | None = None
     min_construction_year: int | None = None
@@ -107,6 +109,8 @@ class ListingSearchFilter:
     cursor: str | None = None
 
     def __post_init__(self) -> None:
+        if self.sido_codes is not None:
+            self.sido_codes = sorted({int(code) for code in self.sido_codes}) or None
         if self.sigungu_codes is not None:
             self.sigungu_codes = sorted({int(code) for code in self.sigungu_codes}) or None
 
@@ -146,7 +150,9 @@ class ListingSearchFilter:
         if isinstance(copied.get("trade_type"), str):
             copied["trade_type"] = None
         cls._migrate_region(copied)
+        copied["sido_codes"] = cls._int_values(copied.get("sido_codes"))
         copied["sigungu_codes"] = cls._int_values(copied.get("sigungu_codes"))
+        copied["max_commute_gangnam"] = cls._int_value(copied.get("max_commute_gangnam"))
         if copied.get("min_price") is None:
             copied["min_price"] = copied.get("min_deposit")
         if copied.get("max_price") is None:

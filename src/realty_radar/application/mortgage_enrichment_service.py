@@ -88,6 +88,11 @@ def _unsigned_int(value: Any, *, maximum: int) -> int | None:
     return number if 0 <= number <= maximum else None
 
 
+def _positive_int_or_none(value: Any, *, maximum: int) -> int | None:
+    number = _unsigned_int(value, maximum=maximum)
+    return number if number is not None and number > 0 else None
+
+
 def _nullable_bool(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -153,7 +158,7 @@ def parse_article_detail(payload: dict[str, Any]) -> ArticleDetail:
         move_in_available_on=_date_value(
             _first_value(fields, "moveInAvailableDate", "moveInDate", "moveInPossibleYmd")
         ),
-        nearest_subway_walk_minutes=_unsigned_int(
+        nearest_subway_walk_minutes=_positive_int_or_none(
             _first_value(fields, "nearestSubwayWalkMinutes", "subwayWalkMinutes", "walkingTimeToNearSubway"),
             maximum=65535,
         ),

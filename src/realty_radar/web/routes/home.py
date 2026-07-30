@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, SIGUNGU_CODES
+from realty_radar.domain.listing.commute_map import get_sigungu_codes_within_commute
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.entities import LoanEligibilityStatus
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
@@ -211,6 +212,7 @@ def _slider_limits(filters: ListingSearchFilter) -> dict[str, int | Decimal]:
 def parse_search_filter(
     region_code: str | None = Query(None),
     sido_code: str | None = Query(None),
+    sido_codes: list[str] | None = Query(None),
     municipality: str | None = Query(None),
     sigungu_code: str | None = Query(None),
     sigungu_codes: list[str] | None = Query(None),
@@ -234,6 +236,7 @@ def parse_search_filter(
     max_monthly_management_cost: str | None = Query(None),
     move_in_by: str | None = Query(None),
     max_subway_walk_minutes: str | None = Query(None),
+    max_commute_gangnam: str | None = Query(None),
     min_exclusive_area: str | None = Query(None),
     max_exclusive_area: str | None = Query(None),
     min_construction_year: str | None = Query(None),
@@ -269,16 +272,22 @@ def parse_search_filter(
     if trades and 4 in trades:
         parsed_exclude_short_term = False
     parsed_sido_code = _optional_int(sido_code)
+    parsed_sido_codes = _code_list(_request_list(sido_codes))
+    parsed_max_commute_gangnam = _optional_int(max_commute_gangnam)
+
     municipality_value = _request_string(municipality)
     municipality_codes = _municipality_codes(parsed_sido_code, municipality_value)
-    explicit_sigungu_codes = _code_list(_request_list(sigungu_codes))
+    explicit_sigungu_codes = _code_list(_request_list(sigungu_codes)) or []
+    final_sigungu_codes = explicit_sigungu_codes or municipality_codes or None
+
     return ListingSearchFilter(
         region_code=_optional_int(region_code),
         sido_code=parsed_sido_code,
+        sido_codes=parsed_sido_codes,
         sigungu_code=_optional_int(sigungu_code),
-        sigungu_codes=explicit_sigungu_codes or municipality_codes or None,
+        sigungu_codes=final_sigungu_codes,
         invalid_municipality=(
-            explicit_sigungu_codes is None and municipality_value is not None and municipality_codes == []
+            not explicit_sigungu_codes and municipality_value is not None and municipality_codes == []
         ),
         complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
         trade_type=trades[0] if trades and len(trades) == 1 else None,
@@ -307,6 +316,7 @@ def parse_search_filter(
         max_monthly_management_cost=_optional_int(max_monthly_management_cost),
         move_in_by=_optional_date(move_in_by),
         max_subway_walk_minutes=_optional_int(max_subway_walk_minutes),
+        max_commute_gangnam=parsed_max_commute_gangnam,
         min_exclusive_area=_optional_decimal(min_exclusive_area),
         max_exclusive_area=_optional_decimal(max_exclusive_area),
         min_construction_year=_optional_int(min_construction_year),
@@ -488,6 +498,7 @@ def _filter_query_items(filters: ListingSearchFilter) -> list[tuple[str, str]]:
     ):
         items.append((key, str(value).lower()))
     for key, values in (
+        ("sido_codes", filters.sido_codes),
         ("sigungu_codes", filters.sigungu_codes),
         ("mortgage_codes", filters.mortgage_codes),
         ("direction_codes", filters.direction_codes),
@@ -567,6 +578,7 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "current_username": get_current_username(request),
             "region_options": _region_options(),
             "selected_municipality": _selected_municipality(filters),
+            "selected_sido_codes": filters.sido_codes or [],
             "slider_limits": _slider_limits(filters),
             "sort_options": SORT_OPTIONS,
             "sido_labels": sido_labels,
@@ -587,6 +599,7 @@ def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_h
         "filters": filters,
         "region_options": _region_options(),
         "selected_municipality": _selected_municipality(filters),
+        "selected_sido_codes": filters.sido_codes or [],
         "slider_limits": _slider_limits(filters),
         "sort_options": SORT_OPTIONS,
         "sido_labels": sido_labels,

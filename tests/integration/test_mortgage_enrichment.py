@@ -287,3 +287,14 @@ def test_enrichment_prioritizes_current_job_rows_then_backfills_pending_rows():
         assert session.get(ListingCurrent, 11).room_count == 11
         assert session.get(ListingCurrent, 10).room_count == 10
         assert session.get(ListingCurrent, 12).detail_checked_at is not None
+
+
+def test_parse_article_detail_zero_subway_walk_normalizes_to_none():
+    """walkingTimeToNearSubway: 0 (역 없음/정보 없음)이 들어오면 None으로 정규화되어야 함."""
+    payload = {"articleDetail": {"walkingTimeToNearSubway": 0}}
+    parsed = parse_article_detail(payload)
+    assert parsed.nearest_subway_walk_minutes is None
+
+    payload_valid = {"articleDetail": {"walkingTimeToNearSubway": 5}}
+    parsed_valid = parse_article_detail(payload_valid)
+    assert parsed_valid.nearest_subway_walk_minutes == 5
