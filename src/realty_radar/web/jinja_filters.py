@@ -1,6 +1,11 @@
 import json
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+
+
+# KST 타임존 (UTC+9)
+KST = timezone(timedelta(hours=9))
 
 
 def korean_tx_type(val: Any) -> str:
@@ -127,6 +132,44 @@ def tojson_filter(val: Any) -> str:
         return "[]"
 
 
+def kst_datetime(val: Any) -> str:
+    """UTC datetime을 KST(UTC+9) 문자열로 변환."""
+    if val is None:
+        return "-"
+    try:
+        if isinstance(val, datetime):
+            dt = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val
+            kst_dt = dt.astimezone(KST)
+            return kst_dt.strftime("%m/%d %H:%M:%S")
+        return str(val)
+    except Exception:
+        return str(val)
+
+
+def scheduler_duration(log: Any) -> str:
+    """SchedulerLog 객체에서 소요 시간(finished_at - started_at)을 계산하여 표시."""
+    try:
+        started = getattr(log, "started_at", None)
+        finished = getattr(log, "finished_at", None)
+        if started is None or finished is None:
+            return "-"
+        delta = finished - started
+        total_seconds = int(delta.total_seconds())
+        if total_seconds < 0:
+            return "-"
+        if total_seconds < 60:
+            return f"{total_seconds}초"
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        if minutes < 60:
+            return f"{minutes}분 {seconds}초"
+        hours = minutes // 60
+        remaining_minutes = minutes % 60
+        return f"{hours}시간 {remaining_minutes}분"
+    except Exception:
+        return "-"
+
+
 def register_jinja_filters(templates: Any) -> None:
     """Jinja2Templates 객체에 한글 변환, 평수 변환 커스텀 필터 일괄 등록."""
     templates.env.filters["korean_tx_type"] = korean_tx_type
@@ -138,3 +181,6 @@ def register_jinja_filters(templates: Any) -> None:
     templates.env.filters["comma_number"] = comma_number
     templates.env.filters["to_pyeong"] = to_pyeong
     templates.env.filters["tojson"] = tojson_filter
+    templates.env.filters["kst_datetime"] = kst_datetime
+    templates.env.filters["scheduler_duration"] = scheduler_duration
+

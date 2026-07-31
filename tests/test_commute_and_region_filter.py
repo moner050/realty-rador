@@ -113,3 +113,41 @@ def test_listing_search_filter_sido_and_sigungu_coexist():
 
     assert filter_obj.sido_codes == [11]
     assert filter_obj.sigungu_codes == [41131, 41135]
+
+
+def test_listing_search_service_commute_only_filter():
+    """max_commute_gangnam만 지정 시 통근 시군구 코드가 sigungu_code IN 절로 적용되는지 확인."""
+    from realty_radar.application.listing_search_service import ListingSearchService
+    from sqlalchemy.orm import Session
+    from unittest.mock import MagicMock
+
+    service = ListingSearchService(db=MagicMock(spec=Session))
+    filters = ListingSearchFilter(
+        max_commute_gangnam=60,
+    )
+    stmt = service._filtered_rows(filters)
+    compiled_sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    # 통근 시군구 코드가 sigungu_code IN 절로 적용되어야 함
+    assert "sigungu_code IN (" in compiled_sql
+
+
+def test_listing_search_service_sido_chips_with_commute():
+    """sido_codes 칩 + max_commute_gangnam 결합 시 OR 합집합으로 적용되는지 확인."""
+    from realty_radar.application.listing_search_service import ListingSearchService
+    from sqlalchemy.orm import Session
+    from unittest.mock import MagicMock
+
+    service = ListingSearchService(db=MagicMock(spec=Session))
+    filters = ListingSearchFilter(
+        sido_codes=[11],
+        max_commute_gangnam=60,
+    )
+    stmt = service._filtered_rows(filters)
+    compiled_sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    # sido_codes와 commute_codes가 OR로 결합되어야 함
+    assert "sido_code IN (11)" in compiled_sql
+    assert "sigungu_code IN (" in compiled_sql
+
+

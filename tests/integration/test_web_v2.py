@@ -144,8 +144,8 @@ def test_region_options_split_gyeonggi_municipalities_from_child_districts():
 
     assert [district["name"] for district in suwon["districts"]] == ["영통구", "장안구", "팔달구", "권선구"]
     assert [district["code"] for district in suwon["districts"]] == [41111, 41113, 41115, 41117]
-    assert bucheon["districts"] == []
-    assert bucheon["codes"] == [41190]
+    assert [district["name"] for district in bucheon["districts"]] == ["원미구", "소사구", "오정구"]
+    assert bucheon["codes"] == [41192, 41194, 41196]
 
 
 def test_short_term_trade_selection_includes_short_term_rows_despite_default_exclusion():
@@ -382,8 +382,8 @@ def test_home_exposes_hierarchical_auto_search_and_append_pager_contract():
 
     assert response.status_code == 200
     assert "아파트 매물 검색" in response.text
-    assert "name=\"sido_code\"" in response.text
-    assert "name=\"sigungu_code\"" in response.text
+    assert "id=\"sido-select\"" in response.text
+    assert "id=\"district-select\"" in response.text
     assert "hx-sync=\"this:replace\"" in response.text
     assert "delay:400ms" in response.text
     assert append_response.status_code == 200
@@ -410,8 +410,8 @@ def test_home_uses_three_level_region_selectors_and_drag_only_numeric_filters():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert 'id="municipality-select" name="municipality"' in response.text
-    assert 'id="district-select" name="sigungu_code"' in response.text
+    assert 'id="municipality-select"' in response.text
+    assert 'id="district-select"' in response.text
     assert 'data-range-slider="price"' in response.text
     assert 'data-range-slider="exclusive-area"' in response.text
     assert response.text.count('type="range"') >= 12

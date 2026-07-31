@@ -1,0 +1,119 @@
+<!-- 스케줄러 실행 이력 카드 (HTMX partial) -->
+<div id="scheduler-log-section">
+  <div class="theme-surface rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+    <!-- 카드 헤더 -->
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+      <div class="flex items-center gap-2.5">
+        <span class="text-xl">🕐</span>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white">스케줄러 실행 이력</h2>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-800">
+          매일 06:00
+        </span>
+      </div>
+      <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">최근 7일</span>
+    </div>
+
+    {% if scheduler_logs %}
+    <!-- 마지막 실행 요약 -->
+    {% set latest = scheduler_logs[0] %}
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">최근 실행:</span>
+          {% if latest.status == 2 %}
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+            ✅ 성공
+          </span>
+          {% elif latest.status == 3 %}
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-bold border border-red-200 dark:border-red-800">
+            ❌ 실패
+          </span>
+          {% else %}
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-200 dark:border-amber-800">
+            🔄 진행 중
+          </span>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span class="font-semibold">{{ latest.started_at | kst_datetime }}</span>
+        </div>
+        {% if latest.jobs_created > 0 %}
+        <div class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span><strong>{{ latest.jobs_created }}</strong>개 job 등록</span>
+        </div>
+        {% endif %}
+        {% if latest.finished_at and latest.started_at %}
+        <div class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span>소요 {{ latest | scheduler_duration }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 이력 테이블 -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-slate-50 dark:bg-slate-900/30 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+          <tr>
+            <th class="px-5 py-3">실행 시각</th>
+            <th class="px-5 py-3">상태</th>
+            <th class="px-5 py-3">등록 Job</th>
+            <th class="px-5 py-3">소요 시간</th>
+            <th class="px-5 py-3">트리거</th>
+            <th class="px-5 py-3">비고</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700/50">
+          {% for log in scheduler_logs %}
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-slate-800 dark:text-slate-200">
+            <td class="px-5 py-3 font-medium text-xs whitespace-nowrap">{{ log.started_at | kst_datetime }}</td>
+            <td class="px-5 py-3">
+              {% if log.status == 2 %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold">✅ 성공</span>
+              {% elif log.status == 3 %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-bold">❌ 실패</span>
+              {% else %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-bold">🔄 진행 중</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3 text-xs font-semibold">
+              {% if log.jobs_created > 0 %}
+              <span class="text-indigo-600 dark:text-indigo-400">{{ log.jobs_created }}개</span>
+              {% else %}
+              <span class="text-slate-400 dark:text-slate-500">-</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3 text-xs text-slate-500 dark:text-slate-400">{{ log | scheduler_duration }}</td>
+            <td class="px-5 py-3">
+              {% if log.trigger_type == 'cron' %}
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">CRON</span>
+              {% else %}
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">수동</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3 text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title="{{ log.error_message or '' }}">
+              {% if log.error_message %}
+              <span class="text-red-600 dark:text-red-400">{{ log.error_message[:80] }}{% if log.error_message|length > 80 %}...{% endif %}</span>
+              {% else %}
+              -
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <!-- 기록 없음 -->
+    <div class="px-5 py-10 text-center">
+      <span class="text-3xl mb-2 block">📭</span>
+      <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">최근 7일 이내 스케줄러 실행 기록이 없습니다.</p>
+      <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">스케줄러가 매일 06:00에 자동 실행되면 이곳에 기록됩니다.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>

@@ -14,7 +14,7 @@ from realty_radar.infrastructure.database.models.v2 import (
 )
 
 
-def test_v2_schema_contains_only_the_five_domain_tables():
+def test_v2_schema_contains_expected_domain_tables():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -31,7 +31,9 @@ def test_v2_schema_contains_only_the_five_domain_tables():
         "crawl_scope",
         "user_account",
         "user_preference",
+        "scheduler_log",
     }
+
 
 
 def test_current_rows_use_authoritative_ids_and_generated_region_codes():

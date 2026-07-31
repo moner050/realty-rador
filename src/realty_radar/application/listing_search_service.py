@@ -698,16 +698,16 @@ class ListingSearchService:
         statement = select(ListingCurrent).where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE)
         if filters.exclude_short_term:
             statement = statement.where(ListingCurrent.is_short_term == false())
+        # 단일 지정 기본 필터 (지역 관련 필터 제외)
         for column, value in (
             (ListingCurrent.region_code, filters.region_code),
-            (ListingCurrent.sido_code, filters.sido_code),
-            (ListingCurrent.sigungu_code, filters.sigungu_code),
             (ListingCurrent.complex_id, filters.complex_id),
             (ListingCurrent.trade_type, filters.trade_type),
         ):
             if value is not None:
                 statement = statement.where(column == value)
-        # 강남역 통근 퀵필터 시군구 코드 도출
+
+        # 다중 지역 칩 기반 필터링 (sido_codes + sigungu_codes + commute_codes를 OR 합집합으로 결합)
         effective_sigungu_codes = list(filters.sigungu_codes) if filters.sigungu_codes else None
         if filters.max_commute_gangnam is not None:
             commute_codes = get_sigungu_codes_within_commute(filters.max_commute_gangnam, "gangnam")
@@ -717,7 +717,7 @@ class ListingSearchService:
                 effective_sigungu_codes = commute_codes
 
         if filters.sido_codes and effective_sigungu_codes:
-            # 시/도 전체 + 개별 시군구 복합 검색: OR 조건으로 결합
+            # 시/도 전체 + 개별 시군구 복합: OR 결합
             statement = statement.where(
                 or_(
                     ListingCurrent.sido_code.in_(filters.sido_codes),

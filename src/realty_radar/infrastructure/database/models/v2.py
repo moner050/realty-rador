@@ -313,3 +313,27 @@ class UserPreference(Base):
 
     user = relationship("UserAccount", back_populates="preference")
 
+
+class SchedulerLog(Base):
+    """스케줄러(cron) 실행 이력을 기록하는 테이블."""
+
+    __tablename__ = "scheduler_log"
+    __table_args__ = (
+        Index("ix_scheduler_log_recent", "started_at", "log_id"),
+        {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
+    )
+
+    # 상태 상수
+    STATUS_STARTED = 1
+    STATUS_SUCCESS = 2
+    STATUS_FAILED = 3
+
+    log_id = Column(UnsignedBigInt, primary_key=True, autoincrement=True)
+    job_name = Column(String(120), nullable=False)
+    trigger_type = Column(String(20), nullable=False, server_default=text("'cron'"))
+    status = Column(UnsignedTinyInt, nullable=False, server_default=text("1"))
+    jobs_created = Column(UnsignedInteger, nullable=False, server_default=text("0"))
+    error_message = Column(String(512), nullable=True)
+    started_at = Column(DateTime6, nullable=False)
+    finished_at = Column(DateTime6, nullable=True)
+

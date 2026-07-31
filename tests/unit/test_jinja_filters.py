@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from realty_radar.web.jinja_filters import (
     korean_money,
     korean_mortgage,
@@ -5,6 +7,8 @@ from realty_radar.web.jinja_filters import (
     korean_source,
     korean_status,
     korean_tx_type,
+    kst_datetime,
+    scheduler_duration,
     to_pyeong,
     tojson_filter,
 )
@@ -58,3 +62,22 @@ def test_tojson_filter():
     """tojson JSON 직렬화 커스텀 필터 테스트."""
     assert tojson_filter([{"name": "홍길동", "amount": 100}]) == '[{"name": "홍길동", "amount": 100}]'
     assert tojson_filter(None) == '[]'
+
+
+def test_kst_datetime_filter():
+    """kst_datetime KST 시각 변환 필터 테스트."""
+    utc_dt = datetime(2026, 7, 31, 6, 0, 0, tzinfo=timezone.utc)
+    # KST는 UTC+9 -> 15:00:00
+    assert kst_datetime(utc_dt) == "07/31 15:00:00"
+    assert kst_datetime(None) == "-"
+
+
+def test_scheduler_duration_filter():
+    """scheduler_duration 소요시간 계산 필터 테스트."""
+    class DummyLog:
+        started_at = datetime(2026, 7, 31, 6, 0, 0)
+        finished_at = datetime(2026, 7, 31, 6, 2, 35)
+
+    assert scheduler_duration(DummyLog()) == "2분 35초"
+    assert scheduler_duration(None) == "-"
+

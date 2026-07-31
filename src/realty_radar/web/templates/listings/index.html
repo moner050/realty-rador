@@ -333,9 +333,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             </div>
 
             <!-- 그룹 5: ⚡ 강남역 대중교통 통근시간 퀵 필터 -->
-            <div class="space-y-1.5 border-t border-indigo-200/50 dark:border-slate-800/80 pt-2.5">
+            <div class="relative space-y-1.5 border-t border-indigo-200/50 dark:border-slate-800/80 pt-2.5">
                 <div class="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
                     <span>⚡ 강남역 대중교통 통근시간 퀵 필터</span>
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500 font-normal">(버튼에 마우스를 1초간 올리면 포함 구역 표시)</span>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button type="button" data-quick-preset="commute-gangnam-60" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm {% if filters.max_commute_gangnam == 60 %}is-active !border-amber-500 !bg-amber-100 !text-amber-950 dark:!bg-amber-950/70 dark:!text-amber-200 ring-2 ring-amber-500 font-bold shadow-md{% endif %}">
@@ -346,6 +347,26 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                         <span>⚡ 강남까지 1시간 30분 이내</span>
                         <span class="text-[10px] opacity-80 font-normal">(수원/일산/동탄/부천/하남 등)</span>
                     </button>
+                </div>
+                <!-- 1초 마우스 호버 툴팁 레이어 -->
+                <div id="commute-hover-tooltip" class="hidden absolute left-0 top-full mt-2 z-50 w-80 md:w-96 rounded-xl border border-amber-500/30 bg-slate-900/95 p-3.5 text-xs text-slate-200 shadow-2xl backdrop-blur-md transition-all duration-200">
+                    <div class="flex items-center gap-1.5 font-bold text-amber-400 mb-2 border-b border-slate-700/60 pb-1.5" id="commute-tooltip-title">
+                        <span>⚡ 강남역 통근권 구역 안내</span>
+                    </div>
+                    <div class="space-y-2 text-[11px] leading-relaxed">
+                        <div>
+                            <span class="font-bold text-indigo-300">🏢 서울:</span>
+                            <span id="commute-tooltip-seoul" class="text-slate-300"></span>
+                        </div>
+                        <div>
+                            <span class="font-bold text-emerald-300">🌳 경기:</span>
+                            <span id="commute-tooltip-gyeonggi" class="text-slate-300"></span>
+                        </div>
+                        <div id="commute-tooltip-incheon-wrap">
+                            <span class="font-bold text-sky-300">🌊 인천:</span>
+                            <span id="commute-tooltip-incheon" class="text-slate-300"></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -362,9 +383,9 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                 <span class="text-[11px] text-slate-400 ml-auto">지역을 먼저 지정해 보세요</span>
             </div>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>시도</span><select id="sido-select" name="sido_code" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">전체</option>{% for region in region_options %}<option value="{{ region.code }}" {% if filters.sido_code == region.code %}selected{% endif %}>{{ region.name }}</option>{% endfor %}</select></label>
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>시/군</span><select id="municipality-select" name="municipality" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시도를 먼저 선택하세요</option></select></label>
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>구</span><select id="district-select" name="sigungu_code" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시/군을 먼저 선택하세요</option></select></label>
+                <label class="space-y-1 text-xs font-medium text-slate-300"><span>시도</span><select id="sido-select" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">전체</option>{% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}</select></label>
+                <label class="space-y-1 text-xs font-medium text-slate-300"><span>시/군</span><select id="municipality-select" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시도를 먼저 선택하세요</option></select></label>
+                <label class="space-y-1 text-xs font-medium text-slate-300"><span>구</span><select id="district-select" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시/군을 먼저 선택하세요</option></select></label>
                 <label class="space-y-1 text-xs font-medium text-slate-300"><span>단지명·주소</span><input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="예: 래미안, 강남구" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"></label>
             </div>
 
@@ -568,7 +589,8 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         district.replaceChildren();
         if (city?.districts?.length) {
             district.disabled = false;
-            district.add(option(`${city.name} 전체`));
+            district.add(option("구 선택", ""));
+            district.add(option(`${city.name} 전체`, "__ALL__"));
             for (const item of city.districts) district.add(option(item.name, item.code, String(item.code) === selected));
             return;
         }
@@ -579,7 +601,8 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         }
         if (region?.districts?.length) {
             district.disabled = false;
-            district.add(option("전체"));
+            district.add(option("구 선택", ""));
+            district.add(option(`${region.name} 전체`, "__ALL__"));
             for (const item of region.districts) district.add(option(item.name, item.code, String(item.code) === selected));
             return;
         }
@@ -1043,6 +1066,84 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         });
     });
 
+    // 강남역 통근시간 퀵 필터 1초 마우스 호버 툴팁 데이터 및 이벤트 처리
+    const commuteTooltipData = {
+        "60": {
+            title: "⚡ 강남역 1시간(60분) 이내 포함 구역",
+            seoul: "서울 25개 자치구 전체 (강남, 서초, 송파, 동작, 관악, 성동, 용산, 강동, 마포, 영등포, 구로, 양천, 금천, 강서, 성북, 동대문, 서대문, 중랑, 은평, 노원, 도봉, 강북 등)",
+            gyeonggi: "과천시, 성남시(분당구/수정구/중원구), 용인시(수지구/기흥구), 안양시(동안구/만안구), 광명시, 의왕시, 군포시, 하남시, 구리시",
+            incheon: "해당 없음 (60분 초과권)"
+        },
+        "90": {
+            title: "⚡ 강남역 1시간 30분(90분) 이내 포함 구역",
+            seoul: "서울 25개 자치구 전체",
+            gyeonggi: "60분 지역 전체 + 수원시(영통/장안/팔달/권선), 고양시(덕양/일산동/일산서), 부천시(원미/소사/오정), 화성시(동탄/효행/향남/우정), 남양주시, 안산시(상록/단원), 의정부시, 오산시, 시흥시, 파주시, 김포시, 광주시, 이천시, 평택시, 양주시, 안성시 등 경기 전역",
+            incheon: "부평구, 계양구, 남동구, 연수구, 서구, 검단구, 서해구, 미추홀구, 영종구, 미단구 등 인천 전역"
+        }
+    };
+
+    const tooltipEl = document.getElementById("commute-hover-tooltip");
+    const tooltipTitle = document.getElementById("commute-tooltip-title");
+    const tooltipSeoul = document.getElementById("commute-tooltip-seoul");
+    const tooltipGyeonggi = document.getElementById("commute-tooltip-gyeonggi");
+    const tooltipIncheon = document.getElementById("commute-tooltip-incheon");
+    let hoverTimer = null;
+    let hideTimer = null;
+
+    const showTooltip = (minutes) => {
+        if (hideTimer) {
+            clearTimeout(hideTimer);
+            hideTimer = null;
+        }
+        const data = commuteTooltipData[minutes];
+        if (data && tooltipEl) {
+            if (tooltipTitle) tooltipTitle.innerHTML = `<span>${data.title}</span>`;
+            if (tooltipSeoul) tooltipSeoul.textContent = data.seoul;
+            if (tooltipGyeonggi) tooltipGyeonggi.textContent = data.gyeonggi;
+            if (tooltipIncheon) tooltipIncheon.textContent = data.incheon;
+            tooltipEl.classList.remove("hidden");
+        }
+    };
+
+    const scheduleHideTooltip = () => {
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+            if (tooltipEl) {
+                tooltipEl.classList.add("hidden");
+            }
+        }, 200);
+    };
+
+    const cancelHideTooltip = () => {
+        if (hideTimer) {
+            clearTimeout(hideTimer);
+            hideTimer = null;
+        }
+    };
+
+    if (tooltipEl) {
+        tooltipEl.addEventListener("mouseenter", cancelHideTooltip);
+        tooltipEl.addEventListener("mouseleave", scheduleHideTooltip);
+    }
+
+    gangnamButtons.forEach((button) => {
+        const minutes = button.dataset.quickPreset.replace("commute-gangnam-", "");
+
+        button.addEventListener("mouseenter", () => {
+            cancelHideTooltip();
+            if (hoverTimer) clearTimeout(hoverTimer);
+            hoverTimer = setTimeout(() => {
+                showTooltip(minutes);
+            }, 1000);
+        });
+
+        button.addEventListener("mouseleave", scheduleHideTooltip);
+    });
+
     // --- 다중 지역 칩(Region Chips UI) & 묶음 프리셋 제어 ---
     const regionChipsContainer = document.getElementById("selected-region-chips");
     const hiddenSigunguContainer = document.getElementById("hidden-sigungu-inputs");
@@ -1218,18 +1319,61 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         });
     }
 
-    // 구 선택 드롭다운: '전체' 선택 시 시/도 전체, 개별 구 선택 시 시군구 추가
+
+
+    // 시/군 드롭다운 변경 시: 하위 구가 없는 단일 시/군만 자동 추가, 하위 구가 있는 시/군은 구 선택 대기
+    if (municipality) {
+        municipality.addEventListener("change", () => {
+            const cityName = municipality.value;
+            if (!cityName) return;
+            const region = regionForSido();
+            const city = (region?.municipalities ?? []).find(m => m.name === cityName);
+            if (city) {
+                const hasSubDistricts = city.districts && city.districts.length > 0;
+                // 하위 구가 없는 단일 시/군(예: 과천시, 남양주시 등)인 경우에만 해당 시 코드 추가
+                if (!hasSubDistricts) {
+                    const codes = city.codes || [];
+                    if (codes.length) {
+                        addSigunguCodes(codes);
+                    }
+                }
+            }
+        });
+    }
+
+    // 구 선택 드롭다운: 사용자가 'OO시 전체'(__ALL__) 또는 개별 구 선택 시 다중 지역 추가
     if (district) {
         district.addEventListener("change", () => {
             const val = district.value;
-            const numVal = Number(val);
-            // 값이 비어있거나 숫자가 아님 → "전체" 선택
-            if (!numVal) {
-                const currentSidoCode = Number(sido.value);
-                if (currentSidoCode) addSidoCode(currentSidoCode);
+            if (!val) return; // '구 선택' 안내 옵션 선택 시 무시
+
+            if (val === "__ALL__") {
+                const cityName = municipality ? municipality.value : "";
+                const region = regionForSido();
+                const city = (region?.municipalities ?? []).find(m => m.name === cityName);
+                if (city) {
+                    const codes = [];
+                    if (city.districts && city.districts.length) {
+                        city.districts.forEach(d => codes.push(d.code));
+                    }
+                    if (city.codes && city.codes.length) {
+                        city.codes.forEach(c => codes.push(c));
+                    }
+                    if (codes.length) {
+                        addSigunguCodes(codes);
+                    }
+                } else if (sido && sido.value) {
+                    const currentSidoCode = Number(sido.value);
+                    if (currentSidoCode) addSidoCode(currentSidoCode);
+                }
             } else {
-                addSigunguCodes([numVal]);
+                const numVal = Number(val);
+                if (numVal) {
+                    addSigunguCodes([numVal]);
+                }
             }
+            // 추가 후 구 선택 드롭다운을 '구 선택' 위치로 재초기화
+            district.value = "";
         });
     }
 

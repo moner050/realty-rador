@@ -1,7 +1,7 @@
 """SITE_A job queue dashboard. 웹 요청은 job만 등록하고 worker가 실행한다."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from realty_radar.application.crawl_job_service import CrawlJobService
-from realty_radar.infrastructure.database.models import CrawlJob
+from realty_radar.infrastructure.database.models import CrawlJob, SchedulerLog
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.auth import require_admin
 from realty_radar.web.jinja_filters import register_jinja_filters
@@ -30,6 +30,19 @@ def _progress_context(db: Session) -> dict[str, object]:
         "metro_progress": service.get_latest_metro_batch_progress(),
         "region_options": _region_options(),
     }
+
+
+def _scheduler_logs(db: Session) -> list[SchedulerLog]:
+    """최근 7일간의 스케줄러 실행 이력을 조회한다."""
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    return list(
+        db.scalars(
+            select(SchedulerLog)
+            .where(SchedulerLog.started_at >= seven_days_ago)
+            .order_by(SchedulerLog.started_at.desc())
+            .limit(50)
+        ).all()
+    )
 
 
 def _selected_metro_scope_codes(
@@ -83,13 +96,29 @@ def get_jobs_dashboard(request: Request, db: Annotated[Session, Depends(get_db)]
     return templates.TemplateResponse(
         request,
         "jobs/index.html",
-        {"jobs": jobs, "is_authenticated": True, "is_admin": True, **_progress_context(db)},
+        {
+            "jobs": jobs,
+            "is_authenticated": True,
+            "is_admin": True,
+            "scheduler_logs": _scheduler_logs(db),
+            **_progress_context(db),
+        },
     )
 
 
 @router.get("/api/crawl-jobs/progress", response_class=HTMLResponse, name="get_crawl_progress")
 def get_crawl_progress(request: Request, db: Annotated[Session, Depends(get_db)]):
     return _render_progress(request, db)
+
+
+@router.get("/api/scheduler-logs", response_class=HTMLResponse, name="get_scheduler_logs")
+def get_scheduler_logs(request: Request, db: Annotated[Session, Depends(get_db)]):
+    """스케줄러 실행 이력 HTMX partial 렌더링 API."""
+    return templates.TemplateResponse(
+        request,
+        "jobs/scheduler_log_partial.html",
+        {"scheduler_logs": _scheduler_logs(db)},
+    )
 
 
 @router.post("/api/crawl-jobs", name="create_crawl_job")

@@ -5,6 +5,7 @@ from realty_radar.infrastructure.database.models.v2 import (
     CrawlScope,
     ListingCurrent,
     ListingHistory,
+    SchedulerLog,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "ListingHistory",
     "CrawlJob",
     "CrawlScope",
+    "SchedulerLog",
 ]
