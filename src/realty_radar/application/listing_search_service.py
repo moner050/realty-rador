@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import and_, false, func, or_, select, text, true
 from sqlalchemy.orm import Session
 
+from realty_radar.application.purchase_affordability_service import PurchaseAffordabilityService
 from realty_radar.config import settings
 from realty_radar.constants import TransactionType
 from realty_radar.domain.listing.commute_map import get_sigungu_codes_within_commute
@@ -31,6 +32,7 @@ from realty_radar.infrastructure.database.models import ComplexCurrent, ListingC
 
 LIFECYCLE_ACTIVE = 1
 CURSOR_VERSION = 2
+MAX_SUPPORTED_PURCHASE_LOAN = 420_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,7 @@ class ListingSearchService:
         self.db = db
         self._cursor_secret = (cursor_secret or settings.secret_key).encode("utf-8")
         self._loan_evaluator = LoanRuleEvaluator()
+        self._purchase_affordability_service = PurchaseAffordabilityService()
         self._diagnostics: SearchDiagnostics | None = None
 
     def search_listings(self, filters: ListingSearchFilter, applicant: Any = None) -> SearchResult:
@@ -75,6 +78,7 @@ class ListingSearchService:
         self._diagnostics = diagnostics
         started_at = perf_counter()
         self._validate(filters)
+        self._validate_purchase_affordability_profile(filters, applicant)
         if filters.group_by_complex:
             result = self._search_grouped(filters, applicant)
         else:
@@ -136,6 +140,13 @@ class ListingSearchService:
         include_previous: bool = True,
     ) -> SearchResult:
         sort = self._sort(filters)
+        if filters.only_purchase_affordable:
+            return self._search_purchase_affordable_rows(
+                filters,
+                sort,
+                applicant,
+                include_previous=include_previous,
+            )
         if filters.only_eligible_loans:
             return self._search_eligible_rows(
                 filters,
@@ -176,6 +187,8 @@ class ListingSearchService:
 
     def _search_grouped(self, filters: ListingSearchFilter, applicant: Any) -> SearchResult:
         sort = self._sort(filters)
+        if filters.only_purchase_affordable:
+            return self._search_purchase_affordable_grouped(filters, sort, applicant)
         if filters.only_eligible_loans:
             return self._search_eligible_grouped(filters, sort, applicant)
         page_size = min(filters.page_size, 20)
@@ -326,6 +339,67 @@ class ListingSearchService:
             has_previous=include_previous and anchor is not None,
         )
 
+    def _search_purchase_affordable_rows(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        applicant: Any,
+        *,
+        include_previous: bool = True,
+    ) -> SearchResult:
+        anchor = self._decode_cursor(filters, sort, grouped=False, applicant=applicant)
+        items = self._scan_purchase_affordable_rows(filters, sort, anchor, applicant, filters.page_size + 1)
+        has_more = len(items) > filters.page_size
+        page = items[: filters.page_size]
+        previous_cursor = (
+            self._previous_purchase_affordable_row_cursor(filters, sort, page[0], applicant)
+            if include_previous and anchor is not None and page
+            else None
+        )
+        next_cursor = (
+            self._encode_cursor(
+                filters, sort, page[-1], page[-1].article_id, grouped=False, applicant=applicant
+            ) if has_more else None
+        )
+        return SearchResult(
+            items=page,
+            next_cursor=next_cursor,
+            has_more=has_more,
+            previous_cursor=previous_cursor,
+            has_previous=include_previous and anchor is not None,
+        )
+
+    def _scan_purchase_affordable_rows(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        anchor: tuple[Any, int] | None,
+        applicant: Any,
+        wanted: int | None,
+    ) -> list[ListingCurrent]:
+        candidate_anchor = anchor
+        matched: list[ListingCurrent] = []
+        batch_size = max(100, filters.page_size * 4)
+        while wanted is None or len(matched) < wanted:
+            rows = self._purchase_candidate_batch(
+                filters,
+                sort,
+                candidate_anchor,
+                applicant,
+                batch_size=batch_size,
+            )
+            if not rows:
+                break
+            for row in rows:
+                if self._is_purchase_affordable(row, filters, applicant):
+                    matched.append(row)
+                    if wanted is not None and len(matched) >= wanted:
+                        return matched
+            candidate_anchor = (getattr(rows[-1], sort.name), rows[-1].article_id)
+            if len(rows) < batch_size:
+                break
+        return matched
+
     def _scan_eligible_rows(
         self,
         filters: ListingSearchFilter,
@@ -358,6 +432,40 @@ class ListingSearchService:
         return eligible
 
     def _search_eligible_grouped(self, filters: ListingSearchFilter, sort: _SortSpec, applicant: Any) -> SearchResult:
+        if not LoanCandidatePlan.for_applicant(applicant).branches:
+            self._decode_cursor(filters, sort, grouped=True, applicant=applicant)
+            self._decode_scan_anchor(filters, sort, grouped=True, applicant=applicant)
+            return SearchResult(items=[], next_cursor=None, has_more=False, grouped_items=[], is_grouped=True)
+        return self._search_runtime_filtered_grouped(
+            filters,
+            sort,
+            applicant,
+            self._eligible_candidate_rows,
+            lambda listing: self._is_loan_eligible(listing, applicant),
+        )
+
+    def _search_purchase_affordable_grouped(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        applicant: Any,
+    ) -> SearchResult:
+        return self._search_runtime_filtered_grouped(
+            filters,
+            sort,
+            applicant,
+            self._purchase_candidate_rows,
+            lambda listing: self._is_purchase_affordable(listing, filters, applicant),
+        )
+
+    def _search_runtime_filtered_grouped(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        applicant: Any,
+        candidate_rows,
+        matches_listing,
+    ) -> SearchResult:
         # Policy evaluation is Python-only, but group candidates remain SQL
         # ordered and keyset-bounded. Stop as soon as a page plus lookahead is
         # eligible; never materialize the full result set.
@@ -368,9 +476,7 @@ class ListingSearchService:
             grouped=True,
             applicant=applicant,
         )
-        if not LoanCandidatePlan.for_applicant(applicant).branches:
-            return SearchResult(items=[], next_cursor=None, has_more=False, grouped_items=[], is_grouped=True)
-        filtered = self._eligible_candidate_rows(filters, applicant).with_only_columns(
+        filtered = candidate_rows(filters, applicant).with_only_columns(
             ListingCurrent.complex_id,
             ListingCurrent.primary_price,
             ListingCurrent.first_seen_at,
@@ -425,13 +531,13 @@ class ListingSearchService:
                 break
             complex_ids = [row["complex_id"] for row in group_rows]
             listing_rows = self._scalars(
-                self._eligible_candidate_rows(filters, applicant)
+                candidate_rows(filters, applicant)
                 .where(ListingCurrent.complex_id.in_(complex_ids))
                 .order_by(ListingCurrent.complex_id, ListingCurrent.primary_price, ListingCurrent.article_id)
             )
             by_complex: dict[int, list[ListingCurrent]] = {complex_id: [] for complex_id in complex_ids}
             for listing in listing_rows:
-                if self._is_loan_eligible(listing, applicant):
+                if matches_listing(listing):
                     by_complex[listing.complex_id].append(listing)
             predecessor = candidate_anchor
             for row in group_rows:
@@ -579,6 +685,23 @@ class ListingSearchService:
             if diagnostics is not None:
                 diagnostics.loan_evaluation_time_ms += (perf_counter() - started_at) * 1000
 
+    def _is_purchase_affordable(
+        self,
+        listing: ListingCurrent,
+        filters: ListingSearchFilter,
+        applicant: Any,
+    ) -> bool:
+        is_loan_eligible = self._is_loan_eligible(listing, applicant)
+        if filters.only_eligible_loans and not is_loan_eligible:
+            return False
+        calculation = self._purchase_affordability_service.calculate(
+            listing,
+            listing.loan_evaluations,
+            applicant,
+        )
+        listing.purchase_affordability = calculation
+        return calculation is not None and calculation.is_affordable is True
+
     @staticmethod
     def _loan_candidate_condition(branch: LoanCandidateBranch):
         trade_condition = (
@@ -678,6 +801,49 @@ class ListingSearchService:
             key=lambda row: (getattr(row, sort.name), row.article_id),
             reverse=not sort.descending if previous else sort.descending,
         )[:batch_size]
+
+    def _purchase_candidate_rows(self, filters: ListingSearchFilter, applicant: Any):
+        sale_filters = replace(
+            filters,
+            trade_type=1,
+            trade_types=[1],
+            only_eligible_loans=False,
+            only_purchase_affordable=False,
+        )
+        return self._filtered_rows(sale_filters).where(
+            ListingCurrent.primary_price <= applicant.available_cash + MAX_SUPPORTED_PURCHASE_LOAN
+        )
+
+    def _purchase_candidate_batch(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        anchor: tuple[Any, int] | None,
+        applicant: Any,
+        *,
+        batch_size: int,
+        previous: bool = False,
+    ) -> list[ListingCurrent]:
+        sort_column = getattr(ListingCurrent, sort.name)
+        statement = self._with_candidate_index_hint(
+            self._purchase_candidate_rows(filters, applicant), filters, sort
+        )
+        if anchor is not None:
+            keyset = self._apply_previous_keyset if previous else self._apply_keyset
+            statement = keyset(
+                statement,
+                sort_column,
+                ListingCurrent.article_id,
+                sort.descending,
+                anchor,
+            )
+        stream_descending = not sort.descending if previous else sort.descending
+        return self._scalars(
+            statement.order_by(
+                sort_column.desc() if stream_descending else sort_column.asc(),
+                ListingCurrent.article_id.desc() if stream_descending else ListingCurrent.article_id.asc(),
+            ).limit(batch_size)
+        )
 
     @staticmethod
     def _with_candidate_index_hint(statement, filters: ListingSearchFilter, sort: _SortSpec):
@@ -896,6 +1062,42 @@ class ListingSearchService:
             filters, sort, previous, previous.article_id, grouped=False, applicant=applicant
         )
 
+    def _previous_purchase_affordable_row_cursor(
+        self,
+        filters: ListingSearchFilter,
+        sort: _SortSpec,
+        first_item: ListingCurrent,
+        applicant: Any,
+    ) -> str | None:
+        anchor = (getattr(first_item, sort.name), first_item.article_id)
+        preceding: list[ListingCurrent] = []
+        batch_size = max(100, filters.page_size * 4)
+        while len(preceding) < filters.page_size + 1:
+            rows = self._purchase_candidate_batch(
+                filters,
+                sort,
+                anchor,
+                applicant,
+                batch_size=batch_size,
+                previous=True,
+            )
+            if not rows:
+                break
+            for row in rows:
+                if self._is_purchase_affordable(row, filters, applicant):
+                    preceding.append(row)
+                    if len(preceding) >= filters.page_size + 1:
+                        break
+            anchor = (getattr(rows[-1], sort.name), rows[-1].article_id)
+            if len(rows) < batch_size:
+                break
+        if len(preceding) <= filters.page_size:
+            return None
+        previous = preceding[-1]
+        return self._encode_cursor(
+            filters, sort, previous, previous.article_id, grouped=False, applicant=applicant
+        )
+
     def _encode_cursor(
         self,
         filters: ListingSearchFilter,
@@ -1006,7 +1208,7 @@ class ListingSearchService:
     @staticmethod
     def _filter_fingerprint(filters: ListingSearchFilter, applicant: Any = None) -> str:
         values: dict[str, Any] = {"filters": filters.fingerprint_values()}
-        if filters.only_eligible_loans:
+        if filters.only_eligible_loans or filters.only_purchase_affordable:
             values["applicant"] = ListingSearchService._applicant_values(applicant)
         normalized = json.dumps(values, default=str, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -1032,3 +1234,14 @@ class ListingSearchService:
             raise ListingSearchValidationError("unsupported municipality")
         if filters.complex_keyword and len("".join(filters.complex_keyword.split())) < 2:
             raise ListingSearchValidationError("complex keyword must be at least two characters")
+
+    @staticmethod
+    def _validate_purchase_affordability_profile(filters: ListingSearchFilter, applicant: Any) -> None:
+        if not filters.only_purchase_affordable:
+            return
+        if (
+            applicant is None
+            or getattr(applicant, "available_cash", None) is None
+            or getattr(applicant, "max_monthly_housing_cost", None) is None
+        ):
+            raise ListingSearchValidationError("purchase affordability profile incomplete")

@@ -103,6 +103,7 @@ class ListingSearchFilter:
     exclude_first_floor: bool = False
     exclude_short_term: bool = True
     only_eligible_loans: bool = False
+    only_purchase_affordable: bool = False
     group_by_complex: bool = False
     sort_by: str = "price_asc"
     page_size: int = 20
@@ -176,7 +177,13 @@ class ListingSearchFilter:
             "max_subway_walk_minutes",
         ):
             copied[key] = cls._int_value(copied.get(key))
-        for key in ("direct_trade_only", "safe_lessor_hug_only", "parking_possible_only"):
+        for key in (
+            "direct_trade_only",
+            "safe_lessor_hug_only",
+            "parking_possible_only",
+            "only_eligible_loans",
+            "only_purchase_affordable",
+        ):
             copied[key] = cls._bool_value(copied.get(key), False)
         allowed = {field_name for field_name in cls.__dataclass_fields__}
         return cls(**{key: value for key, value in copied.items() if key in allowed})
