@@ -3,7 +3,7 @@
 {% set mortgage_labels = {0: '융자 정보 미상', 1: '융자 없음', 2: '융자 있음'} %}
 {% set direction_labels = {1: '남', 2: '남동', 3: '동', 4: '북동', 5: '북', 6: '북서', 7: '서', 8: '남서'} %}
 {% set floor_labels = {1: '저층', 2: '중층', 3: '고층', 4: '탑층', 5: '지하'} %}
-<div id="search-results" data-search-mode="{% if result.is_grouped %}grouped{% elif filters.only_eligible_loans %}eligible-loans{% else %}normal{% endif %}" class="space-y-3">
+<div id="search-results" data-search-mode="{% if filters.only_purchase_affordable %}purchase-affordable{% elif result.is_grouped %}grouped{% elif filters.only_eligible_loans %}eligible-loans{% else %}normal{% endif %}" class="space-y-3">
 <div id="search-status" data-result-controls class="theme-result-toolbar sticky top-20 z-30 flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-slate-700/90 bg-white/95 dark:bg-slate-900/95 p-4 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between text-slate-900 dark:text-slate-100 transition-colors">
     <div class="flex items-center gap-2">
         <span class="inline-flex items-center justify-center w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
@@ -49,6 +49,7 @@
             <span class="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 px-3 py-1 text-xs text-slate-700 dark:text-slate-200 font-semibold shadow-sm">단기임대 {{ '제외' if filters.exclude_short_term else '포함' }}</span>
             {% if filters.group_by_complex %}<span class="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 px-3 py-1 text-xs text-slate-700 dark:text-slate-200 font-semibold shadow-sm">단지별 묶기</span>{% endif %}
             {% if filters.only_eligible_loans %}<span class="rounded-full border border-indigo-200 dark:border-indigo-700/60 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 text-xs text-indigo-700 dark:text-indigo-300 font-bold shadow-sm">가능 대출 있는 매물만</span>{% endif %}
+            {% if filters.only_purchase_affordable %}<span class="rounded-full border border-indigo-200 dark:border-indigo-700/60 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 text-xs text-indigo-700 dark:text-indigo-300 font-bold shadow-sm">실구매 가능 매물만</span>{% endif %}
             {% if filters.direct_trade_only %}<span class="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 px-3 py-1 text-xs text-slate-700 dark:text-slate-200 font-semibold shadow-sm">직거래만</span>{% endif %}
             {% if filters.safe_lessor_hug_only %}<span class="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 px-3 py-1 text-xs text-slate-700 dark:text-slate-200 font-semibold shadow-sm">HUG 안심임대인 표기</span>{% endif %}
         </div>
@@ -60,4 +61,22 @@
     <div id="listing-pager" class="mt-4 text-center">
         {{ cards.pager(result, previous_url, next_url) }}
     </div>
+    <section data-listing-map-root class="theme-surface overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-100">
+        <div class="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+            <div>
+                <h2 class="text-sm font-extrabold">매물 위치 지도</h2>
+                <p class="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">검증된 단지 주소만 표시합니다.</p>
+            </div>
+            {% if map_markers %}<span class="rounded-full bg-indigo-100 dark:bg-indigo-500/15 px-2.5 py-1 text-xs font-bold text-indigo-800 dark:text-indigo-200">{{ map_markers | length }}개 단지</span>{% endif %}
+        </div>
+        {% if not naver_map_client_id %}
+        <p data-listing-map-status class="px-4 py-8 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">네이버 지도 설정이 필요합니다.</p>
+        {% elif not map_markers %}
+        <p data-listing-map-status class="px-4 py-8 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">위치 확인 중</p>
+        {% else %}
+        <div id="listings-map" data-listings-map class="h-80 w-full"></div>
+        <script id="listing-map-payload" data-listing-map-payload type="application/json">{{ map_markers | tojson }}</script>
+        <p data-listing-map-status class="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">단지를 선택하면 매물 요약을 볼 수 있습니다.</p>
+        {% endif %}
+    </section>
 </div>

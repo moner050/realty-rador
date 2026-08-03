@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.listing_batch_writer import IncomingListing, ListingBatchWriter
 from realty_radar.infrastructure.database.models import Base, CrawlJob, ListingCurrent, ListingHistory
+from realty_radar.infrastructure.database.models.v2 import ComplexCurrent
 
 
 def _session():
@@ -134,3 +135,38 @@ def test_listing_recrawl_updates_list_flags_without_overwriting_detail_enrichmen
     assert refreshed.is_safe_lessor_hug is True
     assert refreshed.room_count == 3
     assert refreshed.detail_checked_at is not None
+
+
+def test_complex_address_change_resets_cached_geocode_to_pending():
+    session = _session()
+    session.add_all([_job(1, "dong:1150010200:1"), _job(2, "dong:1150010200:2")])
+    session.commit()
+    writer = ListingBatchWriter(session)
+    writer.commit_batch(job_id=1, rows=[_incoming(10_000)])
+
+    complex_row = session.get(ComplexCurrent, 1001)
+    assert complex_row is not None
+    complex_row.latitude = "37.5500000"
+    complex_row.longitude = "126.8500000"
+    complex_row.geocode_status = 1
+    complex_row.geocoded_address_hash = b"a" * 16
+    complex_row.geocoded_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    complex_row.geocode_attempted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    complex_row.geocode_retry_after = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.commit()
+
+    writer.commit_batch(
+        job_id=2,
+        rows=[replace(_incoming(10_000), address="서울특별시 강서구 테스트로 2")],
+    )
+    session.expire_all()
+
+    refreshed = session.get(ComplexCurrent, 1001)
+    assert refreshed is not None
+    assert refreshed.latitude is None
+    assert refreshed.longitude is None
+    assert refreshed.geocode_status == 0
+    assert refreshed.geocoded_address_hash is None
+    assert refreshed.geocoded_at is None
+    assert refreshed.geocode_attempted_at is None
+    assert refreshed.geocode_retry_after is None

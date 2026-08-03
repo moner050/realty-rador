@@ -13,7 +13,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from realty_radar.infrastructure.database.models import CrawlJob, ListingCurrent, ListingHistory
-from realty_radar.infrastructure.database.models.v2 import ComplexCurrent
+from realty_radar.infrastructure.database.models.v2 import ComplexCurrent, GEOCODE_STATUS_PENDING
 
 
 LIFECYCLE_ACTIVE = 1
@@ -248,6 +248,34 @@ class ListingBatchWriter:
                     "address": excluded_complex.address,
                     "construction_year": excluded_complex.construction_year,
                     "household_count": excluded_complex.household_count,
+                    "latitude": case(
+                        (ComplexCurrent.address != excluded_complex.address, None),
+                        else_=ComplexCurrent.latitude,
+                    ),
+                    "longitude": case(
+                        (ComplexCurrent.address != excluded_complex.address, None),
+                        else_=ComplexCurrent.longitude,
+                    ),
+                    "geocode_status": case(
+                        (ComplexCurrent.address != excluded_complex.address, GEOCODE_STATUS_PENDING),
+                        else_=ComplexCurrent.geocode_status,
+                    ),
+                    "geocoded_address_hash": case(
+                        (ComplexCurrent.address != excluded_complex.address, None),
+                        else_=ComplexCurrent.geocoded_address_hash,
+                    ),
+                    "geocoded_at": case(
+                        (ComplexCurrent.address != excluded_complex.address, None),
+                        else_=ComplexCurrent.geocoded_at,
+                    ),
+                    "geocode_attempted_at": case(
+                        (ComplexCurrent.address != excluded_complex.address, None),
+                        else_=ComplexCurrent.geocode_attempted_at,
+                    ),
+                    "geocode_retry_after": case(
+                        (ComplexCurrent.address != excluded_complex.address, None),
+                        else_=ComplexCurrent.geocode_retry_after,
+                    ),
                     "state_hash": excluded_complex.state_hash,
                     "last_seen_at": excluded_complex.last_seen_at,
                     "updated_at": case(
@@ -421,6 +449,13 @@ class ListingBatchWriter:
                             region_code = VALUES(region_code),
                             name = VALUES(name),
                             normalized_name = VALUES(normalized_name),
+                            latitude = IF(address <> VALUES(address), NULL, latitude),
+                            longitude = IF(address <> VALUES(address), NULL, longitude),
+                            geocode_status = IF(address <> VALUES(address), :geocode_pending, geocode_status),
+                            geocoded_address_hash = IF(address <> VALUES(address), NULL, geocoded_address_hash),
+                            geocoded_at = IF(address <> VALUES(address), NULL, geocoded_at),
+                            geocode_attempted_at = IF(address <> VALUES(address), NULL, geocode_attempted_at),
+                            geocode_retry_after = IF(address <> VALUES(address), NULL, geocode_retry_after),
                             address = VALUES(address),
                             construction_year = VALUES(construction_year),
                             household_count = VALUES(household_count),
@@ -428,7 +463,8 @@ class ListingBatchWriter:
                             updated_at = IF(state_hash <> VALUES(state_hash), VALUES(updated_at), updated_at),
                             state_hash = VALUES(state_hash)
                         """
-                    )
+                    ),
+                    {"geocode_pending": GEOCODE_STATUS_PENDING},
                 )
                 connection.execute(
                     text(

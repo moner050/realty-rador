@@ -14,7 +14,10 @@ from fastapi.params import Param
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from realty_radar.application.listing_map_service import ListingMapService
+from realty_radar.application.purchase_affordability_service import PurchaseAffordabilityService
 from realty_radar.application.listing_search_service import ListingSearchService
+from realty_radar.config import settings
 from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, SIGUNGU_CODES
 from realty_radar.domain.listing.commute_map import get_sigungu_codes_within_commute
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
@@ -254,6 +257,7 @@ def parse_search_filter(
     exclude_first_floor: bool = Query(False),
     group_by_complex: bool = Query(False),
     only_eligible_loans: bool = Query(False),
+    only_purchase_affordable: bool = Query(False),
 ) -> ListingSearchFilter:
     transaction = _request_string(transaction_type)
     trades = _trade_codes(
@@ -333,6 +337,7 @@ def parse_search_filter(
         exclude_first_floor=_request_bool(exclude_first_floor, False),
         group_by_complex=_request_bool(group_by_complex, False),
         only_eligible_loans=_request_bool(only_eligible_loans, False),
+        only_purchase_affordable=_request_bool(only_purchase_affordable, False),
     )
 
 
@@ -366,6 +371,16 @@ def _favorite_payload_context(result) -> dict[str, dict[int, dict[str, object]]]
         "favorite_listing_payloads": {
             item.article_id: _favorite_listing_payload(item) for item in _listing_items(result)
         },
+    }
+
+
+def _listing_map_context(db: Session, result) -> dict[str, object]:
+    if not settings.naver_map_client_id:
+        return {"naver_map_client_id": None, "map_markers": []}
+    markers = ListingMapService(db).build_markers(result)
+    return {
+        "naver_map_client_id": settings.naver_map_client_id,
+        "map_markers": [marker.to_dict() for marker in markers],
     }
 
 
@@ -442,6 +457,14 @@ def _enrich_listings_with_loans(result, applicant) -> float:
     return evaluation_time_ms
 
 
+def _enrich_listings_with_affordability(result, applicant) -> None:
+    service = PurchaseAffordabilityService()
+    for item in _listing_items(result):
+        calculation = service.calculate(item, getattr(item, "loan_evaluations", []), applicant)
+        if calculation is not None:
+            item.purchase_affordability = calculation
+
+
 def _log_search_diagnostics(result, started_at: float) -> None:
     diagnostics = result.diagnostics
     diagnostics.total_time_ms = (perf_counter() - started_at) * 1000
@@ -495,6 +518,7 @@ def _filter_query_items(filters: ListingSearchFilter) -> list[tuple[str, str]]:
         ("exclude_short_term", filters.exclude_short_term),
         ("group_by_complex", filters.group_by_complex),
         ("only_eligible_loans", filters.only_eligible_loans),
+        ("only_purchase_affordable", filters.only_purchase_affordable),
     ):
         items.append((key, str(value).lower()))
     for key, values in (
@@ -550,7 +574,9 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
     applicant = get_request_user_profile(request)
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
     result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
+    _enrich_listings_with_affordability(result, applicant)
     favorite_payloads = _favorite_payload_context(result)
+    map_context = _listing_map_context(db, result)
     page_url = request.url.remove_query_params("append")
     next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
     previous_url = None
@@ -584,13 +610,20 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "sido_labels": sido_labels,
             "sigungu_labels": sigungu_labels,
             **favorite_payloads,
+            **map_context,
         },
     )
     _log_search_diagnostics(result, started_at)
     return response
 
 
-def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_htmx: bool):
+def _render_search_error(
+    request: Request,
+    filters: ListingSearchFilter,
+    *,
+    is_htmx: bool,
+    reason: str | None = None,
+):
     sido_labels, sigungu_labels = _region_labels()
     applicant = get_request_user_profile(request)
     context = {
@@ -607,6 +640,7 @@ def _render_search_error(request: Request, filters: ListingSearchFilter, *, is_h
         "is_authenticated": is_authenticated(request),
         "is_admin": is_admin_user(request),
         "search_error": True,
+        "search_error_reason": reason,
     }
     response = templates.TemplateResponse(
         request,
@@ -630,8 +664,9 @@ def _render_or_client_error(
 ):
     try:
         return _render_result(request, db, filters, template_name)
-    except ListingSearchValidationError:
-        return _render_search_error(request, filters, is_htmx=is_htmx)
+    except ListingSearchValidationError as error:
+        reason = "purchase_profile_incomplete" if str(error) == "purchase affordability profile incomplete" else None
+        return _render_search_error(request, filters, is_htmx=is_htmx, reason=reason)
 
 
 @router.get("/", response_class=HTMLResponse, name="home")

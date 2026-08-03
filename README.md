@@ -22,6 +22,23 @@ Alembic `001_site_a_v2`가 유일한 canonical migration입니다. 도메인 테
 python scripts/create_v2_database.py --database realty_radar_v2 --confirm-create realty_radar_v2
 ```
 
+## Naver Maps
+
+Set `NAVER_MAP_CLIENT_ID` to the NCP Map ID (`ncpKeyId`) issued for Dynamic Map. It is sent only to the browser so map tiles can load. Keep `NAVER_MAP_CLIENT_SECRET` server-side: it is used only by the Geocoding API and is never rendered in listing HTML.
+
+After enabling Dynamic Map and Geocoding in NCP, register each development/production web-service URL. Apply the schema change and then backfill verified complex coordinates:
+
+```powershell
+python -m alembic upgrade head
+python scripts/backfill_complex_geocodes.py --batch-size 100
+```
+
+Listings without a verified coordinate remain visible in search results but are excluded from the map. No client-side or synthetic coordinates are generated.
+
+## Purchase affordability
+
+Purchase affordability uses available cash, existing monthly debt payment, the maximum monthly housing cost, and a closing-cost reserve rate (default 2%). It is a planning estimate based on the current policy-loan rules and a 30-year equal-payment schedule; it does not replace bank approval or statutory acquisition-tax and brokerage-fee calculations.
+
 `MYSQL_DATABASE`의 기본값도 `realty_radar_v2`입니다. 기존 DB 폐기는 전체 coverage와 24시간 rollback 기간이 끝난 뒤에만 `scripts/retire_v1_tables.py`를 명시적으로 실행합니다. 이 스크립트는 먼저 날짜가 포함된 `mysqldump` 백업을 만듭니다.
 
 ## 검증

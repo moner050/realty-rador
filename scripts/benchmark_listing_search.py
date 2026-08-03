@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import sys
 import time
+import urllib.parse
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,7 +45,7 @@ class BenchmarkResult:
         return _percentile(self.durations_ms, 0.95)
 
 
-MODE_NAMES = ("normal", "grouped", "eligible-loans", "complex-detail")
+MODE_NAMES = ("normal", "grouped", "eligible-loans", "purchase-affordable", "complex-detail")
 _SEARCH_ROUTE = "/listings/search"
 _COMPLEX_ROUTE = "/listings/complex/{complex_id}"
 _HTMX_HEADERS = {"HX-Request": "true"}
@@ -139,6 +141,14 @@ def _mode_specs(complex_id: int | None) -> dict[str, BenchmarkMode]:
             default_p95_ms=1_000.0,
             item_marker=b"data-listing-card",
             mode_marker=b'data-search-mode="eligible-loans"',
+        ),
+        "purchase-affordable": BenchmarkMode(
+            name="purchase-affordable",
+            path=f"{_SEARCH_ROUTE}?page_size=20&sort_by=price_asc&only_purchase_affordable=true",
+            route_path=_SEARCH_ROUTE,
+            default_p95_ms=1_000.0,
+            item_marker=b"data-listing-card",
+            mode_marker=b'data-search-mode="purchase-affordable"',
         ),
         "complex-detail": BenchmarkMode(
             name="complex-detail",
@@ -340,7 +350,9 @@ def _load_runtime(options: argparse.Namespace):
     from sqlalchemy import text as sql_text
 
     from realty_radar.infrastructure.database.engine import engine
+    from realty_radar.domain.loan.entities import ApplicantProfile
     from realty_radar.web.main import app
+    from realty_radar.web.routes.settings import GUEST_COOKIE_NAME
 
     if engine.dialect.name != "mysql":
         raise RuntimeError("listing search benchmark requires MySQL")
@@ -367,12 +379,16 @@ def _load_runtime(options: argparse.Namespace):
                 )
                 or 0
             )
-    return (
-        app,
-        TestClient(app, raise_server_exceptions=False),
-        active_listing_count,
-        complex_listing_count,
+    client = TestClient(app, raise_server_exceptions=False)
+    benchmark_profile = ApplicantProfile(
+        available_cash=3_000_000_000,
+        max_monthly_housing_cost=100_000_000,
     )
+    client.cookies.set(
+        GUEST_COOKIE_NAME,
+        urllib.parse.quote(json.dumps(benchmark_profile.to_dict(), ensure_ascii=False)),
+    )
+    return app, client, active_listing_count, complex_listing_count
 
 
 def main(argv: list[str] | None = None) -> int:
