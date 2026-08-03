@@ -139,3 +139,20 @@ def test_listing_current_declares_detail_columns_and_only_the_planned_range_inde
         "article_id",
     )
     assert indexes["ix_listing_detail_pending"] == ("detail_checked_at", "article_id")
+
+
+def test_complex_current_declares_nullable_verified_coordinate_columns():
+    columns = ComplexCurrent.__table__.columns
+
+    assert {
+        "latitude",
+        "longitude",
+        "geocode_status",
+        "geocoded_address_hash",
+        "geocoded_at",
+        "geocode_attempted_at",
+        "geocode_retry_after",
+    }.issubset(columns.keys())
+    assert columns["latitude"].nullable is True
+    assert columns["longitude"].nullable is True
+    assert columns["geocode_status"].nullable is False

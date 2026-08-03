@@ -9,6 +9,7 @@ from scripts import benchmark_listing_search as benchmark
 _LISTING_CARDS = b'<article data-listing-card></article>' * 20
 _NORMAL_BODY = b'<div data-search-mode="normal">' + _LISTING_CARDS
 _ELIGIBLE_BODY = b'<div data-search-mode="eligible-loans">' + _LISTING_CARDS
+_PURCHASE_AFFORDABLE_BODY = b'<div data-search-mode="purchase-affordable">' + _LISTING_CARDS
 _COMPLEX_BODY = b'<template data-search-mode="complex-detail">' + _LISTING_CARDS
 _GROUPED_BODY = (
     b'<div data-search-mode="grouped">'
@@ -43,6 +44,8 @@ class _GetOnlyClient:
             return _Response(content=_GROUPED_BODY)
         if "only_eligible_loans=true" in path:
             return _Response(content=_ELIGIBLE_BODY)
+        if "only_purchase_affordable=true" in path:
+            return _Response(content=_PURCHASE_AFFORDABLE_BODY)
         if path.startswith("/listings/complex/"):
             return _Response(content=_COMPLEX_BODY)
         return _Response()
@@ -111,11 +114,12 @@ def test_all_modes_measure_supported_searches_with_full_result_markers():
     )
 
     assert exit_code == 0
-    assert len(client.requests) == 20
+    assert len(client.requests) == 25
     assert all(headers == {"HX-Request": "true"} for _, headers in client.requests)
     assert "[PASS] normal" in output.getvalue()
     assert "[PASS] grouped" in output.getvalue()
     assert "[PASS] eligible-loans" in output.getvalue()
+    assert "[PASS] purchase-affordable" in output.getvalue()
     assert "[PASS] complex-detail" in output.getvalue()
     assert "p50_ms=10.00 p95_ms=10.00" in output.getvalue()
     assert "items_min=20" in output.getvalue()
@@ -180,6 +184,14 @@ def test_complex_detail_runs_when_route_and_complex_id_are_available():
         )
     ]
     assert "[PASS] complex-detail" in output.getvalue()
+
+
+def test_purchase_affordability_benchmark_mode_has_a_distinct_route_marker():
+    mode = benchmark._mode_specs(complex_id=None)["purchase-affordable"]
+
+    assert "only_purchase_affordable=true" in mode.path
+    assert mode.mode_marker == b'data-search-mode="purchase-affordable"'
+    assert mode.expected_items == 20
 
 
 def test_threshold_override_returns_nonzero_when_p95_is_too_slow():

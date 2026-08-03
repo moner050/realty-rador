@@ -16,6 +16,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     UniqueConstraint,
     text,
@@ -33,6 +34,11 @@ UnsignedSmallInt = mysql.SMALLINT(unsigned=True).with_variant(Integer, "sqlite")
 UnsignedTinyInt = mysql.TINYINT(unsigned=True).with_variant(Integer, "sqlite")
 DateTime6 = mysql.DATETIME(fsp=6).with_variant(mysql.DATETIME(), "sqlite")
 Hash16 = mysql.BINARY(16).with_variant(LargeBinary(16), "sqlite")
+
+GEOCODE_STATUS_PENDING = 0
+GEOCODE_STATUS_OK = 1
+GEOCODE_STATUS_NOT_FOUND = 2
+GEOCODE_STATUS_FAILED = 3
 
 
 class ComplexCurrent(Base):
@@ -72,6 +78,13 @@ class ComplexCurrent(Base):
     address = Column(String(240), nullable=False)
     construction_year = Column(UnsignedSmallInt, nullable=False, server_default=text("0"))
     household_count = Column(UnsignedMediumInt, nullable=False, server_default=text("0"))
+    latitude = Column(Numeric(10, 7), nullable=True)
+    longitude = Column(Numeric(10, 7), nullable=True)
+    geocode_status = Column(UnsignedTinyInt, nullable=False, server_default=text(str(GEOCODE_STATUS_PENDING)))
+    geocoded_address_hash = Column(Hash16, nullable=True)
+    geocoded_at = Column(DateTime6, nullable=True)
+    geocode_attempted_at = Column(DateTime6, nullable=True)
+    geocode_retry_after = Column(DateTime6, nullable=True)
     state_hash = Column(Hash16, nullable=False)
     first_seen_at = Column(DateTime6, nullable=False)
     last_seen_at = Column(DateTime6, nullable=False)

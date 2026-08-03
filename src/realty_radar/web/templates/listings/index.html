@@ -3,6 +3,10 @@
 {% block title %}아파트 매물 검색{% endblock %}
 
 {% block content %}
+{% if naver_map_client_id %}
+<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={{ naver_map_client_id }}" defer></script>
+<script src="/static/listing-map.js" defer></script>
+{% endif %}
 <style>
 /* 듀얼 레인지 슬라이더 투명 트랙 pointer-events 투과 및 손잡이 썸 수직 중앙 정렬/크기 축소 */
 input[type="range"].range-handle-input {
@@ -536,6 +540,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                 <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
                     <input type="checkbox" name="only_eligible_loans" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}>
                     <span>가능 대출 있는 매물만</span>
+                </label>
+                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
+                    <input type="checkbox" name="only_purchase_affordable" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}>
+                    <span>실구매 가능 매물만</span>
                 </label>
             </div>
         </section>

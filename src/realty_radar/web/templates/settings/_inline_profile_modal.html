@@ -54,6 +54,28 @@
                         <span class="block text-sm font-medium text-slate-900 dark:text-white">순자산 (원)</span>
                         <input type="text" name="net_assets" value="{{ applicant.net_assets | comma_number }}" class="money-input mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
                     </label>
+
+                    <label class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-3">
+                        <span class="block text-sm font-medium text-slate-900 dark:text-white">구매 투입 가능 현금 (원)</span>
+                        <input type="text" name="available_cash" value="{{ applicant.available_cash | comma_number if applicant.available_cash is not none else '' }}" placeholder="예: 320,000,000" class="money-input mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                        <span class="mt-1 block text-xs text-slate-600 dark:text-slate-400">순자산과 별도로 매수에 바로 쓸 금액만 입력하세요.</span>
+                    </label>
+
+                    <label class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-3">
+                        <span class="block text-sm font-medium text-slate-900 dark:text-white">기존 월 대출상환액 (원)</span>
+                        <input type="text" name="existing_monthly_debt_payment" value="{{ applicant.existing_monthly_debt_payment | comma_number }}" class="money-input mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                    </label>
+
+                    <label class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-3">
+                        <span class="block text-sm font-medium text-slate-900 dark:text-white">감당 가능한 월 총주거비 (원)</span>
+                        <input type="text" name="max_monthly_housing_cost" value="{{ applicant.max_monthly_housing_cost | comma_number if applicant.max_monthly_housing_cost is not none else '' }}" placeholder="예: 3,000,000" class="money-input mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                    </label>
+
+                    <label class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-3">
+                        <span class="block text-sm font-medium text-slate-900 dark:text-white">부대비용 예비비율 (%)</span>
+                        <input type="number" name="closing_cost_reserve_percent" value="{{ '%.2f' | format(applicant.closing_cost_reserve_bps / 100) }}" min="0" max="10" step="0.01" class="mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                        <span class="mt-1 block text-xs text-slate-600 dark:text-slate-400">기본 2% 계획 예비비이며 법정 세금·중개보수 계산값이 아닙니다.</span>
+                    </label>
                     
                     <label class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-3">
                         <span class="block text-sm font-medium text-slate-900 dark:text-white">차용증 인원 수</span>

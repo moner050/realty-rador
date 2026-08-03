@@ -45,6 +45,10 @@ class ApplicantProfile:
     promissory_note_person_count: int = 0  # 하위 호환 인원 수
     promissory_note_amount: int = 0  # 하위 호환 단일 지정 금액 (원)
     promissory_notes: list[PromissoryNoteEntry] = field(default_factory=list)  # 동적 차용증 작성인 항목 리스트
+    available_cash: int | None = None
+    existing_monthly_debt_payment: int = 0
+    max_monthly_housing_cost: int | None = None
+    closing_cost_reserve_bps: int = 200
 
     @property
     def promissory_note_total(self) -> int:
@@ -78,6 +82,10 @@ class ApplicantProfile:
             "promissory_note_person_count": self.promissory_note_person_count,
             "promissory_note_amount": self.promissory_note_amount,
             "promissory_notes": [e.to_dict() for e in self.promissory_notes],
+            "available_cash": self.available_cash,
+            "existing_monthly_debt_payment": self.existing_monthly_debt_payment,
+            "max_monthly_housing_cost": self.max_monthly_housing_cost,
+            "closing_cost_reserve_bps": self.closing_cost_reserve_bps,
         }
 
     @classmethod
@@ -99,6 +107,10 @@ class ApplicantProfile:
             promissory_note_person_count=data.get("promissory_note_person_count", 0),
             promissory_note_amount=data.get("promissory_note_amount", 0),
             promissory_notes=notes,
+            available_cash=data.get("available_cash"),
+            existing_monthly_debt_payment=data.get("existing_monthly_debt_payment", 0),
+            max_monthly_housing_cost=data.get("max_monthly_housing_cost"),
+            closing_cost_reserve_bps=data.get("closing_cost_reserve_bps", 200),
         )
 
 

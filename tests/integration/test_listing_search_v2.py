@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.listing_search_service import ListingSearchService
-from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.entities import ApplicantProfile
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
 
@@ -974,3 +974,69 @@ def test_grouped_eligible_price_cursor_scans_past_raw_batch_until_global_order_i
     assert seen[0] == 3050
     assert len(seen) == 51
     assert len(set(seen)) == 51
+
+
+def test_purchase_affordable_filter_scans_keyset_pages_without_duplicates():
+    session = _session()
+    _seed(session)
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    applicant = ApplicantProfile(available_cash=300_000_000, max_monthly_housing_cost=2_000_000)
+    filters = ListingSearchFilter(only_purchase_affordable=True, page_size=1, sort_by="price_asc")
+
+    first = service.search_listings(filters, applicant)
+    second = service.search_listings(
+        ListingSearchFilter(
+            only_purchase_affordable=True,
+            page_size=1,
+            sort_by="price_asc",
+            cursor=first.next_cursor,
+        ),
+        applicant,
+    )
+    third = service.search_listings(
+        ListingSearchFilter(
+            only_purchase_affordable=True,
+            page_size=1,
+            sort_by="price_asc",
+            cursor=second.next_cursor,
+        ),
+        applicant,
+    )
+
+    assert [row.article_id for row in first.items + second.items + third.items] == [2001, 2002, 2003]
+    assert third.has_more is False
+
+
+def test_purchase_affordable_filter_rejects_incomplete_profile_before_select(monkeypatch):
+    service = ListingSearchService(_session(), cursor_secret="test-secret")
+    monkeypatch.setattr(service, "_scalars", lambda _statement: pytest.fail("must not query listings"))
+
+    with pytest.raises(ListingSearchValidationError, match="profile incomplete"):
+        service.search_listings(
+            ListingSearchFilter(only_purchase_affordable=True), ApplicantProfile(available_cash=300_000_000)
+        )
+
+
+def test_grouped_purchase_filter_returns_only_complexes_with_a_qualifying_sale():
+    session = _session()
+    _seed(session)
+
+    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+        ListingSearchFilter(group_by_complex=True, only_purchase_affordable=True, page_size=10),
+        ApplicantProfile(available_cash=230_000_000, max_monthly_housing_cost=2_000_000),
+    )
+
+    assert [group.complex_id for group in result.grouped_items] == [1001]
+
+
+def test_purchase_filter_combines_with_policy_loan_filter():
+    session = _session()
+    _seed(session)
+
+    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+        ListingSearchFilter(only_purchase_affordable=True, only_eligible_loans=True),
+        ApplicantProfile(available_cash=300_000_000, max_monthly_housing_cost=2_000_000),
+    )
+
+    assert result.items
+    assert all(any(loan.is_eligible for loan in row.loan_evaluations) for row in result.items)

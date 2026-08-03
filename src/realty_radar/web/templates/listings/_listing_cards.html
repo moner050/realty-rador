@@ -84,6 +84,19 @@
             <span class="rounded-full bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/30 px-2.5 py-0.5 font-extrabold text-emerald-800 dark:text-emerald-200">{{ item.eligible_loans | map(attribute='loan_type_name') | join(' · ') }} 가능</span>
             {% endif %}
         </div>
+        {% if item.purchase_affordability is defined %}
+        {% set affordability = item.purchase_affordability %}
+        <section data-purchase-affordability class="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-slate-800 dark:border-indigo-900/60 dark:bg-indigo-950/20 dark:text-slate-200">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="font-extrabold text-indigo-900 dark:text-indigo-100">예상 필요 현금 {{ affordability.required_cash | korean_money }}</p>
+                {% if affordability.is_affordable is true %}<span class="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">설정 한도 충족</span>{% elif affordability.is_affordable is false %}<span class="rounded-full bg-rose-100 px-2 py-0.5 font-bold text-rose-800 dark:bg-rose-500/20 dark:text-rose-200">설정 한도 초과</span>{% else %}<span class="rounded-full bg-slate-200 px-2 py-0.5 font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">한도 설정 필요</span>{% endif %}
+            </div>
+            <p class="mt-1 text-slate-700 dark:text-slate-300">선택 정책대출 {{ affordability.selected_loan.loan_type_name if affordability.selected_loan else '적용 가능한 정책대출 없음' }}{% if affordability.selected_loan %} · {{ affordability.selected_loan.max_loan_amount | korean_money }}{% endif %}</p>
+            <p class="mt-1 text-slate-700 dark:text-slate-300">부대비용 예비비 {{ affordability.closing_cost_reserve | korean_money }}</p>
+            <p class="mt-1 text-slate-700 dark:text-slate-300">월 원리금 {{ affordability.monthly_principal_and_interest | korean_money }} + 관리비 {{ affordability.monthly_management_cost | korean_money }} + 기존 대출 {{ affordability.existing_monthly_debt_payment | korean_money }} = 월 총주거비 {{ affordability.total_monthly_housing_cost | korean_money }}</p>
+            <p class="mt-1 text-slate-600 dark:text-slate-400">정책대출 기준 예상치이며 실제 대출·세금·중개보수는 계약 전 확인하세요.</p>
+        </section>
+        {% endif %}
     </div>
     <dialog id="listing-detail-{{ item.article_id }}" x-ref="dialog" class="theme-surface w-[min(48rem,calc(100vw-2rem))] rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60" @click.stop @close="open = false">
         <div class="max-h-[85vh] overflow-y-auto p-5 sm:p-6">

@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import urllib.parse
+from decimal import Decimal, InvalidOperation
 from typing import Annotated
 from fastapi import APIRouter, Form, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -21,6 +22,20 @@ register_jinja_filters(templates)
 
 PROFILES_DIR = settings.data_directory / "user_profiles"
 GUEST_COOKIE_NAME = "realty_guest_profile"
+
+
+def _optional_money(raw: str | None) -> int | None:
+    digits = re.sub(r"[^0-9]", "", raw or "")
+    return int(digits) if digits else None
+
+
+def _reserve_percent_to_bps(raw: str | None) -> int:
+    cleaned = re.sub(r"[^0-9.]", "", raw or "")
+    try:
+        percent = Decimal(cleaned)
+    except InvalidOperation:
+        return 200
+    return min(1_000, max(0, int((percent * 100).quantize(Decimal("1")))))
 
 
 def get_profile_file_path(username: str = "guest_user"):
@@ -129,6 +144,10 @@ def update_inline_settings(
     promissory_note_amount: Annotated[int, Form()] = 0,
     promissory_note_names: Annotated[list[str], Form()] = [],
     promissory_note_amounts: Annotated[list[str], Form()] = [],
+    available_cash: Annotated[str, Form()] = "",
+    existing_monthly_debt_payment: Annotated[str, Form()] = "",
+    max_monthly_housing_cost: Annotated[str, Form()] = "",
+    closing_cost_reserve_percent: Annotated[str, Form()] = "",
 ):
     note_entries: list[PromissoryNoteEntry] = []
     if use_promissory_note:
@@ -149,6 +168,10 @@ def update_inline_settings(
         promissory_note_person_count=promissory_note_person_count,
         promissory_note_amount=promissory_note_amount,
         promissory_notes=note_entries,
+        available_cash=_optional_money(available_cash),
+        existing_monthly_debt_payment=_optional_money(existing_monthly_debt_payment) or 0,
+        max_monthly_housing_cost=_optional_money(max_monthly_housing_cost),
+        closing_cost_reserve_bps=_reserve_percent_to_bps(closing_cost_reserve_percent),
     )
     response = Response(status_code=204, headers={"HX-Refresh": "true"})
     username = verify_session_token(request.cookies.get(SESSION_COOKIE_NAME))

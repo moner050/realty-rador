@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     public_data_api_key: str | None = Field(default=None, validation_alias="PUBLIC_DATA_API_KEY")
+    naver_map_client_id: str | None = Field(default=None, validation_alias="NAVER_MAP_CLIENT_ID")
+    naver_map_client_secret: str | None = Field(default=None, validation_alias="NAVER_MAP_CLIENT_SECRET")
 
     admin_username: str = Field(default="admin", validation_alias="ADMIN_USERNAME")
     admin_password: str = Field(default="admin1234", validation_alias="ADMIN_PASSWORD")

@@ -13,7 +13,7 @@ from realty_radar.infrastructure.database.models import Base, ComplexCurrent, Li
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.web.main import app
-from realty_radar.web.routes.home import _region_options, parse_search_filter
+from realty_radar.web.routes.home import _filter_query_items, _region_options, parse_search_filter
 
 
 def test_listing_cards_link_to_fin_land_article_pages():
@@ -120,6 +120,19 @@ def test_search_filter_parses_extended_listing_controls_and_saved_settings_value
 
     restored = type(filters).from_dict(filters.to_dict())
     assert restored == filters
+
+
+def test_search_filter_parses_purchase_affordability_control_and_round_trips():
+    filters = parse_search_filter(only_purchase_affordable=True)
+
+    assert filters.only_purchase_affordable is True
+    assert type(filters).from_dict(filters.to_dict()) == filters
+
+
+def test_purchase_affordability_control_survives_pagination_query_building():
+    query_items = _filter_query_items(parse_search_filter(only_purchase_affordable=True))
+
+    assert ("only_purchase_affordable", "true") in query_items
 
 
 def test_recent_preset_wins_when_a_no_javascript_form_submits_both_values():
