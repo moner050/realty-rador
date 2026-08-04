@@ -4,6 +4,14 @@ from pathlib import Path
 TEMPLATE_ROOT = Path("src/realty_radar/web/templates")
 
 
+def test_embedded_filter_surface_keeps_light_theme_contrast():
+    listings = (TEMPLATE_ROOT / "listings" / "index.html").read_text(encoding="utf-8")
+
+    assert 'data-slider-variant="embedded"' in listings
+    assert 'text-slate-900 dark:text-slate-100' in listings
+    assert 'border-slate-200 dark:border-slate-800' in listings
+
+
 def test_base_defines_scoped_comfortable_light_tokens():
     base = (TEMPLATE_ROOT / "base.html").read_text(encoding="utf-8")
 

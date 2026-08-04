@@ -16,6 +16,44 @@ from realty_radar.web.main import app
 from realty_radar.web.routes.home import _filter_query_items, _region_options, parse_search_filter
 
 
+def _render_home_with_memory_db(query: str):
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        return TestClient(app).get(query)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_detailed_filter_groups_budget_and_progressive_housing_controls():
+    response = _render_home_with_memory_db(
+        "/?trade_types=SALE&min_price_eok=2&max_price_eok=6&min_households=500"
+    )
+
+    assert response.status_code == 200
+    assert 'data-filter-scope="housing-budget"' in response.text
+    assert 'data-filter-scope="housing-core"' in response.text
+    assert 'data-filter-scope="housing-detail"' in response.text
+    assert 'data-slider-name="min_price_eok"' in response.text
+    assert 'data-slider-name="max_price_eok"' in response.text
+    assert 'data-slider-name="min_exclusive_area"' in response.text
+    assert 'data-slider-name="max_exclusive_area"' in response.text
+    assert 'name="min_construction_year"' in response.text
+    assert 'name="max_subway_walk_minutes"' in response.text
+    assert 'data-slider-variant="embedded"' in response.text
+
+
 def test_listing_cards_link_to_fin_land_article_pages():
     template = Path("src/realty_radar/web/templates/listings/_listing_cards.html").read_text(encoding="utf-8")
 

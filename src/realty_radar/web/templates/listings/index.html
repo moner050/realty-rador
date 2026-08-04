@@ -115,8 +115,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 }
 </style>
 
-{% macro single_slider(id, name, value, minimum, maximum, step, label, unit, scale=1, helper='') -%}
-<div data-single-slider data-scale="{{ scale }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100">
+{% macro single_slider(id, name, value, minimum, maximum, step, label, unit, scale=1, helper='', variant='card') -%}
+<div data-single-slider data-scale="{{ scale }}" data-unit="{{ unit }}"
+     {% if variant == 'embedded' %}data-slider-variant="embedded"{% endif %}
+     class="{% if variant == 'embedded' %}border-t border-slate-200 dark:border-slate-800 pt-4 text-slate-900 dark:text-slate-100{% else %}group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100{% endif %}">
     <input id="{{ id }}-value" type="hidden" name="{{ name }}" data-slider-name="{{ name }}" value="{{ value if value is not none else '' }}">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
         <label for="{{ id }}" class="text-xs font-bold text-slate-900 dark:text-slate-200">{{ label }}</label>
@@ -149,8 +151,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 </div>
 {%- endmacro %}
 
-{% macro range_slider(key, min_id, min_name, min_value, max_id, max_name, max_value, minimum, maximum, step, label, unit, helper='') -%}
-<div data-range-slider="{{ key }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100">
+{% macro range_slider(key, min_id, min_name, min_value, max_id, max_name, max_value, minimum, maximum, step, label, unit, helper='', variant='card') -%}
+<div data-range-slider="{{ key }}" data-unit="{{ unit }}"
+     {% if variant == 'embedded' %}data-slider-variant="embedded"{% endif %}
+     class="{% if variant == 'embedded' %}border-t border-slate-200 dark:border-slate-800 pt-4 text-slate-900 dark:text-slate-100{% else %}group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100{% endif %}">
     <input id="{{ min_id }}-value" type="hidden" name="{{ min_name }}" data-slider-name="{{ min_name }}" value="{{ min_value if min_value is not none else '' }}">
     <input id="{{ max_id }}-value" type="hidden" name="{{ max_name }}" data-slider-name="{{ max_name }}" value="{{ max_value if max_value is not none else '' }}">
     
@@ -352,34 +356,34 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 
                 <!-- 탭 2: 주거 & 건물 스펙 (가격, 면적, 준공년도, 세대수) -->
                 <div id="filter-tab-content-housing" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
-                    <details id="transaction-advanced-filters" class="theme-subtle-surface group rounded-xl border p-4 transition-all" open>
-                        <summary class="theme-primary-text flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">
-                            <span>가격·면적 조건</span>
-                        </summary>
-                        <div data-trade-filter class="mt-3 space-y-4">
-                            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                                {{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억') }}
-                                <div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.') }}</div>
-                            </div>
-                            {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '59㎡는 약 18평, 84㎡는 약 25평입니다.') }}
+                    <section id="transaction-advanced-filters" data-filter-scope="housing-budget" data-trade-filter class="theme-subtle-surface rounded-xl border p-4 space-y-4">
+                        <div>
+                            <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">예산·면적</h2>
+                            <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">직접 입력으로 범위를 정하고, 필요할 때 슬라이더로 조정하세요.</p>
                         </div>
-                    </details>
+                        {{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억', variant='embedded') }}
+                        {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '59㎡는 약 18평, 84㎡는 약 25평입니다.', variant='embedded') }}
+                        <div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.', variant='embedded') }}</div>
+                    </section>
 
-                    <section id="advanced-housing-conditions" class="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
-                        <div class="mb-2">
-                            <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">주거 조건</h2>
-                        </div>
+                    <section data-filter-scope="housing-core" class="space-y-3">
+                        <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">기본 주거 조건</h2>
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년') }}
-                            {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대') }}
-                            {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일') }}
-                            {{ single_slider('min-room-count', 'min_room_count', filters.min_room_count, 0, 10, 1, '방 최소', '개') }}
-                            {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개') }}
-                            {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대') }}
-                            {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000) }}
-                            {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분') }}
+                            {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년', variant='embedded') }}
+                            {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대', variant='embedded') }}
+                            {{ single_slider('min-room-count', 'min_room_count', filters.min_room_count, 0, 10, 1, '방 최소', '개', variant='embedded') }}
+                            {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개', variant='embedded') }}
                         </div>
                     </section>
+                    <details id="advanced-housing-conditions" data-filter-scope="housing-detail" class="theme-subtle-surface rounded-xl border p-4">
+                        <summary class="theme-primary-text cursor-pointer text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">상세 주거 조건</summary>
+                        <div class="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2">
+                            {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대', variant='embedded') }}
+                            {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000, variant='embedded') }}
+                            {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분', variant='embedded') }}
+                            {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일', variant='embedded') }}
+                        </div>
+                    </details>
                 </div>
 
                 <!-- 탭 3: 강남역 통근시간 퀵 필터 -->
