@@ -4,7 +4,11 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from realty_radar.scheduler.schedules import schedule_geocode_backfill, schedule_regular_search_job
+from realty_radar.scheduler.schedules import (
+    schedule_geocode_backfill,
+    schedule_listing_detail_backfill,
+    schedule_regular_search_job,
+)
 
 
 class TaskScheduler:
@@ -33,6 +37,17 @@ class TaskScheduler:
             trigger=CronTrigger.from_crontab("0 6 * * *"),
             id="job_regular_search_site_a",
             name="네이버부동산 매일 06시 전체 지역 정기 수집",
+            replace_existing=True,
+            misfire_grace_time=3600,
+            coalesce=True,
+        )
+
+        self.scheduler.add_job(
+            schedule_listing_detail_backfill,
+            trigger=CronTrigger.from_crontab("0 23 * * *", timezone=ZoneInfo("Asia/Seoul")),
+            id="job_listing_detail_backfill",
+            name="listing detail preload",
+            max_instances=1,
             replace_existing=True,
             misfire_grace_time=3600,
             coalesce=True,

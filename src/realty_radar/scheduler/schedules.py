@@ -1,9 +1,42 @@
-from realty_radar.application.crawl_job_service import CrawlJobService
+import asyncio
+
+from sqlalchemy import select
+
+from realty_radar.application.crawl_job_service import JOB_SUCCESS, CrawlJobService
 from realty_radar.application.listing_batch_writer import utc_now
+from realty_radar.application.mortgage_enrichment_service import run_site_a_mortgage_enrichment
 from realty_radar.enrichment.naver_maps.backfill import run_geocode_sweep
 from realty_radar.enrichment.naver_maps.geocoder import NaverGeocoder
-from realty_radar.infrastructure.database.models import SchedulerLog
+from realty_radar.infrastructure.database.models import CrawlJob, SchedulerLog
 from realty_radar.infrastructure.database.session import SessionFactory
+
+
+def _latest_successful_crawl_job_id(db) -> int | None:
+    return db.scalar(
+        select(CrawlJob.job_id)
+        .where(CrawlJob.status == JOB_SUCCESS)
+        .order_by(CrawlJob.job_id.desc())
+        .limit(1)
+    )
+
+
+def schedule_listing_detail_backfill() -> None:
+    with SessionFactory() as db:
+        job_id = _latest_successful_crawl_job_id(db)
+
+    if job_id is None:
+        return
+
+    checked = asyncio.run(
+        run_site_a_mortgage_enrichment(
+            SessionFactory,
+            job_id=job_id,
+            batch_size=100,
+            concurrency=2,
+            max_batches=50,
+        )
+    )
+    print(f"[Scheduler] listing detail checked={checked}")
 
 
 def schedule_geocode_backfill() -> None:

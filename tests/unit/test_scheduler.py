@@ -103,6 +103,36 @@ def test_schedule_geocode_backfill_records_bounded_failure_lifecycle(monkeypatch
         assert logs[0].finished_at is not None
 
 
+def test_schedule_listing_detail_backfill_uses_latest_successful_job(monkeypatch):
+    observed = {}
+    monkeypatch.setattr(schedules, "_latest_successful_crawl_job_id", lambda db: 77)
+
+    async def enrich(*_args, **kwargs):
+        observed.update(kwargs)
+        return 5000
+
+    monkeypatch.setattr(
+        schedules,
+        "run_site_a_mortgage_enrichment",
+        enrich,
+    )
+
+    schedules.schedule_listing_detail_backfill()
+
+    assert observed == {"job_id": 77, "batch_size": 100, "concurrency": 2, "max_batches": 50}
+
+
+def test_schedule_listing_detail_backfill_skips_when_no_successful_job(monkeypatch):
+    monkeypatch.setattr(schedules, "_latest_successful_crawl_job_id", lambda db: None)
+    monkeypatch.setattr(
+        schedules,
+        "run_site_a_mortgage_enrichment",
+        lambda *_args, **_kwargs: pytest.fail("must not fetch"),
+    )
+
+    schedules.schedule_listing_detail_backfill()
+
+
 def test_task_scheduler_passes_asia_seoul_timezone_to_geocode_trigger(monkeypatch):
     captured = []
     scheduler = RecordingScheduler()
@@ -129,7 +159,7 @@ def test_task_scheduler_registers_geocode_before_0600_crawl(monkeypatch):
     task_scheduler = scheduler_module.TaskScheduler()
     task_scheduler.start()
 
-    geocode_job, crawl_job = scheduler.jobs
+    geocode_job, crawl_job, detail_job = scheduler.jobs
     assert geocode_job["id"] == "job_geocode_complexes"
     assert geocode_job["func"] is scheduler_module.schedule_geocode_backfill
     assert geocode_job["trigger"].fields[5].expressions[0].first == 5
@@ -138,6 +168,14 @@ def test_task_scheduler_registers_geocode_before_0600_crawl(monkeypatch):
     assert crawl_job["id"] == "job_regular_search_site_a"
     assert crawl_job["trigger"].fields[5].expressions[0].first == 6
     assert crawl_job["trigger"].fields[6].expressions[0].first == 0
+    assert detail_job["id"] == "job_listing_detail_backfill"
+    assert detail_job["func"] is scheduler_module.schedule_listing_detail_backfill
+    assert detail_job["trigger"].fields[5].expressions[0].first == 23
+    assert detail_job["trigger"].fields[6].expressions[0].first == 0
+    assert detail_job["max_instances"] == 1
+    assert detail_job["replace_existing"] is True
+    assert detail_job["misfire_grace_time"] == 3600
+    assert detail_job["coalesce"] is True
     assert scheduler.started is True
 
 
