@@ -63,8 +63,22 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl, f
   let currentViewport = { west: 126.8, south: 37.5, east: 126.9, north: 37.6 };
   const state = {
     maps: [], overlays: [], listeners: [], removedListeners: 0,
-    mapFetches: [], cardFetches: [], cardSwaps: 0, mapSwaps: 0,
+    mapFetches: [], cardFetches: [], mapRoot: null,
   };
+  function collectionFromHTML(html) {
+    const markup = String(html).trim();
+    return {
+      id: 'listing-collection',
+      outerHTML: markup,
+      textContent: markup.replace(/<[^>]+>/g, ''),
+      replaceWith(replacement) {
+        if (state.collection === this) {
+          state.collection = replacement;
+        }
+      },
+    };
+  }
+  state.collection = collectionFromHTML('<section id="listing-collection">initial</section>');
   const fakeWindow = {
     location: { origin: 'http://localhost' },
     fetch: (url, options) => {
@@ -75,12 +89,7 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl, f
       if (isMapRequest) return Promise.resolve({ ok: true, json: async () => mapData });
       return Promise.resolve({ ok: true, text: async () => '<section id="listing-collection"></section>' });
     },
-    htmx: {
-      swap(target) {
-        if (target && target.id === 'listing-collection') state.cardSwaps += 1;
-        else state.mapSwaps += 1;
-      },
-    },
+    htmx: {},
     naver: {
       maps: {
         LatLng: class LatLng {
@@ -143,10 +152,28 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl, f
   };
   const document = {
     addEventListener() {},
+    createElement(tagName) {
+      assert.equal(tagName, 'template');
+      let collections = [];
+      return {
+        content: {
+          querySelectorAll(selector) {
+            return selector === '#listing-collection' ? collections : [];
+          },
+        },
+        set innerHTML(html) {
+          const matches = String(html).match(/id=(["'])listing-collection\1/g) || [];
+          collections = matches.map(() => collectionFromHTML(html));
+        },
+      };
+    },
     querySelector(selector) {
-      return selector === '#listing-collection' ? { id: 'listing-collection' } : null;
+      if (selector === '#listing-collection') return state.collection;
+      if (selector === '[data-listing-map-root]') return state.mapRoot;
+      return null;
     },
   };
+  state.document = document;
   vm.runInNewContext(controllerSource, { window: fakeWindow, document, URL, setTimeout, clearTimeout });
   state.flushFetches = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
   state.emitMap = (event) => state.listeners
@@ -221,6 +248,7 @@ test('map and card responses for the previous viewport are ignored during the de
     }),
   });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+  const collectionBefore = state.collection;
 
   controller.mount(root);
   pendingMaps[0]({ ok: true, json: async () => singleClusterPayload });
@@ -234,7 +262,54 @@ test('map and card responses for the previous viewport are ignored during the de
   await state.flushFetches();
 
   assert.equal(state.overlays.length, 1);
-  assert.equal(state.cardSwaps, 0);
+  assert.equal(state.collection, collectionBefore);
+});
+
+test('a valid cards response replaces the collection without an HTMX swap API and preserves the map root', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    fetchImpl: (url) => String(url).includes('/api/listings/map-data')
+      ? Promise.resolve({ ok: true, json: async () => singleClusterPayload })
+      : Promise.resolve({ ok: true, text: async () => '<section id="listing-collection">latest</section>' }),
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+  state.mapRoot = root;
+  const mapRootBefore = state.document.querySelector('[data-listing-map-root]');
+  const collectionBefore = state.collection;
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitMap('dragstart');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.document.querySelector('[data-listing-map-root]'), mapRootBefore);
+  assert.notEqual(state.collection, collectionBefore);
+  assert.equal(state.collection.outerHTML, '<section id="listing-collection">latest</section>');
+  assert.equal(state.collection.textContent, 'latest');
+});
+
+test('malformed cards HTML keeps the current collection visible and reports the map-card error', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    fetchImpl: (url) => String(url).includes('/api/listings/map-data')
+      ? Promise.resolve({ ok: true, json: async () => singleClusterPayload })
+      : Promise.resolve({ ok: true, text: async () => '<div>missing collection</div>' }),
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+  const collectionBefore = state.collection;
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitMap('dragstart');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.collection, collectionBefore);
+  assert.equal(state.collection.textContent, 'initial');
+  assert.notEqual(root.status.textContent, '');
 });
 
 test('a user drag during the initial period refreshes exactly the changed settled viewport', async () => {
@@ -323,8 +398,6 @@ test('a cluster click during the initial period fits its bounds and refreshes th
     assert.equal(request.searchParams.get('map_north'), '37.58');
     assert.equal(request.searchParams.get('map_zoom'), '12');
   }
-  assert.equal(state.cardSwaps, 1);
-  assert.equal(state.mapSwaps, 0);
   assert.equal(state.maps.length, 1);
 });
 
@@ -350,13 +423,15 @@ test('stale map and card responses cannot replace the latest settled viewport', 
   pendingMaps[2]({ ok: true, json: async () => singleClusterPayload });
   pendingCards[1]({ ok: true, text: async () => '<section id="listing-collection">latest</section>' });
   await state.flushFetches();
+  const latestCollection = state.collection;
   pendingMaps[0]({ ok: true, json: async () => ({ ...singleClusterPayload, clusters: [] }) });
   pendingMaps[1]({ ok: true, json: async () => ({ ...singleClusterPayload, clusters: [] }) });
   pendingCards[0]({ ok: true, text: async () => '<section id="listing-collection">stale</section>' });
   await state.flushFetches();
 
   assert.equal(state.overlays.length, 1);
-  assert.equal(state.cardSwaps, 1);
+  assert.equal(state.collection, latestCollection);
+  assert.equal(state.collection.textContent, 'latest');
 });
 
 test('unmount cancels a pending viewport refresh and removes dynamic overlays and every map listener', async () => {

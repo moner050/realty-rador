@@ -198,6 +198,16 @@
             });
     }
 
+    function replaceListingCollection(html) {
+        const template = document.createElement("template");
+        template.innerHTML = html;
+        const replacements = template.content.querySelectorAll("#listing-collection");
+        const target = document.querySelector("#listing-collection");
+        if (replacements.length !== 1 || !target) return false;
+        target.replaceWith(replacements[0]);
+        return true;
+    }
+
     function requestCards(root, map, instance) {
         const viewport = viewportFromMap(map);
         const baseUrl = root.dataset && root.dataset.mapCardsUrl;
@@ -216,10 +226,7 @@
             })
             .then((html) => {
                 if (instance.cardsRequestId !== requestId) return;
-                const target = document.querySelector("#listing-collection");
-                if (target && window.htmx && typeof window.htmx.swap === "function") {
-                    window.htmx.swap(target, html, { swapStyle: "outerHTML" });
-                }
+                if (!replaceListingCollection(html)) throw new Error("map cards invalid");
             })
             .catch(() => {
                 if (instance.cardsRequestId === requestId) setStatus(root, "지도 영역의 매물을 불러오지 못했습니다. 다시 시도해 주세요.");

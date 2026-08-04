@@ -191,7 +191,8 @@ def test_map_cards_endpoint_returns_collection_without_a_second_map_root(monkeyp
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert 'id="listing-collection"' in response.text
+    assert response.text.count('id="listing-collection"') == 1
+    assert re.match(r'\s*<section\s+id="listing-collection"(?:\s|>)', response.text)
     assert "data-listing-map-root" not in response.text
 
 
