@@ -21,7 +21,7 @@
 
 ## User ruling — 2026-08-04
 
-The Goal and Global Constraints govern the earlier three-field Task 3 detail. Include `move_in_date` in the same truthful card-state treatment as parking, management fee, and nearest subway-walk data: render `확인 대기` before a detail fetch, `원본 미제공` after a completed fetch without a value, and preserve the existing populated move-in format. Apply this in both the visible tag row and expanded detail grid, add rendered-card coverage for all three move-in states, and include non-null move-in coverage in Task 4 reporting.
+The Goal and Global Constraints govern the earlier three-field Task 3 detail. Include `move_in_available_on` in the same truthful card-state treatment as parking, management fee, and nearest subway-walk data: render `확인 대기` before a detail fetch, `원본 미제공` after a completed fetch without a value, and preserve the existing populated move-in format. Apply this in both the visible tag row and expanded detail grid, add rendered-card coverage for all three move-in states, and include non-null move-in coverage in Task 4 reporting.
 
 ---
 
@@ -193,7 +193,7 @@ git commit -m "feat: schedule bounded listing detail preload"
 - Modify: `tests/integration/test_listing_detail_ui.py`
 
 **Interfaces:**
-- Consumes: `item.detail_checked_at`, `item.parking_per_household_x100`, `item.monthly_management_cost`, `item.move_in_date`, and `item.nearest_subway_walk_minutes`.
+- Consumes: `item.detail_checked_at`, `item.parking_per_household_x100`, `item.monthly_management_cost`, `item.move_in_available_on`, and `item.nearest_subway_walk_minutes`.
 - Produces: human-readable `확인 대기`, `원본 미제공`, or existing formatted numeric values.
 
 - [ ] **Step 1: Write the failing rendered-card test**
@@ -233,7 +233,7 @@ At the top of `_listing_cards.html`, add:
 {%- endmacro %}
 ```
 
-For parking, pass `item.parking_per_household_x100 / 100` only when it is not none and suffix `대/세대`; for management fee pass `item.monthly_management_cost | comma_number` and suffix `원`; for move-in pass `item.move_in_date` using the existing populated format; for subway walk pass `item.nearest_subway_walk_minutes` and suffix `분`. Apply the macro both to the visible tag row and the expanded detail grid. Keep all unrelated card labels and layout unchanged.
+For parking, pass `item.parking_per_household_x100 / 100` only when it is not none and suffix `대/세대`; for management fee pass `item.monthly_management_cost | comma_number` and suffix `원`; for move-in pass `item.move_in_available_on` using the existing populated format; for subway walk pass `item.nearest_subway_walk_minutes` and suffix `분`. Apply the macro both to the visible tag row and the expanded detail grid. Keep all unrelated card labels and layout unchanged.
 
 - [ ] **Step 4: Run card rendering regression tests**
 
@@ -280,7 +280,7 @@ Expected: output `checked=<0..10>`. If authentication fails, stop without retryi
 
 - [ ] **Step 3: Measure before/after coverage without treating missing source data as failure**
 
-Run a read-only query reporting, among active listings, `detail_checked_at IS NOT NULL` plus non-null counts for `parking_per_household_x100`, `monthly_management_cost`, `move_in_date`, and `nearest_subway_walk_minutes`. Record both coverage classes: checked rows demonstrate collection progress; non-null fields demonstrate what the source actually provided.
+Run a read-only query reporting, among active listings, `detail_checked_at IS NOT NULL` plus non-null counts for `parking_per_household_x100`, `monthly_management_cost`, `move_in_available_on`, and `nearest_subway_walk_minutes`. Record both coverage classes: checked rows demonstrate collection progress; non-null fields demonstrate what the source actually provided.
 
 - [ ] **Step 4: Run full regression and browser verification**
 
