@@ -21,10 +21,10 @@ def test_listing_card_distinguishes_detail_states_before_and_after_collection():
     factory = sessionmaker(bind=engine)
     seen_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
     with factory() as session:
-        for article_id, checked_at, parking, management, subway in (
-            (71, None, None, None, None),
-            (72, seen_at, None, None, None),
-            (73, seen_at, 0, 0, 0),
+        for article_id, checked_at, parking, management, move_in, subway in (
+            (71, None, None, None, None, None),
+            (72, seen_at, None, None, None, None),
+            (73, seen_at, 0, 0, date(2026, 8, 15), 0),
         ):
             session.add(
                 ListingCurrent(
@@ -38,6 +38,7 @@ def test_listing_card_distinguishes_detail_states_before_and_after_collection():
                     detail_checked_at=checked_at,
                     parking_per_household_x100=parking,
                     monthly_management_cost=management,
+                    move_in_available_on=move_in,
                     nearest_subway_walk_minutes=subway,
                     state_hash=bytes([article_id]) * 16,
                     last_seen_job_id=1,
@@ -63,13 +64,17 @@ def test_listing_card_distinguishes_detail_states_before_and_after_collection():
     assert unchecked_html.count("\uc8fc\ucc28 \ud655\uc778 \ub300\uae30") == 1
     assert unchecked_html.count("\uad00\ub9ac\ube44 \ud655\uc778 \ub300\uae30") == 1
     assert unchecked_html.count("\uc5ed \ub3c4\ubcf4 \ud655\uc778 \ub300\uae30") == 1
+    assert unchecked_html.count("\uc785\uc8fc \ud655\uc778 \ub300\uae30") == 1
     assert checked_html.count("\uc8fc\ucc28 \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 1
     assert checked_html.count("\uad00\ub9ac\ube44 \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 1
     assert checked_html.count("\uc5ed \ub3c4\ubcf4 \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 1
+    assert checked_html.count("\uc785\uc8fc \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 1
     for label, state in (("\uc8fc\ucc28", "\ud655\uc778 \ub300\uae30"), ("\uad00\ub9ac\ube44", "\ud655\uc778 \ub300\uae30"), ("\uc5ed \ub3c4\ubcf4", "\ud655\uc778 \ub300\uae30")):
         assert re.search(rf"<dt[^>]*>{label}</dt><dd[^>]*>{state}</dd>", unchecked_html)
+    assert re.search(r"<dt[^>]*>\uc785\uc8fc \uac00\ub2a5\uc77c</dt><dd[^>]*>\ud655\uc778 \ub300\uae30</dd>", unchecked_html)
     for label, state in (("\uc8fc\ucc28", "\uc6d0\ubcf8 \ubbf8\uc81c\uacf5"), ("\uad00\ub9ac\ube44", "\uc6d0\ubcf8 \ubbf8\uc81c\uacf5"), ("\uc5ed \ub3c4\ubcf4", "\uc6d0\ubcf8 \ubbf8\uc81c\uacf5")):
         assert re.search(rf"<dt[^>]*>{label}</dt><dd[^>]*>{state}</dd>", checked_html)
+    assert re.search(r"<dt[^>]*>\uc785\uc8fc \uac00\ub2a5\uc77c</dt><dd[^>]*>\uc6d0\ubcf8 \ubbf8\uc81c\uacf5</dd>", checked_html)
     zero_card = re.search(r'<article[^>]*data-article-id="73"[\s\S]*?</article>', response.text)
     assert zero_card is not None
     assert re.search(r"<span[^>]*>\uc8fc\ucc28 0.0\ub300/\uc138\ub300</span>", zero_card.group(0))
@@ -78,6 +83,8 @@ def test_listing_card_distinguishes_detail_states_before_and_after_collection():
     assert re.search(r"<dt[^>]*>\uad00\ub9ac\ube44</dt><dd[^>]*>0\uc6d0</dd>", zero_card.group(0))
     assert re.search(r"<span[^>]*>\uc5ed \ub3c4\ubcf4 0\ubd84</span>", zero_card.group(0))
     assert re.search(r"<dt[^>]*>\uc5ed \ub3c4\ubcf4</dt><dd[^>]*>0\ubd84</dd>", zero_card.group(0))
+    assert re.search(r"<span[^>]*>\uc785\uc8fc 2026-08-15</span>", zero_card.group(0))
+    assert re.search(r"<dt[^>]*>\uc785\uc8fc \uac00\ub2a5\uc77c</dt><dd[^>]*>2026-08-15</dd>", zero_card.group(0))
 
 
 def test_grouped_search_lazy_loads_twenty_complex_listings_without_initial_cards():
