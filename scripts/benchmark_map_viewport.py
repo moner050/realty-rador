@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import math
 import sys
@@ -54,6 +55,17 @@ def _configure_read_only_timeout(session, timeout_seconds: int) -> None:
     session.execute(text("SET SESSION MAX_EXECUTION_TIME = :timeout_ms"), {"timeout_ms": timeout_seconds * 1000})
 
 
+@contextmanager
+def _driver_read_timeout(session, timeout_seconds: int):
+    driver_connection = session.connection().connection.driver_connection
+    original_timeout = driver_connection._read_timeout
+    driver_connection._read_timeout = timeout_seconds
+    try:
+        yield
+    finally:
+        driver_connection._read_timeout = original_timeout
+
+
 def _explain_captured_selects(session, captured: list[tuple[str, Any]]) -> list[object]:
     if not captured:
         raise RuntimeError("map viewport call did not issue a SELECT statement")
@@ -74,17 +86,18 @@ def _measure_viewport(timeout_seconds: int, *, capture_selects: bool) -> tuple[f
             captured.append((statement, parameters))
 
     try:
-        _configure_read_only_timeout(session, timeout_seconds)
-        if capture_selects:
-            event.listen(session.bind, "before_cursor_execute", capture)
-        try:
-            started_at = time.perf_counter()
-            viewport = ListingMapService(session).build_viewport(ListingSearchFilter(), None, 7)
-            elapsed_ms = (time.perf_counter() - started_at) * 1000
-        finally:
+        with _driver_read_timeout(session, timeout_seconds):
+            _configure_read_only_timeout(session, timeout_seconds)
             if capture_selects:
-                event.remove(session.bind, "before_cursor_execute", capture)
-        explains = _explain_captured_selects(session, captured) if capture_selects else []
+                event.listen(session.bind, "before_cursor_execute", capture)
+            try:
+                started_at = time.perf_counter()
+                viewport = ListingMapService(session).build_viewport(ListingSearchFilter(), None, 7)
+                elapsed_ms = (time.perf_counter() - started_at) * 1000
+            finally:
+                if capture_selects:
+                    event.remove(session.bind, "before_cursor_execute", capture)
+            explains = _explain_captured_selects(session, captured) if capture_selects else []
         return elapsed_ms, {
             "matching_complex_count": viewport.matching_complex_count,
             "mapped_complex_count": viewport.mapped_complex_count,

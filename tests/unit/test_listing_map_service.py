@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from importlib.util import module_from_spec, spec_from_file_location
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,6 +37,99 @@ def test_map_benchmark_p95_uses_nearest_rank():
     module = _load_benchmark_module()
 
     assert module.nearest_rank_p95([1.0, 2.0, 3.0, 4.0, 5.0]) == 5.0
+
+
+def test_map_benchmark_scopes_driver_read_timeout_to_warmup_measurement_and_explain(monkeypatch):
+    module = _load_benchmark_module()
+    sessions = []
+    configured_timeouts = []
+    viewport_timeouts = []
+    explain_timeouts = []
+    captured = []
+
+    class RawConnection:
+        _read_timeout = 60
+
+    class Connection:
+        def __init__(self, raw_connection):
+            self.connection = SimpleNamespace(driver_connection=raw_connection)
+
+        def exec_driver_sql(self, statement, parameters):
+            explain_timeouts.append(self.connection.driver_connection._read_timeout)
+            return SimpleNamespace(scalar_one=lambda: "{}")
+
+    class Session:
+        bind = SimpleNamespace(dialect=SimpleNamespace(name="mysql"))
+
+        def __init__(self):
+            self.raw_connection = RawConnection()
+            self._connection = Connection(self.raw_connection)
+            self.closed = False
+
+        def execute(self, statement, parameters=None):
+            configured_timeouts.append(self.raw_connection._read_timeout)
+
+        def connection(self):
+            return self._connection
+
+        def close(self):
+            self.closed = True
+
+    class Service:
+        def __init__(self, session):
+            self.session = session
+
+        def build_viewport(self, filters, applicant, zoom):
+            viewport_timeouts.append(self.session.raw_connection._read_timeout)
+            if captured:
+                captured[0](None, None, "SELECT value FROM map_view", (7,), None, False)
+            return SimpleNamespace(
+                matching_complex_count=1,
+                mapped_complex_count=1,
+                unmapped_complex_count=0,
+                markers=(object(),),
+                clusters=(),
+            )
+
+    def session_factory():
+        session = Session()
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr(module, "SessionLocal", session_factory)
+    monkeypatch.setattr(module, "ListingMapService", Service)
+    monkeypatch.setattr(module.event, "listen", lambda target, name, listener: captured.append(listener))
+    monkeypatch.setattr(module.event, "remove", lambda target, name, listener: captured.remove(listener))
+
+    record = module.run_benchmark(runs=1, timeout_seconds=3)
+
+    assert len(sessions) == 2
+    assert configured_timeouts == [3, 3, 3, 3]
+    assert viewport_timeouts == [3, 3]
+    assert explain_timeouts == [3]
+    assert all(session.raw_connection._read_timeout == 60 and session.closed for session in sessions)
+    assert record["runs"] == 1
+    assert record["explain"] == [{}]
+
+
+def test_map_benchmark_error_record_never_emits_database_credentials(monkeypatch, capsys):
+    module = _load_benchmark_module()
+    secret = "mysql+pymysql://reader:super-secret@db.example/realty"
+
+    def fail(*args, **kwargs):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(module, "run_benchmark", fail)
+
+    assert module.main(["--runs", "1", "--timeout-seconds", "10"]) == 2
+    output = capsys.readouterr().out
+
+    assert secret not in output
+    assert json.loads(output) == {
+        "status": "error",
+        "error_type": "RuntimeError",
+        "error": "database operation failed",
+    }
 
 
 def _session():
