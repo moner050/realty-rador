@@ -1,4 +1,6 @@
 import time
+from zoneinfo import ZoneInfo
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -18,7 +20,7 @@ class TaskScheduler:
         # 매일 오전 05:30 단지 좌표 사전 적재 작업 등록 (크론: 30 5 * * *)
         self.scheduler.add_job(
             schedule_geocode_backfill,
-            trigger=CronTrigger.from_crontab("30 5 * * *"),
+            trigger=CronTrigger.from_crontab("30 5 * * *", timezone=ZoneInfo("Asia/Seoul")),
             id="job_geocode_complexes",
             name="네이버 지도 단지 좌표 사전 적재",
             replace_existing=True,

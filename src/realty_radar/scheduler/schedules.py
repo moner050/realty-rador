@@ -7,22 +7,52 @@ from realty_radar.infrastructure.database.session import SessionFactory
 
 
 def schedule_geocode_backfill() -> None:
-    stats = run_geocode_sweep(
-        SessionFactory,
-        NaverGeocoder(),
-        now=utc_now(),
-        batch_size=100,
-        max_batches=5,
-        max_requests=500,
-    )
-    print(
-        "[Scheduler] geocode "
-        f"selected={stats.selected_count} "
-        f"requests={stats.external_request_count} "
-        f"ok={stats.ok_count} "
-        f"not_found={stats.not_found_count} "
-        f"failed={stats.failed_count}"
-    )
+    with SessionFactory() as db:
+        log = SchedulerLog(
+            job_name="네이버 지도 단지 좌표 사전 적재",
+            trigger_type="cron",
+            status=SchedulerLog.STATUS_STARTED,
+            started_at=utc_now(),
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+
+        try:
+            stats = run_geocode_sweep(
+                SessionFactory,
+                NaverGeocoder(),
+                now=utc_now(),
+                batch_size=100,
+                max_batches=5,
+                max_requests=500,
+            )
+            log.status = SchedulerLog.STATUS_SUCCESS
+            log.finished_at = utc_now()
+            db.commit()
+
+            print(
+                "[Scheduler] geocode "
+                f"selected={stats.selected_count} "
+                f"requests={stats.external_request_count} "
+                f"ok={stats.ok_count} "
+                f"not_found={stats.not_found_count} "
+                f"failed={stats.failed_count}"
+            )
+        except Exception as exc:
+            try:
+                db.rollback()
+                log_reload = db.get(SchedulerLog, log.log_id)
+                if log_reload:
+                    log_reload.status = SchedulerLog.STATUS_FAILED
+                    log_reload.error_message = str(exc)[:512]
+                    log_reload.finished_at = utc_now()
+                    db.commit()
+            except Exception:
+                pass
+
+            print(f"[Scheduler] geocode preload failed: {exc}")
+            raise
 
 
 def schedule_regular_search_job(scope_code: int | None = None) -> None:
