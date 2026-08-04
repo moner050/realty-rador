@@ -1,5 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 from types import SimpleNamespace
 
 from sqlalchemy import create_engine, event
@@ -19,6 +21,21 @@ from realty_radar.infrastructure.database.models.v2 import (
     ComplexCurrent,
     ListingCurrent,
 )
+
+
+def _load_benchmark_module():
+    path = Path(__file__).resolve().parents[2] / "scripts" / "benchmark_map_viewport.py"
+    spec = spec_from_file_location("benchmark_map_viewport", path)
+    module = module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_map_benchmark_p95_uses_nearest_rank():
+    module = _load_benchmark_module()
+
+    assert module.nearest_rank_p95([1.0, 2.0, 3.0, 4.0, 5.0]) == 5.0
 
 
 def _session():
