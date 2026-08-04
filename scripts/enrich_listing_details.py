@@ -6,12 +6,15 @@ import asyncio
 from pathlib import Path
 import sys
 
+from sqlalchemy import select
 
 source_root = Path(__file__).resolve().parents[1] / "src"
 if str(source_root) not in sys.path:
     sys.path.insert(0, str(source_root))
 
+from realty_radar.application.crawl_job_service import JOB_SUCCESS
 from realty_radar.application.mortgage_enrichment_service import run_site_a_mortgage_enrichment
+from realty_radar.infrastructure.database.models import CrawlJob
 from realty_radar.infrastructure.database.session import SessionFactory
 
 
@@ -32,10 +35,20 @@ def main() -> None:
     if args.concurrency <= 0:
         parser.error("--concurrency must be positive")
 
+    with SessionFactory() as db:
+        job_id = db.scalar(
+            select(CrawlJob.job_id).where(
+                CrawlJob.job_id == args.job_id,
+                CrawlJob.status == JOB_SUCCESS,
+            )
+        )
+    if job_id is None:
+        parser.error("--job-id must reference a successful crawl job")
+
     checked = asyncio.run(
         run_site_a_mortgage_enrichment(
             SessionFactory,
-            job_id=args.job_id,
+            job_id=job_id,
             batch_size=args.batch_size,
             max_batches=args.max_batches,
             concurrency=args.concurrency,

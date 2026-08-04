@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.listing_batch_writer import utc_now
 from realty_radar.application.mortgage_enrichment_service import MortgageEnrichmentRunner
+from realty_radar.crawler.adapters.site_a.http_client import AuthenticationError
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent, ListingHistory
 
 
@@ -91,6 +92,24 @@ def test_failed_detail_fetch_releases_claim_without_marking_checked(session_fact
     checked = asyncio.run(runner.run_once(batch_size=1))
 
     assert checked == 0
+    with session_factory() as session:
+        listing = session.get(ListingCurrent, 10)
+        assert listing.detail_checked_at is None
+        assert listing.detail_claim_token is None
+        assert listing.detail_claimed_at is None
+
+
+def test_authentication_failure_propagates_and_releases_unchecked_claim(session_factory):
+    _seed_pending_details(session_factory, article_ids=[10])
+
+    async def authentication_failure(article_id: int, complex_id: int):
+        raise AuthenticationError("SITE_A bootstrap failed")
+
+    runner = MortgageEnrichmentRunner(session_factory, detail_fetcher=authentication_failure, job_id=1)
+
+    with pytest.raises(AuthenticationError, match="bootstrap failed"):
+        asyncio.run(runner.run_until_idle(batch_size=1, max_batches=1))
+
     with session_factory() as session:
         listing = session.get(ListingCurrent, 10)
         assert listing.detail_checked_at is None
