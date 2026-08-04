@@ -177,6 +177,50 @@ test('the first map payload applies its all-results bounds once', async () => {
   ]);
 });
 
+test('map and card responses for the previous viewport are ignored during the debounce window', async () => {
+  const pendingMaps = [];
+  const pendingCards = [];
+  const { controller, state } = loadController({
+    zoom: 12,
+    fetchImpl: (url) => new Promise((resolve) => {
+      (String(url).includes('/api/listings/map-data') ? pendingMaps : pendingCards).push(resolve);
+    }),
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+  controller.mount(root);
+  pendingMaps[0]({ ok: true, json: async () => singleClusterPayload });
+  await state.flushFetches();
+  state.emitMap('dragstart');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  state.emitMap('dragstart');
+  pendingMaps[1]({ ok: true, json: async () => singleClusterPayload });
+  pendingCards[0]({ ok: true, text: async () => '<section id="listing-collection">stale</section>' });
+  await state.flushFetches();
+
+  assert.equal(state.overlays.length, 1);
+  assert.equal(state.cardSwaps, 0);
+});
+
+test('initial fitBounds events do not schedule a viewport refresh', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitMap('zoom_changed');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.mapFetches.length, 1);
+  assert.equal(state.cardFetches.length, 0);
+});
+
 test('cluster click fits its stored bounds and a valid idle later refreshes cards only', async () => {
   const { controller, state } = loadController({ zoom: 12, mapData: singleClusterPayload });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });

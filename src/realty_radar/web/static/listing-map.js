@@ -76,6 +76,12 @@
         );
     }
 
+    function markViewportDirty(instance) {
+        instance.mapRequestId += 1;
+        instance.cardsRequestId += 1;
+        instance.viewportDirty = true;
+    }
+
     function requestUrl(baseUrl, map, viewport, initial) {
         const url = new URL(baseUrl, (window.location && window.location.origin) || "http://localhost");
         url.searchParams.delete("cursor");
@@ -124,7 +130,7 @@
             },
         });
         const listener = window.naver.maps.Event.addListener(marker, "click", () => {
-            instance.viewportDirty = true;
+            markViewportDirty(instance);
             map.fitBounds(boundsFromValues(cluster.west, cluster.south, cluster.east, cluster.north));
         });
         instance.listeners.push(listener);
@@ -187,6 +193,7 @@
                 renderViewport(root, map, instance, payload);
                 const initialBounds = boundsFromPayload(payload.bounds);
                 if (initial && !instance.initialBoundsApplied && initialBounds) {
+                    instance.suppressInitialFitBounds = true;
                     map.fitBounds(initialBounds);
                     instance.initialBoundsApplied = true;
                 }
@@ -267,13 +274,20 @@
             overlays: [],
             pendingMap: false,
             pendingCards: false,
+            suppressInitialFitBounds: false,
             viewportDirty: false,
             viewportTimer: null,
         };
         instance.listeners.push(
-            window.naver.maps.Event.addListener(map, "dragstart", () => { instance.viewportDirty = true; }),
-            window.naver.maps.Event.addListener(map, "zoom_changed", () => { instance.viewportDirty = true; }),
+            window.naver.maps.Event.addListener(map, "dragstart", () => { markViewportDirty(instance); }),
+            window.naver.maps.Event.addListener(map, "zoom_changed", () => {
+                if (!instance.suppressInitialFitBounds) markViewportDirty(instance);
+            }),
             window.naver.maps.Event.addListener(map, "idle", () => {
+                if (instance.suppressInitialFitBounds) {
+                    instance.suppressInitialFitBounds = false;
+                    return;
+                }
                 if (!instance.viewportDirty) return;
                 instance.viewportDirty = false;
                 scheduleViewportRefresh(root, map, instance);
