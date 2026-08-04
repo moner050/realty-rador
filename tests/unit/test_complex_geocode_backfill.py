@@ -6,7 +6,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from realty_radar.enrichment.naver_maps.backfill import ComplexGeocodeBackfill
+import pytest
+
+from realty_radar.enrichment.naver_maps.backfill import (
+    ComplexGeocodeBackfill,
+    run_geocode_sweep,
+)
 from realty_radar.enrichment.naver_maps.geocoder import GeocodeResult, GeocodeStatus
 from realty_radar.infrastructure.database.models.base import Base
 from realty_radar.infrastructure.database.models.v2 import (
@@ -45,6 +50,32 @@ def _session():
     )
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine)()
+
+
+def _session_factory_with_pending_complexes(count):
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as session:
+        session.add_all(
+            [_complex(index, f"address {index}") for index in range(1, count + 1)]
+        )
+        session.commit()
+    return factory
+
+
+def _status_counts(session):
+    return {
+        status: sum(
+            complex_current.geocode_status == status
+            for complex_current in session.query(ComplexCurrent).all()
+        )
+        for status in (GEOCODE_STATUS_OK, GEOCODE_STATUS_PENDING)
+    }
 
 
 def _complex(complex_id, address, *, status=GEOCODE_STATUS_PENDING, retry_after=None):
@@ -192,3 +223,50 @@ def test_backfill_reuses_an_existing_ok_coordinate_without_calling_geocoder():
     assert stats.external_request_count == 0
     assert stats.reused_count == 1
     assert session.get(ComplexCurrent, 2).latitude == Decimal("37.5500000")
+
+
+def test_geocode_sweep_commits_each_batch_and_stops_at_request_budget():
+    factory = _session_factory_with_pending_complexes(3)
+    geocoder = CountingGeocoder(
+        {
+            f"address {index}": GeocodeResult(
+                GeocodeStatus.OK,
+                Decimal(f"37.{index}"),
+                Decimal(f"126.{index}"),
+            )
+            for index in range(1, 4)
+        }
+    )
+
+    stats = run_geocode_sweep(
+        factory,
+        geocoder,
+        now=datetime(2026, 8, 4, 7, 0),
+        batch_size=1,
+        max_batches=3,
+        max_requests=2,
+    )
+
+    assert stats.batch_count == 2
+    assert stats.external_request_count == 2
+    with factory() as session:
+        assert _status_counts(session) == {
+            GEOCODE_STATUS_OK: 2,
+            GEOCODE_STATUS_PENDING: 1,
+        }
+
+
+@pytest.mark.parametrize(
+    ("batch_size", "max_batches", "max_requests"),
+    [(0, 1, 1), (1, 0, 1), (1, 1, 0)],
+)
+def test_geocode_sweep_rejects_non_positive_limits(batch_size, max_batches, max_requests):
+    with pytest.raises(ValueError):
+        run_geocode_sweep(
+            _session_factory_with_pending_complexes(1),
+            CountingGeocoder({}),
+            now=datetime(2026, 8, 4, 7, 0),
+            batch_size=batch_size,
+            max_batches=max_batches,
+            max_requests=max_requests,
+        )

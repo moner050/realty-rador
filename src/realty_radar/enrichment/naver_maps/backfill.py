@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from hashlib import md5
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -33,6 +33,28 @@ class GeocodeBackfillStats:
     ok_count: int = 0
     not_found_count: int = 0
     failed_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class GeocodeSweepStats:
+    batch_count: int = 0
+    selected_count: int = 0
+    external_request_count: int = 0
+    reused_count: int = 0
+    ok_count: int = 0
+    not_found_count: int = 0
+    failed_count: int = 0
+
+    def add(self, batch: GeocodeBackfillStats) -> "GeocodeSweepStats":
+        return GeocodeSweepStats(
+            batch_count=self.batch_count + 1,
+            selected_count=self.selected_count + batch.selected_count,
+            external_request_count=self.external_request_count + batch.external_request_count,
+            reused_count=self.reused_count + batch.reused_count,
+            ok_count=self.ok_count + batch.ok_count,
+            not_found_count=self.not_found_count + batch.not_found_count,
+            failed_count=self.failed_count + batch.failed_count,
+        )
 
 
 class ComplexGeocodeBackfill:
@@ -136,6 +158,41 @@ class ComplexGeocodeBackfill:
             not_found_count=not_found_count,
             failed_count=failed_count,
         )
+
+
+def run_geocode_sweep(
+    session_factory: Callable[[], Session],
+    geocoder: Geocoder,
+    *,
+    now: datetime,
+    batch_size: int,
+    max_batches: int,
+    max_requests: int,
+    complex_ids: Iterable[int] | None = None,
+) -> GeocodeSweepStats:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if max_batches <= 0:
+        raise ValueError("max_batches must be positive")
+    if max_requests <= 0:
+        raise ValueError("max_requests must be positive")
+
+    stats = GeocodeSweepStats()
+    for _ in range(max_batches):
+        if stats.external_request_count >= max_requests:
+            break
+        with session_factory() as session:
+            batch = ComplexGeocodeBackfill(session, geocoder).run(
+                batch_size=batch_size,
+                now=now,
+                complex_ids=complex_ids,
+                max_requests=max_requests - stats.external_request_count,
+            )
+            session.commit()
+        stats = stats.add(batch)
+        if batch.selected_count == 0:
+            break
+    return stats
 
 
 def _address_hash(address: str) -> bytes:

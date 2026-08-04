@@ -11,7 +11,7 @@ source_root = Path(__file__).resolve().parents[1] / "src"
 if str(source_root) not in sys.path:
     sys.path.insert(0, str(source_root))
 
-from realty_radar.enrichment.naver_maps.backfill import ComplexGeocodeBackfill
+from realty_radar.enrichment.naver_maps.backfill import run_geocode_sweep
 from realty_radar.enrichment.naver_maps.geocoder import NaverGeocoder
 from realty_radar.infrastructure.database.session import SessionLocal
 
@@ -19,6 +19,8 @@ from realty_radar.infrastructure.database.session import SessionLocal
 def main() -> None:
     parser = argparse.ArgumentParser(description="누락된 단지 좌표를 NAVER Maps 지오코딩으로 보강합니다.")
     parser.add_argument("--batch-size", type=int, default=100, help="이번 실행에서 처리할 최대 단지 수 (기본값: 100)")
+    parser.add_argument("--max-batches", type=int, default=1)
+    parser.add_argument("--max-requests", type=int, default=15000)
     parser.add_argument(
         "--complex-id",
         type=int,
@@ -30,23 +32,26 @@ def main() -> None:
     if args.batch_size <= 0:
         parser.error("--batch-size는 양수여야 합니다.")
 
-    session = SessionLocal()
-    try:
-        stats = ComplexGeocodeBackfill(session, NaverGeocoder()).run(
-            batch_size=args.batch_size,
-            now=datetime.now(timezone.utc).replace(tzinfo=None),
-            complex_ids=args.complex_ids,
-        )
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+    if args.max_batches <= 0:
+        parser.error("--max-batches must be positive")
+    if args.max_requests <= 0:
+        parser.error("--max-requests must be positive")
+
+    stats = run_geocode_sweep(
+        SessionLocal,
+        NaverGeocoder(),
+        now=datetime.now(timezone.utc).replace(tzinfo=None),
+        batch_size=args.batch_size,
+        max_batches=args.max_batches,
+        max_requests=args.max_requests,
+        complex_ids=args.complex_ids,
+    )
 
     print(
-        f"selected={stats.selected_count} ok={stats.ok_count} "
-        f"not_found={stats.not_found_count} failed={stats.failed_count}"
+        f"batch_count={stats.batch_count} selected_count={stats.selected_count} "
+        f"external_request_count={stats.external_request_count} reused_count={stats.reused_count} "
+        f"ok_count={stats.ok_count} not_found_count={stats.not_found_count} "
+        f"failed_count={stats.failed_count}"
     )
 
 
