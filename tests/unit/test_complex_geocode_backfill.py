@@ -11,6 +11,7 @@ from realty_radar.enrichment.naver_maps.geocoder import GeocodeResult, GeocodeSt
 from realty_radar.infrastructure.database.models.base import Base
 from realty_radar.infrastructure.database.models.v2 import (
     GEOCODE_STATUS_FAILED,
+    GEOCODE_STATUS_OK,
     GEOCODE_STATUS_PENDING,
     ComplexCurrent,
 )
@@ -24,6 +25,16 @@ class StaticGeocoder:
 
     def geocode(self, address):
         return self.results[address]
+
+
+class CountingGeocoder(StaticGeocoder):
+    def __init__(self, results):
+        super().__init__(results)
+        self.calls = []
+
+    def geocode(self, address):
+        self.calls.append(address)
+        return super().geocode(address)
 
 
 def _session():
@@ -138,3 +149,46 @@ def test_backfill_only_geocodes_requested_pending_complexes():
     assert session.get(ComplexCurrent, 1).geocode_status == GeocodeStatus.OK
     assert session.get(ComplexCurrent, 2).geocode_status == GEOCODE_STATUS_PENDING
     assert session.get(ComplexCurrent, 3).geocode_status == GeocodeStatus.OK
+
+
+def test_backfill_calls_geocoder_once_for_two_pending_complexes_with_same_address():
+    session = _session()
+    address = "?쒖슱?밸퀎??媛뺤꽌援??뚯뒪?몃줈 1"
+    session.add_all([_complex(1, address), _complex(2, address)])
+    session.commit()
+    geocoder = CountingGeocoder(
+        {address: GeocodeResult(GeocodeStatus.OK, Decimal("37.55"), Decimal("126.85"))}
+    )
+
+    stats = ComplexGeocodeBackfill(session, geocoder).run(
+        batch_size=10,
+        now=datetime(2026, 8, 4, 7, 0),
+    )
+
+    assert geocoder.calls == [address]
+    assert stats.external_request_count == 1
+    assert stats.reused_count == 1
+    assert {
+        session.get(ComplexCurrent, 1).geocode_status,
+        session.get(ComplexCurrent, 2).geocode_status,
+    } == {GEOCODE_STATUS_OK}
+
+
+def test_backfill_reuses_an_existing_ok_coordinate_without_calling_geocoder():
+    session = _session()
+    address = "?쒖슱?밸퀎??媛뺤꽌援??뚯뒪?몃줈 1"
+    cached = _complex(1, address, status=GEOCODE_STATUS_OK)
+    cached.latitude, cached.longitude = Decimal("37.55"), Decimal("126.85")
+    session.add_all([cached, _complex(2, address)])
+    session.commit()
+    geocoder = CountingGeocoder({})
+
+    stats = ComplexGeocodeBackfill(session, geocoder).run(
+        batch_size=10,
+        now=datetime(2026, 8, 4, 7, 0),
+    )
+
+    assert geocoder.calls == []
+    assert stats.external_request_count == 0
+    assert stats.reused_count == 1
+    assert session.get(ComplexCurrent, 2).latitude == Decimal("37.5500000")

@@ -28,6 +28,8 @@ class Geocoder(Protocol):
 @dataclass(frozen=True, slots=True)
 class GeocodeBackfillStats:
     selected_count: int = 0
+    external_request_count: int = 0
+    reused_count: int = 0
     ok_count: int = 0
     not_found_count: int = 0
     failed_count: int = 0
@@ -48,6 +50,7 @@ class ComplexGeocodeBackfill:
         batch_size: int,
         now: datetime,
         complex_ids: Iterable[int] | None = None,
+        max_requests: int | None = None,
     ) -> GeocodeBackfillStats:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
@@ -70,11 +73,35 @@ class ComplexGeocodeBackfill:
             statement.order_by(ComplexCurrent.complex_id).limit(batch_size)
         ).all()
 
+        cached_coordinates_by_address = {
+            address: (latitude, longitude)
+            for address, latitude, longitude in self.session.execute(
+                select(ComplexCurrent.address, ComplexCurrent.latitude, ComplexCurrent.longitude).where(
+                    ComplexCurrent.geocode_status == GEOCODE_STATUS_OK,
+                    ComplexCurrent.address.in_({candidate.address for candidate in candidates}),
+                )
+            ).all()
+        }
+        outcomes_by_address: dict[str, GeocodeResult] = {}
+        external_request_count = 0
+        reused_count = 0
         ok_count = 0
         not_found_count = 0
         failed_count = 0
         for candidate in candidates:
-            result = self.geocoder.geocode(candidate.address)
+            cached_coordinates = cached_coordinates_by_address.get(candidate.address)
+            if cached_coordinates is not None:
+                result = GeocodeResult(GeocodeStatus.OK, *cached_coordinates)
+                reused_count += 1
+            elif candidate.address in outcomes_by_address:
+                result = outcomes_by_address[candidate.address]
+                reused_count += 1
+            else:
+                if max_requests is not None and external_request_count >= max_requests:
+                    break
+                external_request_count += 1
+                result = self.geocoder.geocode(candidate.address)
+                outcomes_by_address[candidate.address] = result
             candidate.geocode_attempted_at = now
             if result.status is GeocodeStatus.OK:
                 candidate.latitude = result.latitude
@@ -103,6 +130,8 @@ class ComplexGeocodeBackfill:
 
         return GeocodeBackfillStats(
             selected_count=len(candidates),
+            external_request_count=external_request_count,
+            reused_count=reused_count,
             ok_count=ok_count,
             not_found_count=not_found_count,
             failed_count=failed_count,
