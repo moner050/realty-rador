@@ -238,7 +238,7 @@ git commit -m "test: add bounded map viewport benchmark"
 ### Task 3: Measure optimized path and complete map verification
 
 **Files:**
-- Modify: only Task 1-2 files if a direct verification failure requires a focused correction.
+- Modify: Task 1-2 files if a direct verification failure requires a focused correction; additionally `src/realty_radar/web/static/listing-map.js` only for the user-approved HTMX 1.9 card-swap remediation below.
 - Test: `tests/unit/test_listing_map_service.py`
 - Test: `tests/integration/test_listing_search_v2.py`
 - Test: `tests/integration/test_listing_map_ui.py`
@@ -268,18 +268,28 @@ Record JSON output in the task report. If p95 is at most 1,000ms, record plan su
 
 Start the local worktree app in a hidden background process. Use `agent-browser` to verify home loading, successful map-data response, reconciled counts, and zoom/drag updates limited to overlays and `#listing-collection`; check content, overlay errors, console, and a mobile viewport. Close the browser and stop only this task's process. If p95 failed, record that a long live interaction is blocked rather than treating it as passed.
 
-- [ ] **Step 4: Final suites and direct-fix commit only**
+- [ ] **Step 4: User-approved HTMX 1.9 card-swap remediation when browser evidence requires it**
+
+The live diagnosis established that `base.html` loads HTMX 1.9.10 and its `window.htmx` object has no public `swap` function. Therefore successful map-card responses must not depend on `window.htmx.swap`.
+
+First add a controller regression that sets `window.htmx = {}`, resolves a valid cards response, and asserts that the old `#listing-collection` element is replaced by a new element from the response HTML while the map root reference is unchanged. Also assert that a stale response cannot replace the current collection and that malformed HTML without `#listing-collection` keeps existing cards visible and sets the existing map-card error message. Run `node --test tests/web/test_listing_map_controller.mjs` and confirm the valid-response test fails because the current code silently skips the response.
+
+Then replace the HTMX-only block in `requestCards` with a small DOM helper. Parse the response in a detached `template`, select exactly one `#listing-collection`, and call `target.replaceWith(replacement)`. Return without changing current cards when the response has no collection, and let the caller show the existing map-card error status. Do not replace `#search-results`, recreate the map, change history, or upgrade HTMX.
+
+Update the Node fake DOM only as needed to exercise this actual DOM helper; it must not inject a fake `htmx.swap`. Add an integration assertion that the map-cards fragment still has a single `#listing-collection` root. Run a single hidden-server `agent-browser` drag at valid zoom: it must show changed-bounds map-data/map-cards 200, unchanged map-root reference, replaced collection reference, and visible cards. Close browser and stop only this task server.
+
+- [ ] **Step 5: Final suites and direct-fix commit only**
 
 ```powershell
 python -m pytest -q
 node --test tests/web/test_listing_map_controller.mjs
 ```
 
-Make no empty commit. If direct verification required a fix:
+Make no empty commit. If this user-approved direct verification requires a fix:
 
 ```powershell
-git add -- <verified-fix-files>
-git commit -m "test: verify optimized map aggregation"
+git add -- src/realty_radar/web/static/listing-map.js tests/web/test_listing_map_controller.mjs tests/integration/test_listing_map_ui.py
+git commit -m "fix: replace map cards without HTMX swap"
 ```
 
 ## Plan Self-Review
