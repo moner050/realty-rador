@@ -209,6 +209,35 @@ def test_map_bounds_include_edges_but_exclude_unverified_and_outside_listings():
     assert [row.article_id for row in result.items] == [2001, 2002]
 
 
+def test_map_candidate_rows_obey_the_same_price_and_bounds_predicates_as_listing_search():
+    session = _session()
+    _seed(session)
+    complexes = {row.complex_id: row for row in session.query(ComplexCurrent).all()}
+    complexes[1001].latitude = Decimal("37.5000000")
+    complexes[1001].longitude = Decimal("126.8000000")
+    complexes[1001].geocode_status = GEOCODE_STATUS_OK
+    complexes[1002].latitude = Decimal("37.6000000")
+    complexes[1002].longitude = Decimal("126.9000000")
+    complexes[1002].geocode_status = GEOCODE_STATUS_OK
+    session.commit()
+    filters = ListingSearchFilter(
+        min_price=500_000_000,
+        map_west=Decimal("126.8000000"),
+        map_south=Decimal("37.5000000"),
+        map_east=Decimal("126.8500000"),
+        map_north=Decimal("37.5500000"),
+    )
+
+    search_rows = ListingSearchService(session, cursor_secret="test-secret").search_listings(filters).items
+    map_rows = list(
+        ListingSearchService(session, cursor_secret="test-secret").stream_map_matching_rows(
+            filters, applicant=None
+        )
+    )
+
+    assert {row.article_id for row in map_rows} == {row.article_id for row in search_rows} == {2001, 2002}
+
+
 def test_map_bounds_change_the_cursor_fingerprint_but_are_not_persisted():
     session = _session()
     _seed(session)

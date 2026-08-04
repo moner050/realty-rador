@@ -67,6 +67,27 @@ class ListingSearchService:
     def search_listings(self, filters: ListingSearchFilter, applicant: Any = None) -> SearchResult:
         return self._run_search(filters, applicant, self._search_mode(filters))
 
+    def map_candidate_rows(self, filters: ListingSearchFilter, applicant: Any):
+        self._validate(filters)
+        self._validate_purchase_affordability_profile(filters, applicant)
+        if filters.only_purchase_affordable:
+            return self._purchase_candidate_rows(filters, applicant), lambda row: self._is_purchase_affordable(
+                row, filters, applicant
+            )
+        if filters.only_eligible_loans:
+            return self._eligible_candidate_rows(filters, applicant), lambda row: self._is_loan_eligible(
+                row, applicant
+            )
+        return self._filtered_rows(filters), lambda row: True
+
+    def stream_map_matching_rows(self, filters: ListingSearchFilter, applicant: Any):
+        statement, matches = self.map_candidate_rows(filters, applicant)
+        for row in self.db.scalars(
+            statement.order_by(ListingCurrent.article_id).execution_options(yield_per=1000)
+        ):
+            if matches(row):
+                yield row
+
     def _run_search(
         self,
         filters: ListingSearchFilter,

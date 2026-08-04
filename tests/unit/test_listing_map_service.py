@@ -6,10 +6,19 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from realty_radar.application.listing_map_service import ListingMapService
+from realty_radar.application.listing_map_service import (
+    ListingMapMarker,
+    ListingMapService,
+    cluster_map_complexes,
+)
+from realty_radar.domain.listing.filters import ListingSearchFilter
 from realty_radar.domain.listing.models import ComplexGroupItem, SearchResult
 from realty_radar.infrastructure.database.models.base import Base
-from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK, ComplexCurrent
+from realty_radar.infrastructure.database.models.v2 import (
+    GEOCODE_STATUS_OK,
+    ComplexCurrent,
+    ListingCurrent,
+)
 
 
 def _session():
@@ -37,6 +46,24 @@ def _complex(complex_id, *, latitude=None, longitude=None, status=0):
         first_seen_at=observed_at,
         last_seen_at=observed_at,
         updated_at=observed_at,
+    )
+
+
+def _listing(article_id, complex_id, price):
+    observed_at = datetime(2026, 8, 3, 6, 0)
+    return ListingCurrent(
+        article_id=article_id,
+        complex_id=complex_id,
+        region_code=1150010200,
+        complex_name=f"test complex {complex_id}",
+        address=f"test address {complex_id}",
+        trade_type=1,
+        primary_price=price,
+        state_hash=bytes([article_id]) * 16,
+        last_seen_job_id=1,
+        first_seen_at=observed_at,
+        last_seen_at=observed_at,
+        last_changed_at=observed_at,
     )
 
 
@@ -85,6 +112,7 @@ def test_normal_result_builds_one_verified_marker_per_complex_with_one_coordinat
     assert select_count == 1
     assert [marker.to_dict() for marker in markers] == [
         {
+            "kind": "marker",
             "complex_id": 1,
             "complex_name": "테스트 아파트 1",
             "address": "서울특별시 강서구 테스트로 1",
@@ -169,3 +197,133 @@ def test_complex_ids_returns_each_normal_result_complex_once_in_result_order():
     )
 
     assert ListingMapService(session).complex_ids(result) == [7, 3]
+
+
+def test_map_viewport_aggregates_all_matching_complexes_even_when_listing_page_size_is_one():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.5100000"), longitude=Decimal("126.8100000"), status=GEOCODE_STATUS_OK),
+            _complex(3),
+            _listing(1, 1, 510_000_000),
+            _listing(2, 1, 500_000_000),
+            _listing(3, 2, 600_000_000),
+            _listing(4, 3, 700_000_000),
+        ]
+    )
+    session.commit()
+
+    viewport = ListingMapService(session).build_viewport(
+        ListingSearchFilter(page_size=1), applicant=None, zoom=7
+    )
+
+    assert viewport.matching_complex_count == 3
+    assert viewport.mapped_complex_count == 2
+    assert viewport.unmapped_complex_count == 1
+    assert viewport.markers == ()
+    assert [
+        (cluster.complex_count, cluster.listing_count, cluster.min_price, cluster.max_price)
+        for cluster in viewport.clusters
+    ] == [(2, 3, 500_000_000, 600_000_000)]
+
+
+def test_map_viewport_returns_single_markers_after_zoomed_in_cell_split():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.5100000"), longitude=Decimal("126.8100000"), status=GEOCODE_STATUS_OK),
+            _listing(1, 1, 500_000_000),
+            _listing(2, 2, 600_000_000),
+        ]
+    )
+    session.commit()
+
+    viewport = ListingMapService(session).build_viewport(ListingSearchFilter(), applicant=None, zoom=14)
+
+    assert [marker.complex_id for marker in viewport.markers] == [1, 2]
+    assert viewport.clusters == ()
+
+
+def test_cluster_map_complexes_keeps_grid_boundary_memberships_predictable():
+    markers, clusters = cluster_map_complexes(
+        (
+            ListingMapMarker(
+                complex_id=1,
+                complex_name="one",
+                address="one",
+                latitude=37.5000,
+                longitude=126.8000,
+                listing_count=1,
+                min_price=500_000_000,
+                max_price=500_000_000,
+            ),
+            ListingMapMarker(
+                complex_id=2,
+                complex_name="two",
+                address="two",
+                latitude=37.5049,
+                longitude=126.8049,
+                listing_count=2,
+                min_price=510_000_000,
+                max_price=520_000_000,
+            ),
+            ListingMapMarker(
+                complex_id=3,
+                complex_name="three",
+                address="three",
+                latitude=37.5050,
+                longitude=126.8050,
+                listing_count=1,
+                min_price=600_000_000,
+                max_price=600_000_000,
+            ),
+        ),
+        zoom=14,
+    )
+
+    assert [marker.complex_id for marker in markers] == [3]
+    assert [cluster.to_dict() for cluster in clusters] == [
+        {
+            "kind": "cluster",
+            "latitude": 37.50245,
+            "longitude": 126.80245,
+            "west": 126.8,
+            "south": 37.5,
+            "east": 126.8049,
+            "north": 37.5049,
+            "complex_count": 2,
+            "listing_count": 3,
+            "min_price": 500_000_000,
+            "max_price": 520_000_000,
+        }
+    ]
+
+
+def test_map_viewport_applies_verified_coordinate_bounds_to_matching_complexes():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.6000000"), longitude=Decimal("126.9000000"), status=GEOCODE_STATUS_OK),
+            _listing(1, 1, 500_000_000),
+            _listing(2, 2, 600_000_000),
+        ]
+    )
+    session.commit()
+
+    viewport = ListingMapService(session).build_viewport(
+        ListingSearchFilter(
+            map_west=Decimal("126.8000000"),
+            map_south=Decimal("37.5000000"),
+            map_east=Decimal("126.8500000"),
+            map_north=Decimal("37.5500000"),
+        ),
+        applicant=None,
+        zoom=14,
+    )
+
+    assert viewport.matching_complex_count == 1
+    assert [marker.complex_id for marker in viewport.markers] == [1]
+    assert viewport.bounds == (126.8, 37.5, 126.85, 37.55)
