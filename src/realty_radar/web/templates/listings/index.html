@@ -323,26 +323,28 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                 </div>
 
                 <!-- 상세 필터 카테고리 탭 (Tab Bar) -->
-                <div class="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto my-3 gap-2">
-                    <button type="button" data-filter-tab="presets" class="filter-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400">🏛️ 대출/퀵프리셋</button>
-                    <button type="button" data-filter-tab="housing" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">🏠 주거/건물스펙</button>
-                    <button type="button" data-filter-tab="commute" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚡ 통근시간(강남)</button>
-                    <button type="button" data-filter-tab="options" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚙️ 옵션/융자상태</button>
+                <div role="tablist" class="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto my-3 gap-2">
+                    <button id="filter-tab-presets" type="button" role="tab" aria-controls="filter-tab-content-presets" aria-selected="true" tabindex="0" data-filter-tab="presets" class="filter-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400">🏛️ 대출/퀵프리셋</button>
+                    <button id="filter-tab-housing" type="button" role="tab" aria-controls="filter-tab-content-housing" aria-selected="false" tabindex="-1" data-filter-tab="housing" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">🏠 주거/건물스펙</button>
+                    <button id="filter-tab-commute" type="button" role="tab" aria-controls="filter-tab-content-commute" aria-selected="false" tabindex="-1" data-filter-tab="commute" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚡ 통근시간(강남)</button>
+                    <button id="filter-tab-options" type="button" role="tab" aria-controls="filter-tab-content-options" aria-selected="false" tabindex="-1" data-filter-tab="options" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚙️ 옵션/융자상태</button>
                 </div>
 
                 <!-- 탭 1: 대출 & 원클릭 퀵 프리셋 -->
-                <div id="filter-tab-content-presets" class="filter-tab-content space-y-4 overflow-y-auto pr-1">
-                    <div class="rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/80 to-slate-50 dark:from-slate-950 dark:to-slate-900 p-3.5 space-y-3">
-                        <div class="text-xs font-bold text-indigo-900 dark:text-indigo-200">🌟 정책대출 + 정돈된 주거환경 꿀조합</div>
+                <div id="filter-tab-content-presets" role="tabpanel" aria-labelledby="filter-tab-presets" class="filter-tab-content space-y-4 overflow-y-auto pr-1">
+                    <section data-preset-group="recommended" class="rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/80 dark:bg-slate-950 p-3.5 space-y-2">
+                        <h4 class="text-xs font-bold text-indigo-900 dark:text-indigo-200">🌟 추천 조합</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">대출 기준과 선호 주거 조건을 함께 적용합니다.</p>
                         <div class="flex flex-wrap gap-2">
                             <button type="button" data-quick-preset="combo-didimdol-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 디딤돌+정돈된타운 (매매 5억/85㎡ + 800세대)</button>
                             <button type="button" data-quick-preset="combo-bogeum-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 보금자리론+정돈된타운 (매매 6억 + 800세대)</button>
                             <button type="button" data-quick-preset="combo-newborn-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아특례+정돈된타운 (매매 9억/85㎡ + 800세대)</button>
                             <button type="button" data-quick-preset="combo-newborn-jeonse-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아전세+정돈된타운 (전세 5억/85㎡ + 800세대)</button>
                         </div>
-                    </div>
-                    <div class="space-y-2">
-                        <div class="text-xs font-bold text-slate-700 dark:text-slate-300">🏛️ 구입/전세자금 정책대출 전용 프리셋</div>
+                    </section>
+                    <section data-preset-group="loan-only" class="space-y-2">
+                        <h4 class="text-xs font-bold text-slate-700 dark:text-slate-300">🏛️ 대출 조건만</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">예산과 면적 기준만 빠르게 설정합니다.</p>
                         <div class="flex flex-wrap gap-2">
                             <button type="button" data-quick-preset="loan-didimdol" data-price-range=";6" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏛️ 디딤돌 (5억/85㎡)</button>
                             <button type="button" data-quick-preset="loan-bogeum" data-price-range="6;9" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">💒 보금자리론 (6억)</button>
@@ -351,11 +353,11 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                             <button type="button" data-quick-preset="loan-newborn-rent" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🍼 신생아 전세 (5억)</button>
                             <button type="button" data-quick-preset="tidy-town" class="theme-soft-emerald min-h-8 px-3 rounded-lg border text-xs font-semibold">🏘️ 정돈된 아파트 타운</button>
                         </div>
-                    </div>
+                    </section>
                 </div>
 
                 <!-- 탭 2: 주거 & 건물 스펙 (가격, 면적, 준공년도, 세대수) -->
-                <div id="filter-tab-content-housing" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
+                <div id="filter-tab-content-housing" role="tabpanel" aria-labelledby="filter-tab-housing" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
                     <section id="transaction-advanced-filters" data-filter-scope="housing-budget" data-trade-filter class="theme-subtle-surface rounded-xl border p-4 space-y-4">
                         <div>
                             <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">예산·면적</h2>
@@ -387,7 +389,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                 </div>
 
                 <!-- 탭 3: 강남역 통근시간 퀵 필터 -->
-                <div id="filter-tab-content-commute" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
+                <div id="filter-tab-content-commute" role="tabpanel" aria-labelledby="filter-tab-commute" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
                     <div class="p-4 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
                         <div class="text-xs font-bold text-amber-900 dark:text-amber-300">⚡ 강남역 대중교통 통근시간 퀵 필터</div>
                         <div class="flex flex-wrap gap-2">
@@ -400,26 +402,43 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                 </div>
 
                 <!-- 탭 4: 기타 옵션 & 융자상태 -->
-                <div id="filter-tab-content-options" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
-                    <div class="space-y-3">
+                <div id="filter-tab-content-options" role="tabpanel" aria-labelledby="filter-tab-options" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
+                    <fieldset data-option-group="listing" class="space-y-3">
                         <div class="hidden"><h2 class="font-bold text-xs">고급 조건</h2></div>
-                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200">주요 토글 옵션</div>
+                        <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">거래·매물 형태</legend>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">매물 표시 방식과 거래 유형을 정합니다.</p>
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="direct_trade_only" value="true" class="rounded accent-indigo-500" {% if filters.direct_trade_only %}checked{% endif %}><span>직거래만</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="safe_lessor_hug_only" value="true" class="rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}><span>HUG 안심임대인만</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="parking_possible_only" value="true" class="rounded accent-indigo-500" {% if filters.parking_possible_only %}checked{% endif %}><span>주차 가능만</span></label>
                             <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="exclude_first_floor" value="true" class="rounded accent-indigo-500" {% if filters.exclude_first_floor %}checked{% endif %}><span>1층 제외</span></label>
                             <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="hidden" name="exclude_short_term" value="false"><input id="exclude-short-term" type="checkbox" name="exclude_short_term" value="true" class="rounded accent-indigo-500" {% if filters.exclude_short_term %}checked{% endif %}><span>단기임대 제외</span></label>
                             <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="group_by_complex" value="true" class="rounded accent-indigo-500" {% if filters.group_by_complex %}checked{% endif %}><span>단지별 묶기</span></label>
+                        </div>
+                    </fieldset>
+                    <fieldset data-option-group="convenience" class="space-y-3">
+                        <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">주거 편의</legend>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">생활 편의 조건을 추가합니다.</p>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="parking_possible_only" value="true" class="rounded accent-indigo-500" {% if filters.parking_possible_only %}checked{% endif %}><span>주차 가능만</span></label>
+                        </div>
+                    </fieldset>
+                    <fieldset data-option-group="financing" class="space-y-3">
+                        <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">자금 조건</legend>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">대출·구매 가능 매물은 개인 자격 정보에 따라 달라집니다.</p>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="safe_lessor_hug_only" value="true" class="rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}><span>HUG 안심임대인만</span></label>
                             <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_eligible_loans" value="true" class="rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}><span>가능대출 매물만</span></label>
                             <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_purchase_affordable" value="true" class="rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}><span>실구매 가능 매물만</span></label>
                         </div>
                         <div class="hidden"><input type="date" name="move_in_by" value="{{ filters.move_in_by or '' }}"></div>
-                    </div>
+                    </fieldset>
                 </div>
 
-                <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
-                    <button type="button" onclick="document.getElementById('detailed-filter-modal').close()" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
+                <div class="sticky bottom-0 mt-4 border-t border-slate-200 bg-white pt-3 dark:border-slate-800 dark:bg-slate-900 flex items-center justify-between gap-2">
+                    <output data-detailed-filter-count aria-live="polite" class="text-xs text-slate-600 dark:text-slate-400"></output>
+                    <div class="flex gap-2">
+                        <button type="button" data-clear-filter-tab class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold">현재 탭 초기화</button>
+                        <button type="button" data-apply-detailed-filter class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
+                    </div>
                 </div>
             </div>
         </dialog>
@@ -529,6 +548,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
     const formatPyeong = (area) => `약 ${(Number(area) / 3.3).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}평`;
 
     // 단일 슬라이더 동적 툴팁, 수치 숫자 입력창 및 프로그레스 바 제어
+    const singleSliders = new Map();
+    const clearSingleSlider = (container, submit = true) => {
+        singleSliders.get(container)?.clear(submit);
+    };
     document.querySelectorAll("[data-single-slider]").forEach((container) => {
         const hidden = container.querySelector("input[type=hidden]");
         const handle = container.querySelector("[data-slider-handle]");
@@ -602,17 +625,23 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
             });
         }
 
-        container.querySelector("[data-slider-clear]").addEventListener("click", () => {
+        const clear = (submit = true) => {
             hidden.value = "";
             handle.value = handle.min;
             if (numInput) numInput.value = "";
             sync(false);
-            form.requestSubmit();
-        });
+            updateDetailedFilterCount();
+            if (submit) form.requestSubmit();
+        };
+        container.querySelector("[data-slider-clear]").addEventListener("click", () => clearSingleSlider(container));
+        singleSliders.set(container, { clear });
     });
 
     // 듀얼 핸들 트랙 min/max 조작 편의성, 수치 숫자 입력창 및 동적 Z-Index 스와핑
     const rangeSliders = new Map();
+    const clearRangeSlider = (container, submit = true) => {
+        rangeSliders.get(container.dataset.rangeSlider)?.clear(submit);
+    };
     document.querySelectorAll("[data-range-slider]").forEach((container) => {
         const key = container.dataset.rangeSlider;
         const unit = container.dataset.unit;
@@ -813,19 +842,21 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
             });
         }
 
+        const clear = (submit = true) => {
+            hidden.min.value = "";
+            hidden.max.value = "";
+            if (numInputs.min) numInputs.min.value = "";
+            if (numInputs.max) numInputs.max.value = "";
+            render();
+            updateDetailedFilterCount();
+            if (submit) form.requestSubmit();
+        };
         const clearBtn = container.querySelector("[data-range-clear-all]");
         if (clearBtn) {
-            clearBtn.addEventListener("click", () => {
-                hidden.min.value = "";
-                hidden.max.value = "";
-                if (numInputs.min) numInputs.min.value = "";
-                if (numInputs.max) numInputs.max.value = "";
-                render();
-                form.requestSubmit();
-            });
+            clearBtn.addEventListener("click", () => clearRangeSlider(container));
         }
 
-        rangeSliders.set(key, { set });
+        rangeSliders.set(key, { set, clear });
     });
 
     document.querySelectorAll("[data-price-range]").forEach((button) => button.addEventListener("click", () => {
@@ -1292,25 +1323,62 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 
     const tabBtns = document.querySelectorAll(".filter-tab-btn");
     const tabContents = document.querySelectorAll(".filter-tab-content");
+    const detailedFilterCount = document.querySelector("[data-detailed-filter-count]");
+    const updateDetailedFilterCount = () => {
+        const activeContent = Array.from(tabContents).find((content) => !content.hidden);
+        if (!activeContent || !detailedFilterCount) return;
+
+        const appliedConditions = new Set();
+        activeContent.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').forEach((input) => {
+            appliedConditions.add(`${input.name}:${input.value}`);
+        });
+        activeContent.querySelectorAll('input[type="hidden"][data-slider-name]:not(:disabled)').forEach((input) => {
+            if (input.value !== "") appliedConditions.add(`${input.dataset.sliderName}:${input.value}`);
+        });
+        detailedFilterCount.textContent = `현재 ${appliedConditions.size}개 조건 적용`;
+    };
+    const setActiveFilterTab = (target) => {
+        tabBtns.forEach((button) => {
+            const isActive = button.dataset.filterTab === target;
+            button.setAttribute("aria-selected", String(isActive));
+            button.tabIndex = isActive ? 0 : -1;
+            button.classList.toggle("border-b-2", isActive);
+            button.classList.toggle("border-indigo-600", isActive);
+            button.classList.toggle("text-indigo-600", isActive);
+            button.classList.toggle("dark:text-indigo-400", isActive);
+            button.classList.toggle("text-slate-500", !isActive);
+        });
+        tabContents.forEach((content) => {
+            content.hidden = content.id !== `filter-tab-content-${target}`;
+        });
+        updateDetailedFilterCount();
+    };
     tabBtns.forEach(btn => {
         btn.addEventListener("click", () => {
-            const target = btn.dataset.filterTab;
-            tabBtns.forEach(b => {
-                b.classList.remove("border-b-2", "border-indigo-600", "text-indigo-600", "dark:text-indigo-400");
-                b.classList.add("text-slate-500");
-            });
-            btn.classList.add("border-b-2", "border-indigo-600", "text-indigo-600", "dark:text-indigo-400");
-            btn.classList.remove("text-slate-500");
-
-            tabContents.forEach(c => {
-                if (c.id === `filter-tab-content-${target}`) {
-                    c.classList.remove("hidden");
-                } else {
-                    c.classList.add("hidden");
-                }
-            });
+            setActiveFilterTab(btn.dataset.filterTab);
         });
     });
+    form.addEventListener("input", updateDetailedFilterCount);
+    form.addEventListener("change", updateDetailedFilterCount);
+
+    document.querySelector("[data-clear-filter-tab]")?.addEventListener("click", () => {
+        const activeContent = Array.from(tabContents).find((content) => !content.hidden);
+        if (!activeContent) return;
+
+        activeContent.querySelectorAll("[data-single-slider]").forEach((container) => clearSingleSlider(container, false));
+        activeContent.querySelectorAll("[data-range-slider]").forEach((container) => clearRangeSlider(container, false));
+        activeContent.querySelectorAll('input[type="checkbox"]').forEach((input) => { input.checked = false; });
+        activeContent.querySelectorAll("select").forEach((select) => { select.selectedIndex = 0; });
+        updateDetailedFilterCount();
+        form.requestSubmit();
+    });
+
+    document.querySelector("[data-apply-detailed-filter]")?.addEventListener("click", () => {
+        form.requestSubmit();
+        detailedFilterModal.close();
+    });
+
+    setActiveFilterTab("presets");
 
     renderRegionChips();
 })();

@@ -60,6 +60,24 @@ def test_detailed_filter_groups_budget_and_progressive_housing_controls():
     assert "group" in embedded_price_slider.group(1).split()
 
 
+def test_detailed_filter_modal_groups_presets_options_and_tab_actions():
+    response = _render_home_with_memory_db("/?direct_trade_only=true&only_eligible_loans=true")
+
+    assert response.status_code == 200
+    assert 'data-preset-group="recommended"' in response.text
+    assert 'data-preset-group="loan-only"' in response.text
+    assert 'data-option-group="listing"' in response.text
+    assert 'data-option-group="convenience"' in response.text
+    assert 'data-option-group="financing"' in response.text
+    assert 'data-detailed-filter-count' in response.text
+    assert 'data-clear-filter-tab' in response.text
+    assert 'name="direct_trade_only" value="true"' in response.text
+    assert 'name="only_eligible_loans" value="true"' in response.text
+    assert 'name="only_purchase_affordable" value="true"' in response.text
+    assert 'data-quick-preset="combo-didimdol-town"' in response.text
+    assert 'data-quick-preset="loan-didimdol"' in response.text
+
+
 def test_listing_cards_link_to_fin_land_article_pages():
     template = Path("src/realty_radar/web/templates/listings/_listing_cards.html").read_text(encoding="utf-8")
 
