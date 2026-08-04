@@ -10,7 +10,7 @@ from typing import Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.params import Param
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -390,14 +390,8 @@ def _favorite_payload_context(
     }
 
 
-def _listing_map_context(db: Session, result) -> dict[str, object]:
-    if not settings.naver_map_client_id:
-        return {"naver_map_client_id": None, "map_markers": []}
-    markers = ListingMapService(db).build_markers(result)
-    return {
-        "naver_map_client_id": settings.naver_map_client_id,
-        "map_markers": [marker.to_dict() for marker in markers],
-    }
+def _listing_map_context(*_args) -> dict[str, object]:
+    return {"naver_map_client_id": settings.naver_map_client_id, "map_markers": []}
 
 
 def _map_sidebar_context(
@@ -406,14 +400,13 @@ def _map_sidebar_context(
     *,
     status_message: str | None = None,
 ) -> dict[str, object]:
-    map_service = ListingMapService(db)
-    complex_ids = map_service.complex_ids(result)
-    map_context = _listing_map_context(db, result)
+    complex_ids = ListingMapService(db).complex_ids(result)
+    map_context = _listing_map_context()
     map_context.update(
         {
             "map_loading": False,
             "map_status_message": status_message,
-            "map_unmapped_complex_count": max(len(complex_ids) - len(map_context["map_markers"]), 0),
+            "map_unmapped_complex_count": len(complex_ids),
         }
     )
     return map_context
@@ -439,6 +432,34 @@ def _map_search_url(request: Request, filters: ListingSearchFilter) -> str:
     )
     query = urlencode(_filter_query_items(transient_filter))
     base_url = str(request.url_for("search_listings"))
+    return f"{base_url}?{query}" if query else base_url
+
+
+def _map_data_url(request: Request, filters: ListingSearchFilter) -> str:
+    transient_filter = replace(
+        filters,
+        cursor=None,
+        map_west=None,
+        map_south=None,
+        map_east=None,
+        map_north=None,
+    )
+    query = urlencode(_filter_query_items(transient_filter))
+    base_url = str(request.url_for("map_data"))
+    return f"{base_url}?{query}" if query else base_url
+
+
+def _map_cards_url(request: Request, filters: ListingSearchFilter) -> str:
+    transient_filter = replace(
+        filters,
+        cursor=None,
+        map_west=None,
+        map_south=None,
+        map_east=None,
+        map_north=None,
+    )
+    query = urlencode(_filter_query_items(transient_filter))
+    base_url = str(request.url_for("map_cards"))
     return f"{base_url}?{query}" if query else base_url
 
 
@@ -638,14 +659,7 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
     result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
     _enrich_listings_with_affordability(result, applicant)
     favorite_payloads = _favorite_payload_context(result, filters)
-    map_context = _listing_map_context(db, result)
-    map_context.update(
-        {
-            "map_loading": not bool(map_context["map_markers"]),
-            "map_status_message": None,
-            "map_unmapped_complex_count": 0,
-        }
-    )
+    map_context = _listing_map_context()
     page_url = request.url.remove_query_params("append")
     next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
     previous_url = None
@@ -680,6 +694,11 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "sigungu_labels": sigungu_labels,
             "map_sidebar_url": _map_sidebar_url(request, filters),
             "map_search_url": _map_search_url(request, filters),
+            "map_data_url": _map_data_url(request, filters),
+            "map_cards_url": _map_cards_url(request, filters),
+            "listing_collection_target": (
+                "#listing-collection" if template_name == "listings/_listing_collection.html" else "#search-results"
+            ),
             **favorite_payloads,
             **map_context,
         },
@@ -694,6 +713,7 @@ def _render_search_error(
     *,
     is_htmx: bool,
     reason: str | None = None,
+    target: str = "#search-results",
 ):
     sido_labels, sigungu_labels = _region_labels()
     applicant = get_request_user_profile(request)
@@ -712,6 +732,7 @@ def _render_search_error(
         "is_admin": is_admin_user(request),
         "search_error": True,
         "search_error_reason": reason,
+        "search_error_target_id": target.removeprefix("#"),
     }
     response = templates.TemplateResponse(
         request,
@@ -720,7 +741,7 @@ def _render_search_error(
         status_code=200 if is_htmx else 400,
     )
     if is_htmx:
-        response.headers["HX-Retarget"] = "#search-results"
+        response.headers["HX-Retarget"] = target
         response.headers["HX-Reswap"] = "outerHTML"
     return response
 
@@ -732,12 +753,13 @@ def _render_or_client_error(
     template_name: str,
     *,
     is_htmx: bool,
+    error_target: str = "#search-results",
 ):
     try:
         return _render_result(request, db, filters, template_name)
     except ListingSearchValidationError as error:
         reason = "purchase_profile_incomplete" if str(error) == "purchase affordability profile incomplete" else None
-        return _render_search_error(request, filters, is_htmx=is_htmx, reason=reason)
+        return _render_search_error(request, filters, is_htmx=is_htmx, reason=reason, target=error_target)
 
 
 @router.get("/", response_class=HTMLResponse, name="home")
@@ -767,6 +789,46 @@ def search_listings(
     return _render_or_client_error(request, db, filters, template_name, is_htmx=is_htmx)
 
 
+@router.get("/api/listings/map-data", name="map_data")
+def map_data(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
+    map_zoom: int = Query(ge=0, le=21),
+    map_initial: bool = Query(False),
+):
+    applicant = get_request_user_profile(request)
+    if map_initial:
+        filters = replace(
+            filters,
+            map_west=None,
+            map_south=None,
+            map_east=None,
+            map_north=None,
+        )
+    try:
+        viewport = ListingMapService(db).build_viewport(filters, applicant, map_zoom)
+    except ListingSearchValidationError as error:
+        return JSONResponse({"detail": str(error)}, status_code=400)
+    return JSONResponse(viewport.to_dict())
+
+
+@router.get("/listings/map-cards", response_class=HTMLResponse, name="map_cards")
+def map_cards(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
+):
+    return _render_or_client_error(
+        request,
+        db,
+        filters,
+        "listings/_listing_collection.html",
+        is_htmx=True,
+        error_target="#listing-collection",
+    )
+
+
 @router.get("/listings/map", response_class=HTMLResponse, name="listing_map")
 def listing_map(
     request: Request,
@@ -792,6 +854,12 @@ def listing_map(
     map_context = _map_sidebar_context(db, result)
     if map_context["map_unmapped_complex_count"] and not map_context["map_markers"]:
         map_context["map_status_message"] = "이 검색 결과의 지도 좌표를 확인할 수 없습니다."
+    map_context.update(
+        {
+            "map_data_url": _map_data_url(request, filters),
+            "map_cards_url": _map_cards_url(request, filters),
+        }
+    )
     return templates.TemplateResponse(request, "listings/_map_sidebar.html", context=map_context)
 
 

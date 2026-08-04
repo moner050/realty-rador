@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import json
 import re
 from urllib.parse import parse_qs, urlparse
 
@@ -60,7 +59,60 @@ def _factory(*, verified_coordinate: bool):
     return factory
 
 
-def test_search_result_embeds_only_public_key_and_verified_marker_payload(monkeypatch):
+def _factory_with_three_complexes(*, two_verified: bool):
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    seen_at = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    coordinates = (("37.5500000", "126.8500000"), ("37.5600000", "127.8500000"), (None, None))
+    with factory() as session:
+        for complex_id, (latitude, longitude) in enumerate(coordinates, start=1):
+            verified = two_verified and latitude is not None
+            session.add(
+                ComplexCurrent(
+                    complex_id=complex_id,
+                    region_code=1150010200,
+                    name=f"Complex {complex_id}",
+                    normalized_name=f"Complex {complex_id}",
+                    address=f"Address {complex_id}",
+                    latitude=latitude if verified else None,
+                    longitude=longitude if verified else None,
+                    geocode_status=GEOCODE_STATUS_OK if verified else GEOCODE_STATUS_PENDING,
+                    state_hash=bytes([complex_id]) * 16,
+                    first_seen_at=seen_at,
+                    last_seen_at=seen_at,
+                    updated_at=seen_at,
+                )
+            )
+            session.add(
+                ListingCurrent(
+                    article_id=complex_id,
+                    complex_id=complex_id,
+                    region_code=1150010200,
+                    complex_name=f"Complex {complex_id}",
+                    address=f"Address {complex_id}",
+                    trade_type=1,
+                    primary_price=500_000_000,
+                    state_hash=bytes([complex_id + 10]) * 16,
+                    last_seen_job_id=1,
+                    first_seen_at=seen_at,
+                    last_seen_at=seen_at,
+                    last_changed_at=seen_at,
+                )
+            )
+        session.commit()
+    return factory
+
+
+def _override(factory):
+    def override_db():
+        with factory() as session:
+            yield session
+
+    return override_db
+
+
+def test_search_result_exposes_public_map_urls_without_marker_payload(monkeypatch):
     factory = _factory(verified_coordinate=True)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
     monkeypatch.setattr(settings, "naver_map_client_secret", "server-secret")
@@ -76,19 +128,94 @@ def test_search_result_embeds_only_public_key_and_verified_marker_payload(monkey
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert 'id="listings-map"' in response.text
-    assert 'id="listing-map-payload"' in response.text
+    assert "data-listing-map-root" in response.text
+    assert "data-map-data-url=" in response.text
+    assert "data-map-cards-url=" in response.text
+    assert 'id="listing-map-payload"' not in response.text
     assert "ncpKeyId=public-key" in response.text
     assert "지도 테스트 아파트" in response.text
-    assert "126.85" in response.text
     assert "server-secret" not in response.text
     assert response.text.index('src="https://oapi.map.naver.com/openapi/v3/maps.js') < response.text.index("<body")
     assert response.text.index('src="/static/listing-map.js"') < response.text.index("<body")
-    payload_match = re.search(
-        r'<script id="listing-map-payload"[^>]*>(.*?)</script>', response.text, re.DOTALL
+
+
+def test_map_data_endpoint_returns_all_aggregate_counts_without_geocoding(monkeypatch):
+    factory = _factory_with_three_complexes(two_verified=True)
+    monkeypatch.setattr(
+        home,
+        "NaverGeocoder",
+        lambda: (_ for _ in ()).throw(AssertionError("read-only endpoint")),
+        raising=False,
     )
-    assert payload_match is not None
-    assert json.loads(payload_match.group(1))[0]["complex_id"] == 1
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/api/listings/map-data?map_zoom=7")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matching_complex_count"] == 3
+    assert payload["mapped_complex_count"] == 2
+    assert payload["unmapped_complex_count"] == 1
+
+
+def test_initial_map_data_clears_viewport_bounds_before_aggregating():
+    factory = _factory_with_three_complexes(two_verified=True)
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get(
+            "/api/listings/map-data?map_zoom=7&map_initial=true"
+            "&map_west=126.80&map_south=37.50&map_east=126.90&map_north=37.60"
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["matching_complex_count"] == 3
+
+
+def test_map_cards_endpoint_returns_collection_without_a_second_map_root(monkeypatch):
+    factory = _factory_with_three_complexes(two_verified=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get(
+            "/listings/map-cards?map_west=126.80&map_south=37.50&map_east=126.90&map_north=37.60",
+            headers={"HX-Request": "true"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="listing-collection"' in response.text
+    assert "data-listing-map-root" not in response.text
+
+
+def test_map_cards_pager_targets_only_the_listing_collection():
+    factory = _factory_with_three_complexes(two_verified=True)
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/listings/map-cards?page_size=1", headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'hx-target="#listing-collection"' in response.text
+    assert 'hx-target="#search-results"' not in response.text
+
+
+def test_map_cards_validation_error_replaces_the_listing_collection():
+    factory = _factory_with_three_complexes(two_verified=True)
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/listings/map-cards?map_west=126.80", headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["HX-Retarget"] == "#listing-collection"
+    assert 'id="listing-collection"' in response.text
 
 
 def test_search_result_has_a_hidden_until_two_selected_comparison_tray(monkeypatch):
@@ -111,7 +238,7 @@ def test_search_result_has_a_hidden_until_two_selected_comparison_tray(monkeypat
     assert "data-favorite-compare-button" in response.text
 
 
-def test_search_result_starts_a_map_sidebar_refresh_without_a_verified_coordinate(monkeypatch):
+def test_search_result_exposes_map_data_endpoints_without_a_verified_coordinate(monkeypatch):
     factory = _factory(verified_coordinate=False)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
 
@@ -126,9 +253,11 @@ def test_search_result_starts_a_map_sidebar_refresh_without_a_verified_coordinat
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert 'id="listings-map"' not in response.text
-    assert "지도 좌표를 준비하고 있습니다." in response.text
-    assert 'hx-get="http://testserver/listings/map?' in response.text
+    assert "data-listing-map-root" in response.text
+    assert "data-listings-map" in response.text
+    assert 'data-map-data-url="http://testserver/api/listings/map-data?' in response.text
+    assert 'data-map-cards-url="http://testserver/listings/map-cards?' in response.text
+    assert 'id="listing-map-payload"' not in response.text
 
 
 def test_map_sidebar_does_not_geocode_or_commit_pending_coordinates(monkeypatch):
@@ -164,7 +293,7 @@ def test_map_sidebar_does_not_geocode_or_commit_pending_coordinates(monkeypatch)
         assert refreshed.longitude is None
 
 
-def test_search_response_has_a_map_sidebar_loader_but_no_alternate_view_controls(monkeypatch):
+def test_search_response_has_map_root_but_no_alternate_view_controls(monkeypatch):
     factory = _factory(verified_coordinate=False)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
 
@@ -180,7 +309,7 @@ def test_search_response_has_a_map_sidebar_loader_but_no_alternate_view_controls
 
     assert response.status_code == 200
     assert 'data-listing-map-root' in response.text
-    assert 'hx-get="http://testserver/listings/map?' in response.text
+    assert 'hx-get="http://testserver/listings/map?' not in response.text
     assert 'data-view-mode=' not in response.text
 
 
@@ -203,10 +332,12 @@ def test_map_bound_search_places_the_map_before_matching_cards_without_persistin
 
     assert response.status_code == 200
     assert response.text.index("data-listing-map-root") < response.text.index('id="listing-cards"')
-    assert 'data-map-search-url="http://testserver/listings/search?' in response.text
-    map_search_url = re.search(r'data-map-search-url="([^"]+)"', response.text).group(1)
-    assert "map_west" not in map_search_url
-    assert "map_south" not in map_search_url
+    map_data_url = re.search(r'data-map-data-url="([^"]+)"', response.text).group(1)
+    map_cards_url = re.search(r'data-map-cards-url="([^"]+)"', response.text).group(1)
+    assert "map_west" not in map_data_url
+    assert "map_south" not in map_data_url
+    assert "map_west" not in map_cards_url
+    assert "map_south" not in map_cards_url
     assert "h-[56vh]" in response.text
 
 

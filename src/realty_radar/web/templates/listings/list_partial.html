@@ -1,4 +1,3 @@
-{% import "listings/_listing_cards.html" as cards %}
 {% set trade_labels = {1: '매매', 2: '전세', 3: '월세', 4: '단기임대'} %}
 {% set mortgage_labels = {0: '융자 정보 미상', 1: '융자 없음', 2: '융자 있음'} %}
 {% set direction_labels = {1: '남', 2: '남동', 3: '동', 4: '북동', 5: '북', 6: '북서', 7: '서', 8: '남서'} %}
@@ -63,21 +62,10 @@
     </div>
 
     <section id="map-first-section" class="overflow-hidden rounded-2xl">
-        <div id="map-sticky-wrapper" data-listing-map-root data-map-search-url="{{ map_search_url }}" class="relative" hx-get="{{ map_sidebar_url }}" hx-trigger="load" hx-swap="innerHTML">
+        <div id="map-sticky-wrapper" class="relative">
             {% include "listings/_map_sidebar.html" %}
         </div>
     </section>
 
-    <section id="listing-collection" class="space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 class="text-base font-extrabold text-slate-900 dark:text-white">현재 지도 영역의 매물</h2>
-            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">좌표가 검증된 매물만 표시합니다.</p>
-        </div>
-        <div id="listing-cards" class="space-y-3" aria-live="polite">
-            {{ cards.render(result, listings, complex_urls, favorite_listing_payloads) }}
-        </div>
-        <div id="listing-pager" class="mt-4 text-center">
-            {{ cards.pager(result, previous_url, next_url, filters.has_map_bounds) }}
-        </div>
-    </section>
+    {% include "listings/_listing_collection.html" %}
 </div>

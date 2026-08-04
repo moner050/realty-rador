@@ -1,18 +1,11 @@
-<section class="relative min-h-[360px] w-full overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+<section data-listing-map-root data-map-data-url="{{ map_data_url }}" data-map-cards-url="{{ map_cards_url }}" class="relative min-h-[360px] w-full overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-xl dark:border-slate-800 dark:bg-slate-900">
     <div class="flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-3 text-xs font-bold dark:border-slate-800 dark:bg-slate-950">
-        <span class="flex items-center gap-1.5 text-slate-900 dark:text-white">매물 위치 지도</span>
-        {% if map_markers %}<span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-extrabold text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">{{ map_markers | length }}개 단지</span>{% endif %}
+        <span class="text-slate-900 dark:text-white">매물 위치 지도</span>
+        <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-extrabold text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+            <span data-map-matching-count>0</span>개 단지 · <span data-map-mapped-count>0</span>개 지도 표시 · <span data-map-unmapped-count>0</span>개 좌표 미확인
+        </span>
     </div>
-    {% if not naver_map_client_id %}
-    <p data-listing-map-status class="px-4 py-8 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">네이버 지도 설정이 필요합니다.</p>
-    {% elif map_loading %}
-    <p data-listing-map-status class="px-4 py-8 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">지도 좌표를 준비하고 있습니다.</p>
-    {% elif map_markers %}
-    <div id="listings-map" data-listings-map class="h-[56vh] min-h-[360px] max-h-[680px] w-full"></div>
-    <script id="listing-map-payload" data-listing-map-payload type="application/json">{{ map_markers | tojson | safe }}</script>
-    <p data-listing-map-status class="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">{% if map_unmapped_complex_count %}{{ map_unmapped_complex_count }}개 단지의 좌표를 추가로 확인 중입니다. {% endif %}단지를 선택하면 매물 요약을 볼 수 있습니다.</p>
-    {% else %}
-    <p data-listing-map-status class="px-4 py-8 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">{{ map_status_message or '이 검색 결과의 지도 좌표를 확인할 수 없습니다.' }}</p>
-    {% endif %}
-    <div data-map-loading hidden class="hidden absolute inset-0 flex items-center justify-center bg-white/75 text-sm font-bold text-indigo-700 backdrop-blur-sm dark:bg-slate-950/75 dark:text-indigo-300">지도 영역의 매물을 불러오는 중…</div>
+    <div data-listings-map class="h-[56vh] min-h-[360px] max-h-[680px] w-full"></div>
+    <p data-listing-map-status class="px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400"></p>
+    <div data-map-loading hidden class="hidden absolute inset-0 flex items-center justify-center bg-white/75 text-sm font-bold text-indigo-700 backdrop-blur-sm dark:bg-slate-950/75 dark:text-indigo-300">지도 영역의 매물을 불러오는 중입니다.</div>
 </section>

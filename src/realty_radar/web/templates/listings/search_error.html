@@ -1,4 +1,4 @@
-<div id="search-results" class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-amber-100" role="alert">
+<div id="{{ search_error_target_id or 'search-results' }}" class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-amber-100" role="alert">
     {% if search_error_reason == 'purchase_profile_incomplete' %}
     <p class="font-semibold">실구매 가능 조건을 먼저 설정해 주세요.</p>
     <p class="mt-1 text-sm text-amber-100/80">구매 투입 가능 현금과 월 총주거비를 먼저 설정한 뒤 다시 검색하세요.</p>
