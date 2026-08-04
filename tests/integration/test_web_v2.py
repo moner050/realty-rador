@@ -812,8 +812,11 @@ def test_result_header_owns_sort_control_and_advanced_conditions_contain_housing
 
     assert response.status_code == 200
     assert 'data-result-sort form="listing-search-form" name="sort_by"' in response.text
-    assert 'id="advanced-housing-conditions"' in response.text
-    assert re.search(r'<details[^>]*>.*id="advanced-housing-conditions".*</details>', response.text, re.DOTALL)
+    assert re.search(
+        r'<details\b(?=[^>]*\bid="advanced-housing-conditions")(?=[^>]*\bdata-filter-scope="housing-detail")[^>]*>.*?name="min_parking_per_household".*?name="max_subway_walk_minutes".*?</details>',
+        response.text,
+        re.DOTALL,
+    )
     assert 'addEventListener("change", (event) => {' in response.text
 
 
