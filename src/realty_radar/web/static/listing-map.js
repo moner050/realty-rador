@@ -76,23 +76,7 @@
         );
     }
 
-    function clearInitialFitSuppression(instance) {
-        instance.suppressInitialFitBounds = false;
-        if (instance.initialFitTimer) clearTimeout(instance.initialFitTimer);
-        instance.initialFitTimer = null;
-    }
-
-    function suppressInitialFitBounds(instance) {
-        clearInitialFitSuppression(instance);
-        instance.suppressInitialFitBounds = true;
-        instance.initialFitTimer = setTimeout(
-            () => clearInitialFitSuppression(instance),
-            VIEWPORT_DEBOUNCE_MS,
-        );
-    }
-
     function markViewportDirty(instance) {
-        clearInitialFitSuppression(instance);
         instance.mapRequestId += 1;
         instance.cardsRequestId += 1;
         instance.viewportDirty = true;
@@ -128,11 +112,6 @@
             new window.naver.maps.LatLng(south, west),
             new window.naver.maps.LatLng(north, east),
         );
-    }
-
-    function boundsFromPayload(bounds) {
-        if (!Array.isArray(bounds) || bounds.length !== 4) return null;
-        return boundsFromValues(bounds[0], bounds[1], bounds[2], bounds[3]);
     }
 
     function makeClusterOverlay(map, instance, cluster) {
@@ -207,12 +186,6 @@
             .then((payload) => {
                 if (instance.mapRequestId !== requestId) return;
                 renderViewport(root, map, instance, payload);
-                const initialBounds = boundsFromPayload(payload.bounds);
-                if (initial && !instance.initialBoundsApplied && initialBounds) {
-                    suppressInitialFitBounds(instance);
-                    map.fitBounds(initialBounds);
-                    instance.initialBoundsApplied = true;
-                }
             })
             .catch(() => {
                 if (instance.mapRequestId === requestId) setStatus(root, "지도 매물을 불러오지 못했습니다. 다시 시도해 주세요.");
@@ -281,11 +254,7 @@
             zoom: 7,
         });
         const instance = {
-            container,
-            domListeners: [],
             infoWindow: new window.naver.maps.InfoWindow(),
-            initialBoundsApplied: false,
-            initialFitTimer: null,
             listeners: [],
             mapRequestId: 0,
             cardsRequestId: 0,
@@ -293,27 +262,13 @@
             overlays: [],
             pendingMap: false,
             pendingCards: false,
-            suppressInitialFitBounds: false,
             viewportDirty: false,
             viewportTimer: null,
         };
-        if (typeof container.addEventListener === "function") {
-            ["wheel", "pointerdown", "touchstart", "keydown"].forEach((event) => {
-                const handler = () => clearInitialFitSuppression(instance);
-                container.addEventListener(event, handler);
-                instance.domListeners.push([event, handler]);
-            });
-        }
         instance.listeners.push(
             window.naver.maps.Event.addListener(map, "dragstart", () => { markViewportDirty(instance); }),
-            window.naver.maps.Event.addListener(map, "zoom_changed", () => {
-                if (!instance.suppressInitialFitBounds) markViewportDirty(instance);
-            }),
+            window.naver.maps.Event.addListener(map, "zoom_changed", () => { markViewportDirty(instance); }),
             window.naver.maps.Event.addListener(map, "idle", () => {
-                if (instance.suppressInitialFitBounds) {
-                    clearInitialFitSuppression(instance);
-                    return;
-                }
                 if (!instance.viewportDirty) return;
                 instance.viewportDirty = false;
                 scheduleViewportRefresh(root, map, instance);
@@ -331,10 +286,6 @@
         instance.mapRequestId += 1;
         instance.cardsRequestId += 1;
         if (instance.viewportTimer) clearTimeout(instance.viewportTimer);
-        clearInitialFitSuppression(instance);
-        if (typeof instance.container.removeEventListener === "function") {
-            instance.domListeners.forEach(([event, handler]) => instance.container.removeEventListener(event, handler));
-        }
         clearOverlays(instance);
         instance.listeners.forEach((listener) => window.naver.maps.Event.removeListener(listener));
         instance.infoWindow.close();

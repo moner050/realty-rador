@@ -58,22 +58,23 @@ function createRoot({ mapDataUrl, mapCardsUrl }) {
   };
 }
 
-function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl } = {}) {
+function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl, fitBoundsEventDelay = null } = {}) {
+  let currentZoom = zoom;
+  let currentViewport = { west: 126.8, south: 37.5, east: 126.9, north: 37.6 };
   const state = {
     maps: [], overlays: [], listeners: [], removedListeners: 0,
     mapFetches: [], cardFetches: [], cardSwaps: 0, mapSwaps: 0,
   };
   const fakeWindow = {
     location: { origin: 'http://localhost' },
-    fetch: fetchImpl || (async (url) => {
+    fetch: (url, options) => {
       const requested = String(url);
-      if (requested.includes('/api/listings/map-data')) {
-        state.mapFetches.push(requested);
-        return { ok: true, json: async () => mapData };
-      }
-      state.cardFetches.push(requested);
-      return { ok: true, text: async () => '<section id="listing-collection"></section>' };
-    }),
+      const isMapRequest = requested.includes('/api/listings/map-data');
+      (isMapRequest ? state.mapFetches : state.cardFetches).push(requested);
+      if (fetchImpl) return fetchImpl(url, options);
+      if (isMapRequest) return Promise.resolve({ ok: true, json: async () => mapData });
+      return Promise.resolve({ ok: true, text: async () => '<section id="listing-collection"></section>' });
+    },
     htmx: {
       swap(target) {
         if (target && target.id === 'listing-collection') state.cardSwaps += 1;
@@ -105,12 +106,18 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl } 
           }
           fitBounds(bounds) {
             this.fitBoundsCalls.push({ west: bounds.west, south: bounds.south, east: bounds.east, north: bounds.north });
+            if (fitBoundsEventDelay !== null) {
+              setTimeout(() => {
+                state.emitMap('zoom_changed');
+                state.emitMap('idle');
+              }, fitBoundsEventDelay);
+            }
           }
-          getZoom() { return zoom; }
+          getZoom() { return currentZoom; }
           getBounds() {
             return {
-              getSW() { return { lat: () => 37.5, lng: () => 126.8 }; },
-              getNE() { return { lat: () => 37.6, lng: () => 126.9 }; },
+              getSW() { return { lat: () => currentViewport.south, lng: () => currentViewport.west }; },
+              getNE() { return { lat: () => currentViewport.north, lng: () => currentViewport.east }; },
             };
           }
         },
@@ -148,6 +155,10 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl } 
   state.emitContainer = (root, event) => root.containerListeners
     .filter((listener) => listener.event === event)
     .forEach((listener) => listener.callback());
+  state.setViewport = ({ zoom: nextZoom = currentZoom, west, south, east, north }) => {
+    currentZoom = nextZoom;
+    currentViewport = { west, south, east, north };
+  };
   state.clickOverlay = async (index) => {
     const listener = state.listeners.find((item) => item.target === state.overlays[index] && item.event === 'click');
     assert.ok(listener, 'the overlay has a click listener');
@@ -174,18 +185,30 @@ test('map data renders a count cluster and does not swap cards while zoomed out'
   assert.equal(state.cardFetches.length, 0);
 });
 
-test('the first map payload applies its all-results bounds once', async () => {
+test('a delayed initial bounds response cannot start a fit whose late events refresh map or cards', async () => {
+  let resolveInitial;
   const { controller, state } = loadController({
-    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+    fetchImpl: () => new Promise((resolve) => { resolveInitial = resolve; }),
+    fitBoundsEventDelay: 350,
   });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
 
   controller.mount(root);
+  await state.advanceDebounce();
+  resolveInitial({
+    ok: true,
+    json: async () => ({ ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] }),
+  });
+  await state.flushFetches();
+  await new Promise((resolve) => setTimeout(resolve, 700));
   await state.flushFetches();
 
-  assert.deepEqual(state.maps[0].fitBoundsCalls, [
-    { west: 126.8, south: 37.5, east: 126.9, north: 37.6 },
-  ]);
+  assert.equal(state.maps[0].options.center.latitude, 36.5);
+  assert.equal(state.maps[0].options.center.longitude, 127.8);
+  assert.equal(state.maps[0].options.zoom, 7);
+  assert.deepEqual(state.maps[0].fitBoundsCalls, []);
+  assert.equal(state.mapFetches.length, 1);
+  assert.equal(state.cardFetches.length, 0);
 });
 
 test('map and card responses for the previous viewport are ignored during the debounce window', async () => {
@@ -214,112 +237,92 @@ test('map and card responses for the previous viewport are ignored during the de
   assert.equal(state.cardSwaps, 0);
 });
 
-test('initial fitBounds events do not schedule a viewport refresh', async () => {
+test('a user drag during the initial period refreshes exactly the changed settled viewport', async () => {
   const { controller, state } = loadController({
-    zoom: 12,
     mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
   });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
 
   controller.mount(root);
   await state.flushFetches();
-  state.emitMap('zoom_changed');
-  state.emitMap('idle');
-  await state.advanceDebounce();
-  await state.flushFetches();
-
-  assert.equal(state.mapFetches.length, 1);
-  assert.equal(state.cardFetches.length, 0);
-});
-
-test('a user drag before the initial fitBounds idle still refreshes the viewport', async () => {
-  const { controller, state } = loadController({
-    zoom: 12,
-    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
-  });
-  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
-
-  controller.mount(root);
-  await state.flushFetches();
+  state.setViewport({ zoom: 12, west: 126.91, south: 37.61, east: 127.01, north: 37.71 });
   state.emitMap('dragstart');
-  state.emitMap('zoom_changed');
   state.emitMap('idle');
   await state.advanceDebounce();
   await state.flushFetches();
 
   assert.equal(state.mapFetches.length, 2);
   assert.equal(state.cardFetches.length, 1);
+  const mapRequest = new URL(state.mapFetches[1]);
+  const cardRequest = new URL(state.cardFetches[0]);
+  for (const request of [mapRequest, cardRequest]) {
+    assert.equal(request.searchParams.get('map_west'), '126.91');
+    assert.equal(request.searchParams.get('map_south'), '37.61');
+    assert.equal(request.searchParams.get('map_east'), '127.01');
+    assert.equal(request.searchParams.get('map_north'), '37.71');
+    assert.equal(request.searchParams.get('map_zoom'), '12');
+  }
 });
 
-test('a cluster click before the initial fitBounds idle still refreshes the viewport', async () => {
+test('wheel, keyboard, pointer, and touch zooms refresh exactly once even when NAVER emits first', async (t) => {
+  for (const inputEvent of ['wheel', 'keydown', 'pointerdown', 'touchstart']) {
+    await t.test(inputEvent, async () => {
+      const { controller, state } = loadController({
+        mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+      });
+      const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+      controller.mount(root);
+      await state.flushFetches();
+      state.setViewport({ zoom: 12, west: 126.92, south: 37.62, east: 127.02, north: 37.72 });
+      state.emitMap('zoom_changed');
+      state.emitContainer(root, inputEvent);
+      state.emitMap('idle');
+      await state.advanceDebounce();
+      await state.flushFetches();
+
+      assert.equal(state.mapFetches.length, 2);
+      assert.equal(state.cardFetches.length, 1);
+      const mapRequest = new URL(state.mapFetches[1]);
+      const cardRequest = new URL(state.cardFetches[0]);
+      for (const request of [mapRequest, cardRequest]) {
+        assert.equal(request.searchParams.get('map_west'), '126.92');
+        assert.equal(request.searchParams.get('map_south'), '37.62');
+        assert.equal(request.searchParams.get('map_east'), '127.02');
+        assert.equal(request.searchParams.get('map_north'), '37.72');
+        assert.equal(request.searchParams.get('map_zoom'), '12');
+      }
+    });
+  }
+});
+
+test('a cluster click during the initial period fits its bounds and refreshes the changed settled viewport once', async () => {
   const { controller, state } = loadController({
-    zoom: 12,
-    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+    mapData: { ...singleClusterPayload, bounds: [126.7, 37.4, 127.0, 37.7] },
   });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
 
   controller.mount(root);
   await state.flushFetches();
   await state.clickOverlay(0);
+  state.setViewport({ zoom: 12, west: 126.82, south: 37.52, east: 126.88, north: 37.58 });
   state.emitMap('zoom_changed');
-  state.emitMap('idle');
-  await state.advanceDebounce();
-  await state.flushFetches();
-
-  assert.equal(state.mapFetches.length, 2);
-  assert.equal(state.cardFetches.length, 1);
-});
-
-test('a direct user zoom during initial fit suppression refreshes the settled viewport', async () => {
-  const { controller, state } = loadController({
-    zoom: 12,
-    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
-  });
-  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
-
-  controller.mount(root);
-  await state.flushFetches();
-  state.emitContainer(root, 'wheel');
-  state.emitMap('zoom_changed');
-  state.emitMap('idle');
-  await state.advanceDebounce();
-  await state.flushFetches();
-
-  assert.equal(state.mapFetches.length, 2);
-  assert.equal(state.cardFetches.length, 1);
-});
-
-test('initial fit suppression expires when its idle event never arrives', async () => {
-  const { controller, state } = loadController({
-    zoom: 12,
-    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
-  });
-  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
-
-  controller.mount(root);
-  await state.flushFetches();
-  await state.advanceDebounce();
-  state.emitMap('zoom_changed');
-  state.emitMap('idle');
-  await state.advanceDebounce();
-  await state.flushFetches();
-
-  assert.equal(state.mapFetches.length, 2);
-  assert.equal(state.cardFetches.length, 1);
-});
-
-test('cluster click fits its stored bounds and a valid idle later refreshes cards only', async () => {
-  const { controller, state } = loadController({ zoom: 12, mapData: singleClusterPayload });
-  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
-
-  controller.mount(root);
-  await state.flushFetches();
-  await state.clickOverlay(0);
   state.emitMap('idle');
   await state.advanceDebounce();
   await state.flushFetches();
 
   assert.deepEqual(state.maps[0].fitBoundsCalls[0], { west: 126.8, south: 37.5, east: 126.9, north: 37.6 });
+  assert.equal(state.mapFetches.length, 2);
+  assert.equal(state.cardFetches.length, 1);
+  const mapRequest = new URL(state.mapFetches[1]);
+  const cardRequest = new URL(state.cardFetches[0]);
+  for (const request of [mapRequest, cardRequest]) {
+    assert.equal(request.searchParams.get('map_west'), '126.82');
+    assert.equal(request.searchParams.get('map_south'), '37.52');
+    assert.equal(request.searchParams.get('map_east'), '126.88');
+    assert.equal(request.searchParams.get('map_north'), '37.58');
+    assert.equal(request.searchParams.get('map_zoom'), '12');
+  }
   assert.equal(state.cardSwaps, 1);
   assert.equal(state.mapSwaps, 0);
   assert.equal(state.maps.length, 1);
@@ -356,14 +359,21 @@ test('stale map and card responses cannot replace the latest settled viewport', 
   assert.equal(state.cardSwaps, 1);
 });
 
-test('unmount removes dynamic overlays and every map listener', async () => {
+test('unmount cancels a pending viewport refresh and removes dynamic overlays and every map listener', async () => {
   const { controller, state } = loadController({ mapData: singleClusterPayload });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
 
   controller.mount(root);
   await state.flushFetches();
+  state.setViewport({ zoom: 12, west: 126.91, south: 37.61, east: 127.01, north: 37.71 });
+  state.emitMap('dragstart');
+  state.emitMap('idle');
   controller.unmount(root);
+  await state.advanceDebounce();
+  await state.flushFetches();
 
   assert.equal(state.overlays[0].map, null);
   assert.equal(state.removedListeners, state.listeners.length);
+  assert.equal(state.mapFetches.length, 1);
+  assert.equal(state.cardFetches.length, 0);
 });
