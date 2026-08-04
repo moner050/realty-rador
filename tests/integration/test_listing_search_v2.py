@@ -10,6 +10,7 @@ from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from realty_radar.application.listing_map_service import ListingMapService
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.entities import ApplicantProfile
@@ -197,16 +198,21 @@ def test_map_bounds_include_edges_but_exclude_unverified_and_outside_listings():
     )
     session.commit()
 
-    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
-        ListingSearchFilter(
-            map_west=Decimal("126.8000000"),
-            map_south=Decimal("37.5000000"),
-            map_east=Decimal("126.8500000"),
-            map_north=Decimal("37.5500000"),
-        )
+    filters = ListingSearchFilter(
+        map_west=Decimal("126.8000000"),
+        map_south=Decimal("37.5000000"),
+        map_east=Decimal("126.8500000"),
+        map_north=Decimal("37.5500000"),
     )
+    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(filters)
+    viewport = ListingMapService(session).build_viewport(filters, applicant=None, zoom=14)
 
     assert [row.article_id for row in result.items] == [2001, 2002]
+    assert (
+        viewport.matching_complex_count,
+        viewport.mapped_complex_count,
+        viewport.unmapped_complex_count,
+    ) == (1, 1, 0)
 
 
 def test_map_candidate_rows_obey_the_same_price_and_bounds_predicates_as_listing_search():

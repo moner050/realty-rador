@@ -228,6 +228,102 @@ def test_map_viewport_aggregates_all_matching_complexes_even_when_listing_page_s
     ] == [(2, 3, 500_000_000, 600_000_000)]
 
 
+def test_sql_map_viewport_matches_reference_stream_for_ordinary_filters():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.5100000"), longitude=Decimal("126.8100000"), status=GEOCODE_STATUS_OK),
+            _complex(3),
+            _listing(1, 1, 510_000_000),
+            _listing(2, 1, 500_000_000),
+            _listing(3, 2, 600_000_000),
+            _listing(4, 3, 700_000_000),
+        ]
+    )
+    session.commit()
+    service = ListingMapService(session)
+    filters = ListingSearchFilter()
+
+    expected = service._build_stream_viewport(filters, None, zoom=14)
+
+    assert service.build_viewport(filters, None, zoom=14) == expected
+
+
+def test_ordinary_map_viewport_does_not_stream_listing_entities(monkeypatch):
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.5100000"), longitude=Decimal("126.8100000"), status=GEOCODE_STATUS_OK),
+            _complex(3),
+            _listing(1, 1, 510_000_000),
+            _listing(2, 2, 600_000_000),
+            _listing(3, 3, 700_000_000),
+        ]
+    )
+    session.commit()
+    from realty_radar.application.listing_search_service import ListingSearchService
+
+    monkeypatch.setattr(
+        ListingSearchService,
+        "stream_map_matching_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not stream entities")),
+    )
+
+    viewport = ListingMapService(session).build_viewport(ListingSearchFilter(), None, zoom=14)
+
+    assert viewport.matching_complex_count == 3
+
+
+def test_ordinary_map_viewport_projects_only_aggregate_candidate_columns():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _listing(1, 1, 510_000_000),
+        ]
+    )
+    session.commit()
+    select_statements = []
+
+    def capture_selects(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith(("SELECT", "WITH")):
+            select_statements.append(statement.lower())
+
+    event.listen(session.bind, "before_cursor_execute", capture_selects)
+    try:
+        ListingMapService(session).build_viewport(ListingSearchFilter(), None, zoom=14)
+    finally:
+        event.remove(session.bind, "before_cursor_execute", capture_selects)
+
+    assert select_statements
+    assert all("listing_current.description" not in statement for statement in select_statements)
+    assert all("listing_current.article_id" not in statement for statement in select_statements)
+
+
+def test_policy_map_viewport_keeps_stream_fallback(monkeypatch):
+    session = _session()
+    from realty_radar.application.listing_search_service import ListingSearchService
+
+    original = ListingSearchService.stream_map_matching_rows
+    calls = 0
+
+    def spy(self, filters, applicant):
+        nonlocal calls
+        calls += 1
+        yield from original(self, filters, applicant)
+
+    monkeypatch.setattr(ListingSearchService, "stream_map_matching_rows", spy)
+
+    viewport = ListingMapService(session).build_viewport(
+        ListingSearchFilter(only_eligible_loans=True), None, zoom=14
+    )
+
+    assert calls == 1
+    assert viewport.matching_complex_count == 0
+
+
 def test_map_viewport_returns_single_markers_after_zoomed_in_cell_split():
     session = _session()
     session.add_all(

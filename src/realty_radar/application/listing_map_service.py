@@ -5,12 +5,16 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_FLOOR
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from realty_radar.domain.listing.models import SearchResult
 from realty_radar.domain.listing.filters import ListingSearchFilter
-from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK, ComplexCurrent
+from realty_radar.infrastructure.database.models.v2 import (
+    GEOCODE_STATUS_OK,
+    ComplexCurrent,
+    ListingCurrent,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +147,84 @@ class ListingMapService:
         self.session = session
 
     def build_viewport(
+        self,
+        filters: ListingSearchFilter,
+        applicant: Any,
+        zoom: int,
+    ) -> ListingMapViewport:
+        from realty_radar.application.listing_search_service import ListingSearchService
+
+        if filters.only_eligible_loans or filters.only_purchase_affordable:
+            return self._build_stream_viewport(filters, applicant, zoom)
+
+        statement, _ = ListingSearchService(self.session).map_candidate_rows(filters, applicant)
+        return self._build_sql_viewport(statement, filters, zoom)
+
+    def _build_sql_viewport(
+        self,
+        statement,
+        filters: ListingSearchFilter,
+        zoom: int,
+    ) -> ListingMapViewport:
+        candidates = statement.with_only_columns(
+            ListingCurrent.complex_id,
+            ListingCurrent.complex_name,
+            ListingCurrent.address,
+            ListingCurrent.primary_price,
+            maintain_column_froms=True,
+        ).cte("map_candidates")
+        matching_complex_count = self.session.scalar(
+            select(func.count(func.distinct(candidates.c.complex_id)))
+        ) or 0
+        aggregate_statement = (
+            select(
+                candidates.c.complex_id,
+                func.min(candidates.c.complex_name).label("complex_name"),
+                func.min(candidates.c.address).label("address"),
+                ComplexCurrent.latitude,
+                ComplexCurrent.longitude,
+                func.count().label("listing_count"),
+                func.min(candidates.c.primary_price).label("min_price"),
+                func.max(candidates.c.primary_price).label("max_price"),
+            )
+            .join(ComplexCurrent, ComplexCurrent.complex_id == candidates.c.complex_id)
+            .where(
+                ComplexCurrent.geocode_status == GEOCODE_STATUS_OK,
+                ComplexCurrent.latitude.is_not(None),
+                ComplexCurrent.longitude.is_not(None),
+            )
+            .group_by(candidates.c.complex_id, ComplexCurrent.latitude, ComplexCurrent.longitude)
+            .order_by(candidates.c.complex_id)
+        )
+        complexes = tuple(
+            ListingMapMarker(
+                complex_id=row.complex_id,
+                complex_name=row.complex_name,
+                address=row.address,
+                latitude=float(row.latitude),
+                longitude=float(row.longitude),
+                listing_count=row.listing_count,
+                min_price=row.min_price,
+                max_price=row.max_price,
+            )
+            for row in self.session.execute(aggregate_statement)
+        )
+        markers, clusters = cluster_map_complexes(complexes, zoom)
+        bounds = (
+            (float(filters.map_west), float(filters.map_south), float(filters.map_east), float(filters.map_north))
+            if filters.has_map_bounds
+            else None
+        )
+        return ListingMapViewport(
+            markers=markers,
+            clusters=clusters,
+            matching_complex_count=matching_complex_count,
+            mapped_complex_count=len(complexes),
+            unmapped_complex_count=matching_complex_count - len(complexes),
+            bounds=bounds,
+        )
+
+    def _build_stream_viewport(
         self,
         filters: ListingSearchFilter,
         applicant: Any,
