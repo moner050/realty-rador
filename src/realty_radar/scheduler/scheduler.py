@@ -2,7 +2,7 @@ import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from realty_radar.scheduler.schedules import schedule_regular_search_job
+from realty_radar.scheduler.schedules import schedule_geocode_backfill, schedule_regular_search_job
 
 
 class TaskScheduler:
@@ -15,7 +15,17 @@ class TaskScheduler:
         """매일 오전 06:00 정각 전체 지역(서울/경기/인천) 정기 크롤링 작업 자동 등록."""
         print("[Scheduler] Realty Radar 매일 06시 전체 스크래핑 예약 스케줄러를 시작합니다...")
 
-        # 매일 오전 06시 정각 전체 지역 수집 작업 등록 (크론: 0 6 * * *)
+        # 매일 오전 05:30 단지 좌표 사전 적재 작업 등록 (크론: 30 5 * * *)
+        self.scheduler.add_job(
+            schedule_geocode_backfill,
+            trigger=CronTrigger.from_crontab("30 5 * * *"),
+            id="job_geocode_complexes",
+            name="네이버 지도 단지 좌표 사전 적재",
+            replace_existing=True,
+            misfire_grace_time=3600,
+            coalesce=True,
+        )
+
         self.scheduler.add_job(
             schedule_regular_search_job,
             trigger=CronTrigger.from_crontab("0 6 * * *"),

@@ -1,7 +1,28 @@
 from realty_radar.application.crawl_job_service import CrawlJobService
 from realty_radar.application.listing_batch_writer import utc_now
+from realty_radar.enrichment.naver_maps.backfill import run_geocode_sweep
+from realty_radar.enrichment.naver_maps.geocoder import NaverGeocoder
 from realty_radar.infrastructure.database.models import SchedulerLog
 from realty_radar.infrastructure.database.session import SessionFactory
+
+
+def schedule_geocode_backfill() -> None:
+    stats = run_geocode_sweep(
+        SessionFactory,
+        NaverGeocoder(),
+        now=utc_now(),
+        batch_size=100,
+        max_batches=5,
+        max_requests=500,
+    )
+    print(
+        "[Scheduler] geocode "
+        f"selected={stats.selected_count} "
+        f"requests={stats.external_request_count} "
+        f"ok={stats.ok_count} "
+        f"not_found={stats.not_found_count} "
+        f"failed={stats.failed_count}"
+    )
 
 
 def schedule_regular_search_job(scope_code: int | None = None) -> None:
