@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from decimal import Decimal
 import json
 import re
 from urllib.parse import parse_qs, urlparse
@@ -12,9 +11,8 @@ from starlette.requests import Request
 
 from realty_radar.config import settings
 from realty_radar.domain.listing.filters import ListingSearchFilter
-from realty_radar.enrichment.naver_maps.geocoder import GeocodeResult, GeocodeStatus
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
-from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK
+from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK, GEOCODE_STATUS_PENDING
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.main import app
 from realty_radar.web.routes import home
@@ -133,23 +131,19 @@ def test_search_result_starts_a_map_sidebar_refresh_without_a_verified_coordinat
     assert 'hx-get="http://testserver/listings/map?' in response.text
 
 
-def test_map_sidebar_geocodes_the_current_pending_result_and_returns_a_verified_marker(monkeypatch):
+def test_map_sidebar_does_not_geocode_or_commit_pending_coordinates(monkeypatch):
     factory = _factory(verified_coordinate=False)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
-    monkeypatch.setattr(settings, "naver_map_client_secret", "server-secret")
 
-    class StaticGeocoder:
-        is_configured = True
+    class GeocoderConstructed(BaseException):
+        pass
 
-        def geocode(self, address):
-            assert address == "서울특별시 강서구 테스트로 1"
-            return GeocodeResult(
-                GeocodeStatus.OK,
-                latitude=Decimal("37.5500000"),
-                longitude=Decimal("126.8500000"),
-            )
-
-    monkeypatch.setattr(home, "NaverGeocoder", StaticGeocoder, raising=False)
+    monkeypatch.setattr(
+        home,
+        "NaverGeocoder",
+        lambda: (_ for _ in ()).throw(GeocoderConstructed("must not construct geocoder")),
+        raising=False,
+    )
 
     def override_db():
         with factory() as session:
@@ -162,17 +156,12 @@ def test_map_sidebar_geocodes_the_current_pending_result_and_returns_a_verified_
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    payload_match = re.search(
-        r'<script id="listing-map-payload"[^>]*>(.*?)</script>', response.text, re.DOTALL
-    )
-    assert payload_match is not None
-    assert json.loads(payload_match.group(1))[0]["complex_id"] == 1
-    assert "server-secret" not in response.text
+    assert 'id="listing-map-payload"' not in response.text
     with factory() as session:
         refreshed = session.get(ComplexCurrent, 1)
-        assert refreshed.geocode_status == GEOCODE_STATUS_OK
-        assert refreshed.latitude == Decimal("37.5500000")
-        assert refreshed.longitude == Decimal("126.8500000")
+        assert refreshed.geocode_status == GEOCODE_STATUS_PENDING
+        assert refreshed.latitude is None
+        assert refreshed.longitude is None
 
 
 def test_search_response_has_a_map_sidebar_loader_but_no_alternate_view_controls(monkeypatch):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal, ROUND_CEILING
 from time import perf_counter
 from typing import Annotated
@@ -24,8 +24,6 @@ from realty_radar.domain.listing.commute_map import get_sigungu_codes_within_com
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.entities import LoanEligibilityStatus
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
-from realty_radar.enrichment.naver_maps.backfill import ComplexGeocodeBackfill
-from realty_radar.enrichment.naver_maps.geocoder import NaverGeocoder
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.auth import SESSION_COOKIE_NAME, is_authenticated, verify_session_token, get_current_username, is_admin_user
 from realty_radar.web.jinja_filters import register_jinja_filters
@@ -791,31 +789,8 @@ def listing_map(
             },
         )
 
-    map_service = ListingMapService(db)
-    complex_ids = map_service.complex_ids(result)
-    status_message = None
-    if settings.naver_map_client_id and complex_ids:
-        try:
-            stats = ComplexGeocodeBackfill(db, NaverGeocoder()).run(
-                batch_size=min(len(complex_ids), 20),
-                now=datetime.now(timezone.utc).replace(tzinfo=None),
-                complex_ids=complex_ids,
-            )
-            db.commit()
-            if stats.failed_count:
-                status_message = "일부 단지의 지도 좌표를 다시 확인하고 있습니다."
-            elif stats.not_found_count:
-                status_message = "일부 단지의 주소에서 지도 좌표를 찾지 못했습니다."
-        except RuntimeError:
-            db.rollback()
-            status_message = "네이버 지도 서버 설정이 필요합니다."
-        except Exception:
-            db.rollback()
-            logger.exception("listing map sidebar geocoding failed")
-            status_message = "지도 좌표를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
-
-    map_context = _map_sidebar_context(db, result, status_message=status_message)
-    if map_context["map_unmapped_complex_count"] and not map_context["map_markers"] and not status_message:
+    map_context = _map_sidebar_context(db, result)
+    if map_context["map_unmapped_complex_count"] and not map_context["map_markers"]:
         map_context["map_status_message"] = "이 검색 결과의 지도 좌표를 확인할 수 없습니다."
     return templates.TemplateResponse(request, "listings/_map_sidebar.html", context=map_context)
 
