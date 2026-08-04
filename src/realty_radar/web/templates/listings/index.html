@@ -118,7 +118,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 {% macro single_slider(id, name, value, minimum, maximum, step, label, unit, scale=1, helper='', variant='card') -%}
 <div data-single-slider data-scale="{{ scale }}" data-unit="{{ unit }}"
      {% if variant == 'embedded' %}data-slider-variant="embedded"{% endif %}
-     class="{% if variant == 'embedded' %}border-t border-slate-200 dark:border-slate-800 pt-4 text-slate-900 dark:text-slate-100{% else %}group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100{% endif %}">
+     class="{% if variant == 'embedded' %}group border-t border-slate-200 dark:border-slate-800 pt-4 text-slate-900 dark:text-slate-100{% else %}group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100{% endif %}">
     <input id="{{ id }}-value" type="hidden" name="{{ name }}" data-slider-name="{{ name }}" value="{{ value if value is not none else '' }}">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
         <label for="{{ id }}" class="text-xs font-bold text-slate-900 dark:text-slate-200">{{ label }}</label>
@@ -154,7 +154,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 {% macro range_slider(key, min_id, min_name, min_value, max_id, max_name, max_value, minimum, maximum, step, label, unit, helper='', variant='card') -%}
 <div data-range-slider="{{ key }}" data-unit="{{ unit }}"
      {% if variant == 'embedded' %}data-slider-variant="embedded"{% endif %}
-     class="{% if variant == 'embedded' %}border-t border-slate-200 dark:border-slate-800 pt-4 text-slate-900 dark:text-slate-100{% else %}group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100{% endif %}">
+     class="{% if variant == 'embedded' %}group border-t border-slate-200 dark:border-slate-800 pt-4 text-slate-900 dark:text-slate-100{% else %}group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-4 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100{% endif %}">
     <input id="{{ min_id }}-value" type="hidden" name="{{ min_name }}" data-slider-name="{{ min_name }}" value="{{ min_value if min_value is not none else '' }}">
     <input id="{{ max_id }}-value" type="hidden" name="{{ max_name }}" data-slider-name="{{ max_name }}" value="{{ max_value if max_value is not none else '' }}">
     

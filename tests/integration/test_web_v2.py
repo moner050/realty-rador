@@ -52,6 +52,12 @@ def test_detailed_filter_groups_budget_and_progressive_housing_controls():
     assert 'name="min_construction_year"' in response.text
     assert 'name="max_subway_walk_minutes"' in response.text
     assert 'data-slider-variant="embedded"' in response.text
+    embedded_price_slider = re.search(
+        r'<div\s+data-range-slider="price"[^>]*data-slider-variant="embedded"[^>]*class="([^"]+)"',
+        response.text,
+    )
+    assert embedded_price_slider is not None
+    assert "group" in embedded_price_slider.group(1).split()
 
 
 def test_listing_cards_link_to_fin_land_article_pages():
