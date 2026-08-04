@@ -15,6 +15,52 @@ from realty_radar.web.main import app
 from realty_radar.web.routes import home as home_routes
 
 
+def test_listing_card_distinguishes_detail_states_before_and_after_collection():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    seen_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    with factory() as session:
+        for article_id, checked_at in ((71, None), (72, seen_at)):
+            session.add(
+                ListingCurrent(
+                    article_id=article_id,
+                    complex_id=article_id,
+                    region_code=1150010200,
+                    complex_name=f"detail-state-{article_id}",
+                    address="Seoul test street 1",
+                    trade_type=1,
+                    primary_price=500_000_000,
+                    detail_checked_at=checked_at,
+                    state_hash=bytes([article_id]) * 16,
+                    last_seen_job_id=1,
+                    first_seen_at=seen_at,
+                    last_seen_at=seen_at,
+                    last_changed_at=seen_at,
+                )
+            )
+        session.commit()
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/?group_by_complex=false")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    unchecked_html, checked_html = response.text.split('data-article-id="72"')
+    assert unchecked_html.count("\uc8fc\ucc28 \ud655\uc778 \ub300\uae30") == 2
+    assert unchecked_html.count("\uad00\ub9ac\ube44 \ud655\uc778 \ub300\uae30") == 2
+    assert unchecked_html.count("\uc5ed \ub3c4\ubcf4 \ud655\uc778 \ub300\uae30") == 2
+    assert checked_html.count("\uc8fc\ucc28 \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 2
+    assert checked_html.count("\uad00\ub9ac\ube44 \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 2
+    assert checked_html.count("\uc5ed \ub3c4\ubcf4 \uc6d0\ubcf8 \ubbf8\uc81c\uacf5") == 2
+
+
 def test_grouped_search_lazy_loads_twenty_complex_listings_without_initial_cards():
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
