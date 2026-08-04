@@ -20,7 +20,14 @@ const singleClusterPayload = {
 };
 
 function createRoot({ mapDataUrl, mapCardsUrl }) {
-  const container = {};
+  const containerListeners = [];
+  const container = {
+    addEventListener(event, callback) { containerListeners.push({ event, callback }); },
+    removeEventListener(event, callback) {
+      const index = containerListeners.findIndex((item) => item.event === event && item.callback === callback);
+      if (index >= 0) containerListeners.splice(index, 1);
+    },
+  };
   const status = { textContent: '' };
   const loading = {
     hidden: true,
@@ -34,6 +41,7 @@ function createRoot({ mapDataUrl, mapCardsUrl }) {
   };
   return {
     container,
+    containerListeners,
     status,
     dataset: { mapDataUrl, mapCardsUrl },
     matches(selector) { return selector === '[data-listing-map-root]'; },
@@ -136,6 +144,9 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl } 
   state.flushFetches = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
   state.emitMap = (event) => state.listeners
     .filter((listener) => state.maps.includes(listener.target) && listener.event === event)
+    .forEach((listener) => listener.callback());
+  state.emitContainer = (root, event) => root.containerListeners
+    .filter((listener) => listener.event === event)
     .forEach((listener) => listener.callback());
   state.clickOverlay = async (index) => {
     const listener = state.listeners.find((item) => item.target === state.overlays[index] && item.event === 'click');
@@ -250,6 +261,44 @@ test('a cluster click before the initial fitBounds idle still refreshes the view
   controller.mount(root);
   await state.flushFetches();
   await state.clickOverlay(0);
+  state.emitMap('zoom_changed');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.mapFetches.length, 2);
+  assert.equal(state.cardFetches.length, 1);
+});
+
+test('a direct user zoom during initial fit suppression refreshes the settled viewport', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitContainer(root, 'wheel');
+  state.emitMap('zoom_changed');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.mapFetches.length, 2);
+  assert.equal(state.cardFetches.length, 1);
+});
+
+test('initial fit suppression expires when its idle event never arrives', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+  controller.mount(root);
+  await state.flushFetches();
+  await state.advanceDebounce();
   state.emitMap('zoom_changed');
   state.emitMap('idle');
   await state.advanceDebounce();

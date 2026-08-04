@@ -76,8 +76,23 @@
         );
     }
 
-    function markViewportDirty(instance) {
+    function clearInitialFitSuppression(instance) {
         instance.suppressInitialFitBounds = false;
+        if (instance.initialFitTimer) clearTimeout(instance.initialFitTimer);
+        instance.initialFitTimer = null;
+    }
+
+    function suppressInitialFitBounds(instance) {
+        clearInitialFitSuppression(instance);
+        instance.suppressInitialFitBounds = true;
+        instance.initialFitTimer = setTimeout(
+            () => clearInitialFitSuppression(instance),
+            VIEWPORT_DEBOUNCE_MS,
+        );
+    }
+
+    function markViewportDirty(instance) {
+        clearInitialFitSuppression(instance);
         instance.mapRequestId += 1;
         instance.cardsRequestId += 1;
         instance.viewportDirty = true;
@@ -194,7 +209,7 @@
                 renderViewport(root, map, instance, payload);
                 const initialBounds = boundsFromPayload(payload.bounds);
                 if (initial && !instance.initialBoundsApplied && initialBounds) {
-                    instance.suppressInitialFitBounds = true;
+                    suppressInitialFitBounds(instance);
                     map.fitBounds(initialBounds);
                     instance.initialBoundsApplied = true;
                 }
@@ -266,8 +281,11 @@
             zoom: 7,
         });
         const instance = {
+            container,
+            domListeners: [],
             infoWindow: new window.naver.maps.InfoWindow(),
             initialBoundsApplied: false,
+            initialFitTimer: null,
             listeners: [],
             mapRequestId: 0,
             cardsRequestId: 0,
@@ -279,6 +297,13 @@
             viewportDirty: false,
             viewportTimer: null,
         };
+        if (typeof container.addEventListener === "function") {
+            ["wheel", "pointerdown", "touchstart", "keydown"].forEach((event) => {
+                const handler = () => clearInitialFitSuppression(instance);
+                container.addEventListener(event, handler);
+                instance.domListeners.push([event, handler]);
+            });
+        }
         instance.listeners.push(
             window.naver.maps.Event.addListener(map, "dragstart", () => { markViewportDirty(instance); }),
             window.naver.maps.Event.addListener(map, "zoom_changed", () => {
@@ -286,7 +311,7 @@
             }),
             window.naver.maps.Event.addListener(map, "idle", () => {
                 if (instance.suppressInitialFitBounds) {
-                    instance.suppressInitialFitBounds = false;
+                    clearInitialFitSuppression(instance);
                     return;
                 }
                 if (!instance.viewportDirty) return;
@@ -306,6 +331,10 @@
         instance.mapRequestId += 1;
         instance.cardsRequestId += 1;
         if (instance.viewportTimer) clearTimeout(instance.viewportTimer);
+        clearInitialFitSuppression(instance);
+        if (typeof instance.container.removeEventListener === "function") {
+            instance.domListeners.forEach(([event, handler]) => instance.container.removeEventListener(event, handler));
+        }
         clearOverlays(instance);
         instance.listeners.forEach((listener) => window.naver.maps.Event.removeListener(listener));
         instance.infoWindow.close();
