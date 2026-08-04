@@ -2,20 +2,24 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, select, update
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.listing_batch_writer import utc_now
 from realty_radar.application.mortgage_enrichment_service import MortgageEnrichmentRunner
-from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
+from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent, ListingHistory
 
 
 @pytest.fixture
 def session_factory():
+    return _session_factory()
+
+
+def _session_factory(session_class=Session):
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine)
+    return sessionmaker(bind=engine, class_=session_class)
 
 
 async def async_detail_fetcher(article_id: int, complex_id: int):
@@ -99,3 +103,43 @@ def test_expired_claim_is_claimable_again(session_factory):
     runner = MortgageEnrichmentRunner(session_factory, detail_fetcher=async_detail_fetcher, job_id=1)
 
     assert runner._claim_batch(batch_size=1) == [(10, _complex_id_for(10))]
+
+
+def test_taken_over_claim_rejects_stale_success_write():
+    class TakeoverSession(Session):
+        _takeover_done = False
+
+        def get(self, entity, ident, *args, **kwargs):
+            listing = super().get(entity, ident, *args, **kwargs)
+            if (
+                entity is ListingCurrent
+                and ident == 10
+                and listing is not None
+                and listing.detail_claim_token is not None
+                and not self._takeover_done
+            ):
+                self.execute(
+                    update(ListingCurrent)
+                    .where(ListingCurrent.article_id == 10)
+                    .values(detail_claim_token="newer-claim", detail_claimed_at=utc_now())
+                    .execution_options(synchronize_session=False)
+                )
+                self._takeover_done = True
+            return listing
+
+    factory = _session_factory(TakeoverSession)
+    _seed_pending_details(factory, article_ids=[10])
+
+    async def detail_fetcher(article_id: int, complex_id: int):
+        return {"articleDetail": {"roomCount": 9}}
+
+    checked = asyncio.run(MortgageEnrichmentRunner(factory, detail_fetcher=detail_fetcher, job_id=1).run_once(batch_size=1))
+
+    assert checked == 0
+    with factory() as session:
+        listing = session.get(ListingCurrent, 10)
+        assert listing.room_count is None
+        assert listing.detail_checked_at is None
+        assert listing.detail_claim_token == "newer-claim"
+        assert listing.detail_claimed_at is not None
+        assert list(session.scalars(select(ListingHistory).where(ListingHistory.article_id == 10))) == []

@@ -244,7 +244,7 @@ class MortgageEnrichmentRunner:
         failed_article_ids = [article_id for article_id, detail in responses if detail is None]
         now = utc_now()
         with self._session_factory() as db:
-            updates: list[dict[str, Any]] = []
+            successful_writes = 0
             history: list[ListingHistory] = []
             for article_id, detail in resolved:
                 listing = db.get(ListingCurrent, article_id)
@@ -267,24 +267,31 @@ class MortgageEnrichmentRunner:
                         "nearest_subway_walk_minutes",
                     )
                 )
-                updates.append(
-                    {
-                        "article_id": listing.article_id,
-                        "mortgage_code": detail.mortgage_code,
-                        "mortgage_checked_at": now,
-                        "room_count": detail.room_count,
-                        "bathroom_count": detail.bathroom_count,
-                        "parking_possible": detail.parking_possible,
-                        "parking_per_household_x100": detail.parking_per_household_x100,
-                        "monthly_management_cost": detail.monthly_management_cost,
-                        "move_in_available_on": detail.move_in_available_on,
-                        "nearest_subway_walk_minutes": detail.nearest_subway_walk_minutes,
-                        "detail_checked_at": now,
-                        "detail_claim_token": None,
-                        "detail_claimed_at": None,
-                        "last_changed_at": now if mortgage_changed or detail_changed else listing.last_changed_at,
-                    }
+                wrote = db.execute(
+                    update(ListingCurrent)
+                    .where(
+                        ListingCurrent.article_id == listing.article_id,
+                        ListingCurrent.detail_claim_token == self._claim_token,
+                    )
+                    .values(
+                        mortgage_code=detail.mortgage_code,
+                        mortgage_checked_at=now,
+                        room_count=detail.room_count,
+                        bathroom_count=detail.bathroom_count,
+                        parking_possible=detail.parking_possible,
+                        parking_per_household_x100=detail.parking_per_household_x100,
+                        monthly_management_cost=detail.monthly_management_cost,
+                        move_in_available_on=detail.move_in_available_on,
+                        nearest_subway_walk_minutes=detail.nearest_subway_walk_minutes,
+                        detail_checked_at=now,
+                        detail_claim_token=None,
+                        detail_claimed_at=None,
+                        last_changed_at=now if mortgage_changed or detail_changed else listing.last_changed_at,
+                    )
                 )
+                if not wrote.rowcount:
+                    continue
+                successful_writes += 1
                 if mortgage_changed:
                     history.append(
                         ListingHistory(
@@ -323,8 +330,6 @@ class MortgageEnrichmentRunner:
                             occurred_at=now,
                         )
                     )
-            if updates:
-                db.execute(update(ListingCurrent), updates)
             if failed_article_ids:
                 db.execute(
                     update(ListingCurrent)
@@ -337,7 +342,7 @@ class MortgageEnrichmentRunner:
             if history:
                 db.add_all(history)
             db.commit()
-        return EnrichmentBatch(checked_count=len(updates), last_candidate_id=last_candidate_id)
+        return EnrichmentBatch(checked_count=successful_writes, last_candidate_id=last_candidate_id)
 
     def _claim_batch(
         self,
