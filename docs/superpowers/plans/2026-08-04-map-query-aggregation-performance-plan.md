@@ -42,7 +42,7 @@ def test_sql_map_viewport_matches_reference_stream_for_ordinary_filters():
         _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
         _complex(2, latitude=Decimal("37.5100000"), longitude=Decimal("126.8100000"), status=GEOCODE_STATUS_OK),
         _complex(3),
-        _listing(1, 1, 510_000_000), _listing(2, 1, 500_000_000),
+    _listing(1, 1, 510_000_000), _listing(2, 1, 500_000_000),
         _listing(3, 2, 600_000_000), _listing(4, 3, 700_000_000),
     ])
     session.commit()
@@ -72,6 +72,8 @@ def test_ordinary_map_viewport_does_not_stream_listing_entities(monkeypatch):
 
 Attach a SQLAlchemy `before_cursor_execute` listener in a separate test and assert normal-map SQL does not select `listing_current.description` or other full-entity-only columns. Cover the existing bounds example and assert its current counts remain `(1, 1, 0)`. Run the new tests and confirm the stream guard fails before implementation.
 
+Set one complex's later listing to a deliberately different `complex_name` and `address`; assert the viewport retains the text from its lowest-`article_id` listing, exactly as the former article-ordered stream did.
+
 - [ ] **Step 2: Build a narrow candidate CTE and SQL aggregates**
 
 Call `ListingSearchService(self.session).map_candidate_rows(filters, applicant)` once in `build_viewport`. For ordinary filters, pass the statement to `_build_sql_viewport`. It must retain the original FROM/JOIN/WHERE clauses while projecting only needed columns:
@@ -79,6 +81,7 @@ Call `ListingSearchService(self.session).map_candidate_rows(filters, applicant)`
 ```python
 candidates = statement.with_only_columns(
     ListingCurrent.complex_id,
+    ListingCurrent.article_id,
     ListingCurrent.complex_name,
     ListingCurrent.address,
     ListingCurrent.primary_price,
@@ -90,28 +93,55 @@ matching_complex_count = self.session.scalar(
 ) or 0
 ```
 
-Build displayed rows from that same CTE:
+Build a grouped CTE and a first-article text CTE from that same candidate CTE. Do not use `MIN(complex_name)` or `MIN(address)`: those can change existing visible text when listings in one complex disagree.
 
 ```python
-aggregate_statement = (
+aggregates = (
     select(
         candidates.c.complex_id,
-        func.min(candidates.c.complex_name).label("complex_name"),
-        func.min(candidates.c.address).label("address"),
-        ComplexCurrent.latitude,
-        ComplexCurrent.longitude,
+        func.min(candidates.c.article_id).label("first_article_id"),
         func.count().label("listing_count"),
         func.min(candidates.c.primary_price).label("min_price"),
         func.max(candidates.c.primary_price).label("max_price"),
     )
-    .join(ComplexCurrent, ComplexCurrent.complex_id == candidates.c.complex_id)
+    .group_by(candidates.c.complex_id)
+    .cte("map_complex_aggregates")
+)
+first_text = (
+    select(
+        candidates.c.complex_id,
+        candidates.c.complex_name,
+        candidates.c.address,
+    )
+    .join(
+        aggregates,
+        and_(
+            aggregates.c.complex_id == candidates.c.complex_id,
+            aggregates.c.first_article_id == candidates.c.article_id,
+        ),
+    )
+    .cte("map_first_listing_text")
+)
+
+aggregate_statement = (
+    select(
+        aggregates.c.complex_id,
+        first_text.c.complex_name,
+        first_text.c.address,
+        ComplexCurrent.latitude,
+        ComplexCurrent.longitude,
+        aggregates.c.listing_count,
+        aggregates.c.min_price,
+        aggregates.c.max_price,
+    )
+    .join(first_text, first_text.c.complex_id == aggregates.c.complex_id)
+    .join(ComplexCurrent, ComplexCurrent.complex_id == aggregates.c.complex_id)
     .where(
         ComplexCurrent.geocode_status == GEOCODE_STATUS_OK,
         ComplexCurrent.latitude.is_not(None),
         ComplexCurrent.longitude.is_not(None),
     )
-    .group_by(candidates.c.complex_id, ComplexCurrent.latitude, ComplexCurrent.longitude)
-    .order_by(candidates.c.complex_id)
+    .order_by(aggregates.c.complex_id)
 )
 ```
 
