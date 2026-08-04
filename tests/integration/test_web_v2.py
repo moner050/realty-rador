@@ -78,6 +78,74 @@ def test_detailed_filter_modal_groups_presets_options_and_tab_actions():
     assert 'data-quick-preset="loan-didimdol"' in response.text
 
 
+def test_commute_tab_owns_external_value_and_reset_has_one_submit_boundary():
+    response = _render_home_with_memory_db("/?max_commute_gangnam=60&sido_codes=11&min_households=800")
+    page = unescape(response.text)
+
+    assert response.status_code == 200
+    assert re.search(
+        r'<input\b(?=[^>]*\bname="max_commute_gangnam")(?=[^>]*\bdata-filter-owner="commute")[^>]*>',
+        page,
+    )
+    assert 'form.querySelectorAll(`[data-filter-owner="${activeTab}"]`)' in page
+
+    reset_handler = re.search(
+        r'document\.querySelector\("\[data-clear-filter-tab\]"\).*?addEventListener\("click", \(\) => \{(.*?)(?=\n\s*document\.querySelector\("\[data-apply-detailed-filter\]"\))',
+        page,
+        re.DOTALL,
+    )
+    assert reset_handler is not None
+    assert 'activeTab === "commute"' in reset_handler.group(1)
+    assert 'form.querySelectorAll(`[data-filter-owner="${activeTab}"]`)' in reset_handler.group(1)
+    assert 'input.value = ""' in reset_handler.group(1)
+    assert 'updateGangnamButtonsUI("")' in reset_handler.group(1)
+    assert "renderRegionChips()" in reset_handler.group(1)
+    assert "selectedSidoCodes = []" not in reset_handler.group(1)
+    assert "selectedSigunguCodes = []" not in reset_handler.group(1)
+    assert reset_handler.group(1).count("form.requestSubmit();") == 1
+
+
+def test_filter_tabs_activate_and_focus_through_roving_keyboard_navigation():
+    response = _render_home_with_memory_db("/")
+    page = unescape(response.text)
+
+    assert response.status_code == 200
+    for key in ("ArrowLeft", "ArrowRight", "Home", "End"):
+        assert f'"{key}"' in page
+    assert 'addEventListener("keydown", (event) => {' in page
+    assert "event.preventDefault();" in page
+    assert "setActiveFilterTab(nextButton.dataset.filterTab);" in page
+    assert "nextButton.focus();" in page
+
+
+def test_core_housing_presets_leave_advanced_housing_conditions_collapsed():
+    response = _render_home_with_memory_db("/?min_households=800")
+    page = unescape(response.text)
+
+    assert response.status_code == 200
+    advanced_details = re.search(r'<details\b[^>]*\bid="advanced-housing-conditions"[^>]*>', page)
+    assert advanced_details is not None
+    assert not re.search(r"\sopen(?:\s|=|>)", advanced_details.group(0))
+
+    preset_handler = re.search(
+        r'document\.querySelectorAll\("\[data-quick-preset\]"\).*?(?=// 강남역 통근시간)',
+        page,
+        re.DOTALL,
+    )
+    assert preset_handler is not None
+    assert ".open = true" not in preset_handler.group(0)
+
+
+def test_listing_options_legend_is_the_fieldset_first_child():
+    response = _render_home_with_memory_db("/")
+
+    assert response.status_code == 200
+    assert re.search(
+        r'<fieldset\b[^>]*\bdata-option-group="listing"[^>]*>\s*<legend\b',
+        response.text,
+    )
+
+
 def test_listing_cards_link_to_fin_land_article_pages():
     template = Path("src/realty_radar/web/templates/listings/_listing_cards.html").read_text(encoding="utf-8")
 
