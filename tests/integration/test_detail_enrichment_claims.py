@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from realty_radar.application.listing_batch_writer import utc_now
 from realty_radar.application.mortgage_enrichment_service import MortgageEnrichmentRunner
-from realty_radar.crawler.adapters.site_a.http_client import AuthenticationError
+from realty_radar.crawler.adapters.site_a.http_client import AuthenticationError, RetryWaitError
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent, ListingHistory
 
 
@@ -115,6 +115,37 @@ def test_authentication_failure_propagates_and_releases_unchecked_claim(session_
         assert listing.detail_checked_at is None
         assert listing.detail_claim_token is None
         assert listing.detail_claimed_at is None
+
+
+def test_retry_wait_failure_propagates_cancels_sibling_and_releases_unchecked_claims(session_factory):
+    _seed_pending_details(session_factory, article_ids=[10, 20])
+    sibling_started = asyncio.Event()
+    sibling_cancelled = False
+
+    async def retry_wait_failure(article_id: int, complex_id: int):
+        nonlocal sibling_cancelled
+        if article_id == 10:
+            await sibling_started.wait()
+            raise RetryWaitError("SITE_A HTTP circuit is open")
+        sibling_started.set()
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            sibling_cancelled = True
+            raise
+        return {"articleDetail": {"roomCount": 3}}
+
+    runner = MortgageEnrichmentRunner(session_factory, detail_fetcher=retry_wait_failure, job_id=1, concurrency=2)
+
+    with pytest.raises(RetryWaitError, match="circuit is open"):
+        asyncio.run(runner.run_until_idle(batch_size=2, max_batches=1))
+
+    assert sibling_cancelled is True
+    with session_factory() as session:
+        listings = list(session.scalars(select(ListingCurrent).order_by(ListingCurrent.article_id)))
+        assert all(listing.detail_checked_at is None for listing in listings)
+        assert all(listing.detail_claim_token is None for listing in listings)
+        assert all(listing.detail_claimed_at is None for listing in listings)
 
 
 def test_expired_claim_is_claimable_again(session_factory):

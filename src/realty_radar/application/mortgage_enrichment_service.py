@@ -20,7 +20,7 @@ from realty_radar.application.listing_batch_writer import (
     HISTORY_MORTGAGE_ENRICHED,
     utc_now,
 )
-from realty_radar.crawler.adapters.site_a.http_client import AuthenticationError
+from realty_radar.crawler.adapters.site_a.http_client import AuthenticationError, RetryWaitError
 from realty_radar.infrastructure.database.models import ListingCurrent, ListingHistory
 
 
@@ -237,7 +237,7 @@ class MortgageEnrichmentRunner:
                 return article_id, parse_article_detail(payload)
             except asyncio.CancelledError:
                 raise
-            except AuthenticationError:
+            except (AuthenticationError, RetryWaitError):
                 raise
             except Exception:
                 return article_id, None
@@ -245,7 +245,7 @@ class MortgageEnrichmentRunner:
         tasks = [asyncio.create_task(fetch(candidate)) for candidate in candidates]
         try:
             responses = await asyncio.gather(*tasks)
-        except AuthenticationError:
+        except (AuthenticationError, RetryWaitError):
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
