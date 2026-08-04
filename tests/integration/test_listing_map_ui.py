@@ -131,6 +131,9 @@ def test_search_result_exposes_public_map_urls_without_marker_payload(monkeypatc
     assert "data-listing-map-root" in response.text
     assert "data-map-data-url=" in response.text
     assert "data-map-cards-url=" in response.text
+    assert "data-map-matching-count" in response.text
+    assert "data-map-mapped-count" in response.text
+    assert "data-map-unmapped-count" in response.text
     assert 'id="listing-map-payload"' not in response.text
     assert "ncpKeyId=public-key" in response.text
     assert "지도 테스트 아파트" in response.text

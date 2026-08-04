@@ -28,32 +28,13 @@
             .replaceAll("'", "&#039;");
     }
 
-    function readMarkers(root) {
-        const payload = root.querySelector("[data-listing-map-payload]");
-        if (!payload) return [];
-        try {
-            const parsed = JSON.parse(payload.textContent);
-            return Array.isArray(parsed)
-                ? parsed.filter((marker) => (
-                    marker.latitude !== null
-                    && marker.latitude !== ""
-                    && marker.longitude !== null
-                    && marker.longitude !== ""
-                    && Number.isFinite(Number(marker.latitude))
-                    && Number.isFinite(Number(marker.longitude))
-                ))
-                : [];
-        } catch (_) {
-            return [];
-        }
-    }
-
     function setStatus(root, message) {
         const status = root.querySelector("[data-listing-map-status]");
         if (status) status.textContent = message;
     }
 
-    function setLoading(root, isLoading) {
+    function setLoading(root, instance) {
+        const isLoading = instance.pendingMap || instance.pendingCards;
         const loading = root.querySelector("[data-map-loading]");
         if (loading) {
             loading.hidden = !isLoading;
@@ -84,128 +65,222 @@
         return { west, south, east, north };
     }
 
-    function requestViewport(root, map, instance) {
-        const viewport = viewportFromMap(map);
+    function canRefreshCards(map, viewport) {
         const zoom = typeof map.getZoom === "function" ? Number(map.getZoom()) : null;
-        if (!viewport || !Number.isFinite(zoom)) {
-            setStatus(root, "현재 지도 범위를 읽을 수 없습니다.");
-            return;
-        }
-        if (
-            zoom < MIN_SEARCH_ZOOM
-            || viewport.north - viewport.south > MAX_LATITUDE_SPAN
-            || viewport.east - viewport.west > MAX_LONGITUDE_SPAN
-        ) {
-            setStatus(root, "지도를 조금 더 확대한 뒤 이 영역의 매물을 확인해 주세요.");
-            return;
-        }
-        const baseUrl = root.dataset && root.dataset.mapSearchUrl;
-        if (!baseUrl || typeof window.fetch !== "function") return;
+        return Boolean(
+            viewport
+            && Number.isFinite(zoom)
+            && zoom >= MIN_SEARCH_ZOOM
+            && viewport.north - viewport.south <= MAX_LATITUDE_SPAN
+            && viewport.east - viewport.west <= MAX_LONGITUDE_SPAN
+        );
+    }
 
+    function requestUrl(baseUrl, map, viewport, initial) {
         const url = new URL(baseUrl, (window.location && window.location.origin) || "http://localhost");
         url.searchParams.delete("cursor");
         url.searchParams.set("map_west", String(viewport.west));
         url.searchParams.set("map_south", String(viewport.south));
         url.searchParams.set("map_east", String(viewport.east));
         url.searchParams.set("map_north", String(viewport.north));
+        url.searchParams.set("map_zoom", String(map.getZoom()));
+        if (initial) url.searchParams.set("map_initial", "true");
+        return url;
+    }
 
-        const requestId = ++instance.requestId;
-        setLoading(root, true);
-        window.fetch(url.toString(), { headers: { "HX-Request": "true" } })
+    function removeListeners(instance, listeners) {
+        listeners.forEach((listener) => window.naver.maps.Event.removeListener(listener));
+        instance.listeners = instance.listeners.filter((listener) => !listeners.includes(listener));
+    }
+
+    function clearOverlays(instance) {
+        removeListeners(instance, instance.overlayListeners);
+        instance.overlayListeners = [];
+        instance.overlays.forEach((overlay) => overlay.setMap(null));
+        instance.overlays = [];
+        instance.infoWindow.close();
+    }
+
+    function boundsFromValues(west, south, east, north) {
+        return new window.naver.maps.LatLngBounds(
+            new window.naver.maps.LatLng(south, west),
+            new window.naver.maps.LatLng(north, east),
+        );
+    }
+
+    function boundsFromPayload(bounds) {
+        if (!Array.isArray(bounds) || bounds.length !== 4) return null;
+        return boundsFromValues(bounds[0], bounds[1], bounds[2], bounds[3]);
+    }
+
+    function makeClusterOverlay(map, instance, cluster) {
+        const marker = new window.naver.maps.Marker({
+            map,
+            position: new window.naver.maps.LatLng(cluster.latitude, cluster.longitude),
+            title: `${cluster.complex_count}개 단지`,
+            icon: {
+                content: `<div class="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-extrabold text-white shadow-lg">${escapeHtml(cluster.complex_count)}개 단지</div>`,
+                anchor: new window.naver.maps.Point(0, 0),
+            },
+        });
+        const listener = window.naver.maps.Event.addListener(marker, "click", () => {
+            instance.viewportDirty = true;
+            map.fitBounds(boundsFromValues(cluster.west, cluster.south, cluster.east, cluster.north));
+        });
+        instance.listeners.push(listener);
+        instance.overlayListeners.push(listener);
+        return marker;
+    }
+
+    function makeMarkerOverlay(map, instance, item) {
+        const marker = new window.naver.maps.Marker({
+            map,
+            position: new window.naver.maps.LatLng(item.latitude, item.longitude),
+            title: item.complex_name,
+            icon: {
+                content: `<div class="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-slate-900 shadow-lg ring-1 ring-indigo-200">${escapeHtml(formatPrice(item.min_price))} <span class="text-slate-500">${escapeHtml(item.listing_count)}건</span></div>`,
+                anchor: new window.naver.maps.Point(0, 0),
+            },
+        });
+        const listener = window.naver.maps.Event.addListener(marker, "click", () => {
+            instance.infoWindow.setContent(
+                `<div style="padding:10px;min-width:180px"><strong>${escapeHtml(item.complex_name)}</strong><br>` +
+                `<span>${escapeHtml(item.address)}</span><br>` +
+                `<span>매물 ${escapeHtml(item.listing_count)}건 · ${escapeHtml(formatPrice(item.min_price))}~${escapeHtml(formatPrice(item.max_price))}</span></div>`,
+            );
+            instance.infoWindow.open(map, marker);
+        });
+        instance.listeners.push(listener);
+        instance.overlayListeners.push(listener);
+        return marker;
+    }
+
+    function renderViewport(root, map, instance, payload) {
+        clearOverlays(instance);
+        (payload.clusters || []).forEach((cluster) => instance.overlays.push(makeClusterOverlay(map, instance, cluster)));
+        (payload.markers || []).forEach((marker) => instance.overlays.push(makeMarkerOverlay(map, instance, marker)));
+        const counts = [
+            ["[data-map-matching-count]", payload.matching_complex_count],
+            ["[data-map-mapped-count]", payload.mapped_complex_count],
+            ["[data-map-unmapped-count]", payload.unmapped_complex_count],
+        ];
+        counts.forEach(([selector, count]) => {
+            const target = root.querySelector(selector);
+            if (target) target.textContent = String(count || 0);
+        });
+    }
+
+    function requestMapData(root, map, instance, { initial = false } = {}) {
+        const viewport = viewportFromMap(map);
+        const baseUrl = root.dataset && root.dataset.mapDataUrl;
+        if (!viewport || !baseUrl || typeof window.fetch !== "function") return;
+        const requestId = ++instance.mapRequestId;
+        instance.pendingMap = true;
+        setLoading(root, instance);
+        window.fetch(requestUrl(baseUrl, map, viewport, initial).toString())
             .then((response) => {
-                if (!response.ok) throw new Error("map search failed");
-                return response.text();
+                if (!response.ok) throw new Error("map data failed");
+                return response.json();
             })
-            .then((html) => {
-                if (instance.requestId !== requestId) return;
-                const target = document.querySelector("#search-results");
-                if (!target || !window.htmx || typeof window.htmx.swap !== "function") return;
-                window.htmx.swap(target, html, { swapStyle: "outerHTML" });
-            })
-            .catch(() => {
-                if (instance.requestId === requestId) {
-                    setStatus(root, "지도 범위의 매물을 불러오지 못했습니다. 다시 시도해 주세요.");
+            .then((payload) => {
+                if (instance.mapRequestId !== requestId) return;
+                renderViewport(root, map, instance, payload);
+                const initialBounds = boundsFromPayload(payload.bounds);
+                if (initial && !instance.initialBoundsApplied && initialBounds) {
+                    map.fitBounds(initialBounds);
+                    instance.initialBoundsApplied = true;
                 }
             })
+            .catch(() => {
+                if (instance.mapRequestId === requestId) setStatus(root, "지도 매물을 불러오지 못했습니다. 다시 시도해 주세요.");
+            })
             .finally(() => {
-                if (instance.requestId === requestId) setLoading(root, false);
+                if (instance.mapRequestId === requestId) {
+                    instance.pendingMap = false;
+                    setLoading(root, instance);
+                }
             });
     }
 
-    function scheduleViewportSearch(root, map, instance) {
+    function requestCards(root, map, instance) {
+        const viewport = viewportFromMap(map);
+        const baseUrl = root.dataset && root.dataset.mapCardsUrl;
+        if (!canRefreshCards(map, viewport)) {
+            setStatus(root, "지도를 조금 더 확대한 뒤 해당 영역의 매물을 확인해 주세요.");
+            return;
+        }
+        if (!baseUrl || typeof window.fetch !== "function") return;
+        const requestId = ++instance.cardsRequestId;
+        instance.pendingCards = true;
+        setLoading(root, instance);
+        window.fetch(requestUrl(baseUrl, map, viewport, false).toString(), { headers: { "HX-Request": "true" } })
+            .then((response) => {
+                if (!response.ok) throw new Error("map cards failed");
+                return response.text();
+            })
+            .then((html) => {
+                if (instance.cardsRequestId !== requestId) return;
+                const target = document.querySelector("#listing-collection");
+                if (target && window.htmx && typeof window.htmx.swap === "function") {
+                    window.htmx.swap(target, html, { swapStyle: "outerHTML" });
+                }
+            })
+            .catch(() => {
+                if (instance.cardsRequestId === requestId) setStatus(root, "지도 영역의 매물을 불러오지 못했습니다. 다시 시도해 주세요.");
+            })
+            .finally(() => {
+                if (instance.cardsRequestId === requestId) {
+                    instance.pendingCards = false;
+                    setLoading(root, instance);
+                }
+            });
+    }
+
+    function scheduleViewportRefresh(root, map, instance) {
         if (instance.viewportTimer) clearTimeout(instance.viewportTimer);
-        instance.viewportTimer = setTimeout(
-            () => requestViewport(root, map, instance),
-            VIEWPORT_DEBOUNCE_MS,
-        );
+        instance.viewportTimer = setTimeout(() => {
+            requestMapData(root, map, instance);
+            requestCards(root, map, instance);
+        }, VIEWPORT_DEBOUNCE_MS);
     }
 
     function mount(source) {
         const root = findRoot(source);
         if (!root || instances.has(root)) return;
         const container = root.querySelector("[data-listings-map]");
-        const markers = readMarkers(root);
-        if (!container || markers.length === 0) {
-            if (container) setStatus(root, "위치 확인 중");
-            return;
-        }
+        if (!container) return;
         if (!window.naver || !window.naver.maps) {
             setStatus(root, "네이버 지도 연결에 실패했습니다.");
             return;
         }
-
-        const firstPosition = new window.naver.maps.LatLng(markers[0].latitude, markers[0].longitude);
         const map = new window.naver.maps.Map(container, {
-            center: firstPosition,
-            zoom: 14,
+            center: new window.naver.maps.LatLng(36.5, 127.8),
+            zoom: 7,
         });
-        const bounds = new window.naver.maps.LatLngBounds();
-        const infoWindow = new window.naver.maps.InfoWindow();
-        const mapMarkers = [];
-        const listeners = [];
-        for (const item of markers) {
-            const position = new window.naver.maps.LatLng(item.latitude, item.longitude);
-            const marker = new window.naver.maps.Marker({
-                map,
-                position,
-                title: item.complex_name,
-            });
-            bounds.extend(position);
-            listeners.push(
-                window.naver.maps.Event.addListener(marker, "click", () => {
-                    infoWindow.setContent(
-                        `<div style="padding:10px;min-width:180px"><strong>${escapeHtml(item.complex_name)}</strong><br>` +
-                        `<span>${escapeHtml(item.address)}</span><br>` +
-                        `<span>매물 ${item.listing_count}개 · ${formatPrice(item.min_price)}~${formatPrice(item.max_price)}</span></div>`,
-                    );
-                    infoWindow.open(map, marker);
-                }),
-            );
-            mapMarkers.push(marker);
-        }
-        map.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
         const instance = {
-            infoWindow,
-            listeners,
-            markers: mapMarkers,
-            requestId: 0,
+            infoWindow: new window.naver.maps.InfoWindow(),
+            initialBoundsApplied: false,
+            listeners: [],
+            mapRequestId: 0,
+            cardsRequestId: 0,
+            overlayListeners: [],
+            overlays: [],
+            pendingMap: false,
+            pendingCards: false,
             viewportDirty: false,
             viewportTimer: null,
         };
-        listeners.push(
-            window.naver.maps.Event.addListener(map, "dragstart", () => {
-                instance.viewportDirty = true;
-            }),
-            window.naver.maps.Event.addListener(map, "zoom_changed", () => {
-                instance.viewportDirty = true;
-            }),
+        instance.listeners.push(
+            window.naver.maps.Event.addListener(map, "dragstart", () => { instance.viewportDirty = true; }),
+            window.naver.maps.Event.addListener(map, "zoom_changed", () => { instance.viewportDirty = true; }),
             window.naver.maps.Event.addListener(map, "idle", () => {
                 if (!instance.viewportDirty) return;
                 instance.viewportDirty = false;
-                scheduleViewportSearch(root, map, instance);
+                scheduleViewportRefresh(root, map, instance);
             }),
         );
         instances.set(root, instance);
+        requestMapData(root, map, instance, { initial: true });
     }
 
     function unmount(source) {
@@ -213,11 +288,12 @@
         if (!root) return;
         const instance = instances.get(root);
         if (!instance) return;
-        instance.requestId += 1;
+        instance.mapRequestId += 1;
+        instance.cardsRequestId += 1;
         if (instance.viewportTimer) clearTimeout(instance.viewportTimer);
-        instance.infoWindow.close();
+        clearOverlays(instance);
         instance.listeners.forEach((listener) => window.naver.maps.Event.removeListener(listener));
-        instance.markers.forEach((marker) => marker.setMap(null));
+        instance.infoWindow.close();
         instances.delete(root);
     }
 
