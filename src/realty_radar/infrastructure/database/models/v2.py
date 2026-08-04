@@ -139,6 +139,7 @@ class ListingCurrent(Base):
         Index("ix_listing_subway_walk", "lifecycle", "is_short_term", "nearest_subway_walk_minutes", "article_id"),
         Index("ix_listing_management_cost", "lifecycle", "is_short_term", "monthly_management_cost", "article_id"),
         Index("ix_listing_detail_pending", "detail_checked_at", "article_id"),
+        Index("ix_listing_detail_claim", "lifecycle", "detail_checked_at", "detail_claimed_at", "article_id"),
         {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
     )
 
@@ -186,6 +187,8 @@ class ListingCurrent(Base):
     move_in_available_on = Column(Date, nullable=True)
     nearest_subway_walk_minutes = Column(UnsignedSmallInt, nullable=True)
     detail_checked_at = Column(DateTime6, nullable=True)
+    detail_claim_token = Column(String(32), nullable=True)
+    detail_claimed_at = Column(DateTime6, nullable=True)
     building_name = Column(String(40), nullable=True)
     description = Column(String(1000), nullable=True)
     lifecycle = Column(UnsignedTinyInt, nullable=False, server_default=text("1"))

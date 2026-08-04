@@ -99,6 +99,7 @@ def test_enrichment_updates_codes_once_and_never_persists_detail_text():
         rows = {row.article_id: row for row in session.scalars(select(ListingCurrent)).all()}
         assert {article_id: row.mortgage_code for article_id, row in rows.items()} == {10: 1, 11: 2, 12: 0}
         assert all(row.mortgage_checked_at is not None for row in rows.values())
+        assert all(row.detail_claim_token is None and row.detail_claimed_at is None for row in rows.values())
         assert all("융자" not in (row.description or "") for row in rows.values())
         history = list(session.scalars(select(ListingHistory).order_by(ListingHistory.article_id)).all())
         assert [item.article_id for item in history] == [10, 11]

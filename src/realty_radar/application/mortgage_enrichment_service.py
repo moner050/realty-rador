@@ -5,11 +5,12 @@ import asyncio
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from realty_radar.application.listing_batch_writer import (
@@ -182,6 +183,7 @@ class MortgageEnrichmentRunner:
         self._detail_fetcher = detail_fetcher
         self._job_id = job_id
         self._concurrency = concurrency
+        self._claim_token = uuid4().hex
 
     async def run_once(self, *, batch_size: int = 100, priority_job_id: int | None = None) -> int:
         """Run the first pending batch; callers needing a full sweep use ``run_until_idle``."""
@@ -216,57 +218,41 @@ class MortgageEnrichmentRunner:
     ) -> EnrichmentBatch:
         if not 1 <= batch_size <= 500:
             raise ValueError("batch_size must be between 1 and 500")
-        with self._session_factory() as db:
-            statement = (
-                select(ListingCurrent.article_id, ListingCurrent.complex_id)
-                .where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE, ListingCurrent.detail_checked_at.is_(None))
-                .order_by(ListingCurrent.article_id)
-            )
-            if after_article_id is not None:
-                statement = statement.where(ListingCurrent.article_id > after_article_id)
-            candidates = []
-            if priority_job_id is not None and after_article_id is None:
-                candidates = [
-                    (row.article_id, row.complex_id)
-                    for row in db.execute(
-                        statement.where(ListingCurrent.last_seen_job_id == priority_job_id).limit(batch_size)
-                    ).all()
-                ]
-            if len(candidates) < batch_size:
-                fallback = statement
-                if priority_job_id is not None and after_article_id is None:
-                    fallback = fallback.where(ListingCurrent.last_seen_job_id != priority_job_id)
-                candidates.extend(
-                    (row.article_id, row.complex_id)
-                    for row in db.execute(fallback.limit(batch_size - len(candidates))).all()
-                )
+        candidates = self._claim_batch(
+            batch_size=batch_size,
+            priority_job_id=priority_job_id,
+            after_article_id=after_article_id,
+        )
         last_candidate_id = candidates[-1][0] if candidates else None
         semaphore = asyncio.Semaphore(self._concurrency)
 
-        async def fetch(candidate: tuple[int, int]) -> tuple[int, ArticleDetail] | None:
+        async def fetch(candidate: tuple[int, int]) -> tuple[int, ArticleDetail | None]:
             article_id, complex_id = candidate
             try:
                 async with semaphore:
                     payload = await self._detail_fetcher(article_id, complex_id)
                 if not isinstance(payload, dict):
-                    return None
+                    return article_id, None
                 return article_id, parse_article_detail(payload)
             except asyncio.CancelledError:
                 raise
             except Exception:
-                return None
+                return article_id, None
 
         responses = await asyncio.gather(*(fetch(candidate) for candidate in candidates))
-        resolved = [item for item in responses if item is not None]
-        if not resolved:
-            return EnrichmentBatch(checked_count=0, last_candidate_id=last_candidate_id)
+        resolved = [(article_id, detail) for article_id, detail in responses if detail is not None]
+        failed_article_ids = [article_id for article_id, detail in responses if detail is None]
         now = utc_now()
         with self._session_factory() as db:
             updates: list[dict[str, Any]] = []
             history: list[ListingHistory] = []
             for article_id, detail in resolved:
                 listing = db.get(ListingCurrent, article_id)
-                if listing is None or listing.detail_checked_at is not None:
+                if (
+                    listing is None
+                    or listing.detail_checked_at is not None
+                    or listing.detail_claim_token != self._claim_token
+                ):
                     continue
                 mortgage_changed = listing.mortgage_code != detail.mortgage_code
                 detail_changed = any(
@@ -294,6 +280,8 @@ class MortgageEnrichmentRunner:
                         "move_in_available_on": detail.move_in_available_on,
                         "nearest_subway_walk_minutes": detail.nearest_subway_walk_minutes,
                         "detail_checked_at": now,
+                        "detail_claim_token": None,
+                        "detail_claimed_at": None,
                         "last_changed_at": now if mortgage_changed or detail_changed else listing.last_changed_at,
                     }
                 )
@@ -337,10 +325,75 @@ class MortgageEnrichmentRunner:
                     )
             if updates:
                 db.execute(update(ListingCurrent), updates)
+            if failed_article_ids:
+                db.execute(
+                    update(ListingCurrent)
+                    .where(
+                        ListingCurrent.article_id.in_(failed_article_ids),
+                        ListingCurrent.detail_claim_token == self._claim_token,
+                    )
+                    .values(detail_claim_token=None, detail_claimed_at=None)
+                )
             if history:
                 db.add_all(history)
             db.commit()
         return EnrichmentBatch(checked_count=len(updates), last_candidate_id=last_candidate_id)
+
+    def _claim_batch(
+        self,
+        *,
+        batch_size: int,
+        priority_job_id: int | None = None,
+        after_article_id: int | None = None,
+    ) -> list[tuple[int, int]]:
+        """Atomically reserve the next unchecked detail rows for this runner."""
+        now = utc_now()
+        claim_expiry = now - timedelta(minutes=15)
+        claim_available = or_(
+            ListingCurrent.detail_claim_token.is_(None),
+            ListingCurrent.detail_claimed_at < claim_expiry,
+        )
+        with self._session_factory() as db:
+            statement = (
+                select(ListingCurrent.article_id, ListingCurrent.complex_id)
+                .where(
+                    ListingCurrent.lifecycle == LIFECYCLE_ACTIVE,
+                    ListingCurrent.detail_checked_at.is_(None),
+                    claim_available,
+                )
+                .order_by(ListingCurrent.article_id)
+            )
+            if after_article_id is not None:
+                statement = statement.where(ListingCurrent.article_id > after_article_id)
+            if db.get_bind().dialect.name == "mysql":
+                statement = statement.with_for_update(skip_locked=True)
+
+            candidates: list[tuple[int, int]] = []
+
+            def claim(statement_to_claim):
+                for row in db.execute(statement_to_claim).all():
+                    claimed = db.execute(
+                        update(ListingCurrent)
+                        .where(
+                            ListingCurrent.article_id == row.article_id,
+                            ListingCurrent.lifecycle == LIFECYCLE_ACTIVE,
+                            ListingCurrent.detail_checked_at.is_(None),
+                            claim_available,
+                        )
+                        .values(detail_claim_token=self._claim_token, detail_claimed_at=now)
+                    )
+                    if claimed.rowcount:
+                        candidates.append((row.article_id, row.complex_id))
+
+            if priority_job_id is not None and after_article_id is None:
+                claim(statement.where(ListingCurrent.last_seen_job_id == priority_job_id).limit(batch_size))
+            if len(candidates) < batch_size:
+                fallback = statement
+                if priority_job_id is not None and after_article_id is None:
+                    fallback = fallback.where(ListingCurrent.last_seen_job_id != priority_job_id)
+                claim(fallback.limit(batch_size - len(candidates)))
+            db.commit()
+        return candidates
 
 
 async def run_site_a_mortgage_enrichment(
@@ -356,11 +409,10 @@ async def run_site_a_mortgage_enrichment(
     browser = PlaywrightBrowserManager(headless=True)
     client = NaverHttpClient(NaverAuthBootstrap(browser))
 
-    async def fetch(article_id: int, complex_id: int) -> dict[str, Any]:
-        payload = await client.get_json(
+    async def fetch(article_id: int, complex_id: int) -> Any:
+        return await client.get_json(
             f"{NEW_LAND_BASE}/api/articles/{article_id}", params={"complexNo": complex_id}
         )
-        return payload if isinstance(payload, dict) else {}
 
     try:
         return await MortgageEnrichmentRunner(
