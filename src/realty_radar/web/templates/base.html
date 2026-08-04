@@ -83,6 +83,20 @@
             box-shadow: var(--rr-shadow);
         }
 
+        /* 통근 퀵 필터 active 버튼 스타일 보호 (theme-surface !important 무력화 방지) */
+        .commute-active-btn {
+            background-color: #f59e0b !important;
+            color: #451a03 !important;
+            border-color: #d97706 !important;
+            box-shadow: 0 0 0 2px #f59e0b, 0 4px 12px rgba(245, 158, 11, 0.25) !important;
+        }
+        html.dark .commute-active-btn {
+            background-color: #92400e !important;
+            color: #fef3c7 !important;
+            border-color: #b45309 !important;
+            box-shadow: 0 0 0 2px #b45309, 0 4px 12px rgba(245, 158, 11, 0.15) !important;
+        }
+
         .theme-subtle-surface,
         .light-subtle-surface {
             background-color: var(--rr-surface-subtle) !important;
@@ -277,6 +291,7 @@
             transition: background-color 200ms ease, color 200ms ease;
         }
     </style>
+    {% block head_extra %}{% endblock %}
 </head>
 
 <body class="flex flex-col min-h-full font-sans antialiased bg-slate-100/70 text-slate-900 dark:bg-slate-950 dark:text-slate-100 selection:bg-indigo-500 selection:text-white transition-colors">

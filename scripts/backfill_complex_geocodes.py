@@ -19,6 +19,13 @@ from realty_radar.infrastructure.database.session import SessionLocal
 def main() -> None:
     parser = argparse.ArgumentParser(description="누락된 단지 좌표를 NAVER Maps 지오코딩으로 보강합니다.")
     parser.add_argument("--batch-size", type=int, default=100, help="이번 실행에서 처리할 최대 단지 수 (기본값: 100)")
+    parser.add_argument(
+        "--complex-id",
+        type=int,
+        action="append",
+        dest="complex_ids",
+        help="지정한 단지만 처리합니다. 여러 번 지정할 수 있습니다.",
+    )
     args = parser.parse_args()
     if args.batch_size <= 0:
         parser.error("--batch-size는 양수여야 합니다.")
@@ -28,6 +35,7 @@ def main() -> None:
         stats = ComplexGeocodeBackfill(session, NaverGeocoder()).run(
             batch_size=args.batch_size,
             now=datetime.now(timezone.utc).replace(tzinfo=None),
+            complex_ids=args.complex_ids,
         )
         session.commit()
     except Exception:

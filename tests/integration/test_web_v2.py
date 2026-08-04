@@ -575,7 +575,9 @@ def test_htmx_page_navigation_replaces_the_search_results():
     try:
         client = TestClient(app)
         first = client.get("/listings/search?page_size=1", headers={"HX-Request": "true"})
-        next_url = unescape(re.search(r'hx-get="([^"]+)"', first.text).group(1))
+        next_url = unescape(
+            re.search(r'<a[^>]+hx-get="([^"]+)"[^>]*>다음 페이지</a>', first.text).group(1)
+        )
         second_page = client.get(next_url, headers={"HX-Request": "true"})
     finally:
         app.dependency_overrides.clear()

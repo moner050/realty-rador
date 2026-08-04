@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from dataclasses import replace
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_CEILING
 from time import perf_counter
 from typing import Annotated
@@ -23,6 +24,8 @@ from realty_radar.domain.listing.commute_map import get_sigungu_codes_within_com
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.entities import LoanEligibilityStatus
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
+from realty_radar.enrichment.naver_maps.backfill import ComplexGeocodeBackfill
+from realty_radar.enrichment.naver_maps.geocoder import NaverGeocoder
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.auth import SESSION_COOKIE_NAME, is_authenticated, verify_session_token, get_current_username, is_admin_user
 from realty_radar.web.jinja_filters import register_jinja_filters
@@ -220,6 +223,10 @@ def parse_search_filter(
     sigungu_code: str | None = Query(None),
     sigungu_codes: list[str] | None = Query(None),
     complex_keyword: str | None = Query(None),
+    map_west: str | None = Query(None),
+    map_south: str | None = Query(None),
+    map_east: str | None = Query(None),
+    map_north: str | None = Query(None),
     transaction_type: str | None = Query(None),
     transaction_types: list[str] | None = Query(None),
     trade_types: list[str] | None = Query(None),
@@ -294,6 +301,10 @@ def parse_search_filter(
             not explicit_sigungu_codes and municipality_value is not None and municipality_codes == []
         ),
         complex_keyword=(keyword.strip() if (keyword := _request_string(complex_keyword)) and keyword.strip() else None),
+        map_west=_optional_decimal(map_west),
+        map_south=_optional_decimal(map_south),
+        map_east=_optional_decimal(map_east),
+        map_north=_optional_decimal(map_north),
         trade_type=trades[0] if trades and len(trades) == 1 else None,
         trade_types=trades,
         min_price=_capped_price(
@@ -347,7 +358,10 @@ def _listing_items(result):
     return result.items
 
 
-def _favorite_listing_payload(item) -> dict[str, object]:
+def _favorite_listing_payload(item, filters: ListingSearchFilter | None = None) -> dict[str, object]:
+    commute_label = "확인 대기"
+    if filters and filters.max_commute_gangnam:
+        commute_label = f"강남 {filters.max_commute_gangnam}분 이내 검색"
     return {
         "article_id": item.article_id,
         "complex_id": item.complex_id,
@@ -363,13 +377,17 @@ def _favorite_listing_payload(item) -> dict[str, object]:
         "eligible_loans": [
             {"loan_type_name": loan.loan_type_name} for loan in getattr(item, "eligible_loans", [])
         ],
+        "commute_label": commute_label,
     }
 
 
-def _favorite_payload_context(result) -> dict[str, dict[int, dict[str, object]]]:
+def _favorite_payload_context(
+    result,
+    filters: ListingSearchFilter,
+) -> dict[str, dict[int, dict[str, object]]]:
     return {
         "favorite_listing_payloads": {
-            item.article_id: _favorite_listing_payload(item) for item in _listing_items(result)
+            item.article_id: _favorite_listing_payload(item, filters) for item in _listing_items(result)
         },
     }
 
@@ -382,6 +400,48 @@ def _listing_map_context(db: Session, result) -> dict[str, object]:
         "naver_map_client_id": settings.naver_map_client_id,
         "map_markers": [marker.to_dict() for marker in markers],
     }
+
+
+def _map_sidebar_context(
+    db: Session,
+    result,
+    *,
+    status_message: str | None = None,
+) -> dict[str, object]:
+    map_service = ListingMapService(db)
+    complex_ids = map_service.complex_ids(result)
+    map_context = _listing_map_context(db, result)
+    map_context.update(
+        {
+            "map_loading": False,
+            "map_status_message": status_message,
+            "map_unmapped_complex_count": max(len(complex_ids) - len(map_context["map_markers"]), 0),
+        }
+    )
+    return map_context
+
+
+def _map_sidebar_url(request: Request, filters: ListingSearchFilter) -> str:
+    query_items = _filter_query_items(filters)
+    if filters.cursor:
+        query_items.append(("cursor", filters.cursor))
+    query = urlencode(query_items)
+    base_url = str(request.url_for("listing_map"))
+    return f"{base_url}?{query}" if query else base_url
+
+
+def _map_search_url(request: Request, filters: ListingSearchFilter) -> str:
+    transient_filter = replace(
+        filters,
+        cursor=None,
+        map_west=None,
+        map_south=None,
+        map_east=None,
+        map_north=None,
+    )
+    query = urlencode(_filter_query_items(transient_filter))
+    base_url = str(request.url_for("search_listings"))
+    return f"{base_url}?{query}" if query else base_url
 
 
 def _loan_calculation_criteria(item, applicant, evaluation) -> list[tuple[str, str]]:
@@ -489,6 +549,10 @@ def _filter_query_items(filters: ListingSearchFilter) -> list[tuple[str, str]]:
         "sido_code": filters.sido_code,
         "sigungu_code": filters.sigungu_code,
         "complex_keyword": filters.complex_keyword,
+        "map_west": filters.map_west,
+        "map_south": filters.map_south,
+        "map_east": filters.map_east,
+        "map_north": filters.map_north,
         "min_price": max(minimums) if minimums else None,
         "max_price": min(maximums) if maximums else None,
         "max_monthly_rent": filters.max_monthly_rent,
@@ -575,8 +639,15 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
     result.diagnostics.loan_evaluation_time_ms += _enrich_listings_with_loans(result, applicant)
     _enrich_listings_with_affordability(result, applicant)
-    favorite_payloads = _favorite_payload_context(result)
+    favorite_payloads = _favorite_payload_context(result, filters)
     map_context = _listing_map_context(db, result)
+    map_context.update(
+        {
+            "map_loading": not bool(map_context["map_markers"]),
+            "map_status_message": None,
+            "map_unmapped_complex_count": 0,
+        }
+    )
     page_url = request.url.remove_query_params("append")
     next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
     previous_url = None
@@ -609,6 +680,8 @@ def _render_result(request: Request, db: Session, filters: ListingSearchFilter, 
             "sort_options": SORT_OPTIONS,
             "sido_labels": sido_labels,
             "sigungu_labels": sigungu_labels,
+            "map_sidebar_url": _map_sidebar_url(request, filters),
+            "map_search_url": _map_search_url(request, filters),
             **favorite_payloads,
             **map_context,
         },
@@ -694,6 +767,57 @@ def search_listings(
         else "listings/index.html"
     )
     return _render_or_client_error(request, db, filters, template_name, is_htmx=is_htmx)
+
+
+@router.get("/listings/map", response_class=HTMLResponse, name="listing_map")
+def listing_map(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    filters: Annotated[ListingSearchFilter, Depends(parse_search_filter)],
+):
+    applicant = get_request_user_profile(request)
+    try:
+        result = ListingSearchService(db).search_listings(filters, applicant=applicant)
+    except ListingSearchValidationError:
+        return templates.TemplateResponse(
+            request,
+            "listings/_map_sidebar.html",
+            context={
+                "naver_map_client_id": settings.naver_map_client_id,
+                "map_markers": [],
+                "map_loading": False,
+                "map_unmapped_complex_count": 0,
+                "map_status_message": "검색 조건을 확인한 뒤 지도를 다시 불러와 주세요.",
+            },
+        )
+
+    map_service = ListingMapService(db)
+    complex_ids = map_service.complex_ids(result)
+    status_message = None
+    if settings.naver_map_client_id and complex_ids:
+        try:
+            stats = ComplexGeocodeBackfill(db, NaverGeocoder()).run(
+                batch_size=min(len(complex_ids), 20),
+                now=datetime.now(timezone.utc).replace(tzinfo=None),
+                complex_ids=complex_ids,
+            )
+            db.commit()
+            if stats.failed_count:
+                status_message = "일부 단지의 지도 좌표를 다시 확인하고 있습니다."
+            elif stats.not_found_count:
+                status_message = "일부 단지의 주소에서 지도 좌표를 찾지 못했습니다."
+        except RuntimeError:
+            db.rollback()
+            status_message = "네이버 지도 서버 설정이 필요합니다."
+        except Exception:
+            db.rollback()
+            logger.exception("listing map sidebar geocoding failed")
+            status_message = "지도 좌표를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+
+    map_context = _map_sidebar_context(db, result, status_message=status_message)
+    if map_context["map_unmapped_complex_count"] and not map_context["map_markers"] and not status_message:
+        map_context["map_status_message"] = "이 검색 결과의 지도 좌표를 확인할 수 없습니다."
+    return templates.TemplateResponse(request, "listings/_map_sidebar.html", context=map_context)
 
 
 @router.get("/listings/complex/{complex_id}", response_class=HTMLResponse, name="complex_listings")

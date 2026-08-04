@@ -1,15 +1,23 @@
 from datetime import datetime, timezone
+from decimal import Decimal
+import json
+import re
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from realty_radar.config import settings
+from realty_radar.domain.listing.filters import ListingSearchFilter
+from realty_radar.enrichment.naver_maps.geocoder import GeocodeResult, GeocodeStatus
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
 from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK
 from realty_radar.infrastructure.database.session import get_db
 from realty_radar.web.main import app
+from realty_radar.web.routes import home
 
 
 def _factory(*, verified_coordinate: bool):
@@ -76,9 +84,36 @@ def test_search_result_embeds_only_public_key_and_verified_marker_payload(monkey
     assert "지도 테스트 아파트" in response.text
     assert "126.85" in response.text
     assert "server-secret" not in response.text
+    assert response.text.index('src="https://oapi.map.naver.com/openapi/v3/maps.js') < response.text.index("<body")
+    assert response.text.index('src="/static/listing-map.js"') < response.text.index("<body")
+    payload_match = re.search(
+        r'<script id="listing-map-payload"[^>]*>(.*?)</script>', response.text, re.DOTALL
+    )
+    assert payload_match is not None
+    assert json.loads(payload_match.group(1))[0]["complex_id"] == 1
 
 
-def test_search_result_shows_location_pending_without_a_verified_coordinate(monkeypatch):
+def test_search_result_has_a_hidden_until_two_selected_comparison_tray(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="favorite-compare-tray"' in response.text
+    assert "data-favorite-compare-count" in response.text
+    assert "data-favorite-compare-button" in response.text
+
+
+def test_search_result_starts_a_map_sidebar_refresh_without_a_verified_coordinate(monkeypatch):
     factory = _factory(verified_coordinate=False)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
 
@@ -94,4 +129,130 @@ def test_search_result_shows_location_pending_without_a_verified_coordinate(monk
 
     assert response.status_code == 200
     assert 'id="listings-map"' not in response.text
-    assert "위치 확인 중" in response.text
+    assert "지도 좌표를 준비하고 있습니다." in response.text
+    assert 'hx-get="http://testserver/listings/map?' in response.text
+
+
+def test_map_sidebar_geocodes_the_current_pending_result_and_returns_a_verified_marker(monkeypatch):
+    factory = _factory(verified_coordinate=False)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    monkeypatch.setattr(settings, "naver_map_client_secret", "server-secret")
+
+    class StaticGeocoder:
+        is_configured = True
+
+        def geocode(self, address):
+            assert address == "서울특별시 강서구 테스트로 1"
+            return GeocodeResult(
+                GeocodeStatus.OK,
+                latitude=Decimal("37.5500000"),
+                longitude=Decimal("126.8500000"),
+            )
+
+    monkeypatch.setattr(home, "NaverGeocoder", StaticGeocoder, raising=False)
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/listings/map")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload_match = re.search(
+        r'<script id="listing-map-payload"[^>]*>(.*?)</script>', response.text, re.DOTALL
+    )
+    assert payload_match is not None
+    assert json.loads(payload_match.group(1))[0]["complex_id"] == 1
+    assert "server-secret" not in response.text
+    with factory() as session:
+        refreshed = session.get(ComplexCurrent, 1)
+        assert refreshed.geocode_status == GEOCODE_STATUS_OK
+        assert refreshed.latitude == Decimal("37.5500000")
+        assert refreshed.longitude == Decimal("126.8500000")
+
+
+def test_search_response_has_a_map_sidebar_loader_but_no_alternate_view_controls(monkeypatch):
+    factory = _factory(verified_coordinate=False)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'data-listing-map-root' in response.text
+    assert 'hx-get="http://testserver/listings/map?' in response.text
+    assert 'data-view-mode=' not in response.text
+
+
+def test_map_bound_search_places_the_map_before_matching_cards_without_persisting_bounds(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get(
+            "/listings/search?map_west=126.80&map_south=37.50&map_east=126.90&map_north=37.60",
+            headers={"HX-Request": "true"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.text.index("data-listing-map-root") < response.text.index('id="listing-cards"')
+    assert 'data-map-search-url="http://testserver/listings/search?' in response.text
+    map_search_url = re.search(r'data-map-search-url="([^"]+)"', response.text).group(1)
+    assert "map_west" not in map_search_url
+    assert "map_south" not in map_search_url
+    assert "h-[56vh]" in response.text
+
+
+def test_map_loading_overlay_starts_with_a_tailwind_hidden_class(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+
+    def override_db():
+        with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert 'data-map-loading hidden class="hidden ' in response.text
+
+
+def test_map_sidebar_url_preserves_the_current_result_page_cursor():
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "path": "/listings/search",
+            "raw_path": b"/listings/search",
+            "query_string": b"",
+            "headers": [(b"host", b"testserver")],
+            "router": app.router,
+        }
+    )
+
+    map_url = home._map_sidebar_url(request, ListingSearchFilter(cursor="second-page-cursor"))
+
+    assert parse_qs(urlparse(map_url).query)["cursor"] == ["second-page-cursor"]

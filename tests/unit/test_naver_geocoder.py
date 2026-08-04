@@ -47,7 +47,11 @@ def test_geocode_without_credentials_returns_not_configured_without_http_call():
     def no_request(_: httpx.Request) -> httpx.Response:
         raise AssertionError("키가 없으면 지오코딩 요청을 보내면 안 됩니다.")
 
-    geocoder = NaverGeocoder(transport=httpx.MockTransport(no_request))
+    geocoder = NaverGeocoder(
+        client_id="",
+        client_secret="",
+        transport=httpx.MockTransport(no_request),
+    )
 
     result = geocoder.geocode("서울특별시 강서구 테스트로 1")
 

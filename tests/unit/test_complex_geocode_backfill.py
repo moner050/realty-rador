@@ -111,3 +111,30 @@ def test_backfill_delays_failed_geocode_retry_for_six_hours():
     assert refreshed.geocode_status == GEOCODE_STATUS_FAILED
     assert refreshed.geocode_attempted_at == now
     assert refreshed.geocode_retry_after == now + timedelta(hours=6)
+
+
+def test_backfill_only_geocodes_requested_pending_complexes():
+    session = _session()
+    now = datetime(2026, 8, 3, 7, 0)
+    addresses = {
+        1: "서울특별시 강서구 테스트로 1",
+        2: "서울특별시 강서구 테스트로 2",
+        3: "서울특별시 강서구 테스트로 3",
+    }
+    session.add_all([_complex(complex_id, address) for complex_id, address in addresses.items()])
+    session.commit()
+
+    stats = ComplexGeocodeBackfill(
+        session,
+        StaticGeocoder(
+            {
+                addresses[1]: GeocodeResult(GeocodeStatus.OK, Decimal("37.5500000"), Decimal("126.8500000")),
+                addresses[3]: GeocodeResult(GeocodeStatus.OK, Decimal("37.5600000"), Decimal("126.8600000")),
+            }
+        ),
+    ).run(batch_size=10, now=now, complex_ids=[3, 1])
+
+    assert stats.selected_count == 2
+    assert session.get(ComplexCurrent, 1).geocode_status == GeocodeStatus.OK
+    assert session.get(ComplexCurrent, 2).geocode_status == GEOCODE_STATUS_PENDING
+    assert session.get(ComplexCurrent, 3).geocode_status == GeocodeStatus.OK

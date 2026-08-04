@@ -16,3 +16,4 @@ def test_backfill_command_exposes_an_explicit_batch_size_flag():
 
     assert result.returncode == 0
     assert "--batch-size" in result.stdout
+    assert "--complex-id" in result.stdout

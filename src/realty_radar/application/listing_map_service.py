@@ -77,6 +77,9 @@ class ListingMapService:
             )
         return markers
 
+    def complex_ids(self, result: SearchResult) -> list[int]:
+        return list(self._summaries(result))
+
     @staticmethod
     def _summaries(result: SearchResult) -> dict[int, dict[str, Any]]:
         if result.is_grouped:

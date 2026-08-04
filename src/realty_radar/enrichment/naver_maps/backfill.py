@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from hashlib import md5
-from typing import Protocol
+from typing import Iterable, Protocol
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -42,26 +42,32 @@ class ComplexGeocodeBackfill:
         self.session = session
         self.geocoder = geocoder
 
-    def run(self, *, batch_size: int, now: datetime) -> GeocodeBackfillStats:
+    def run(
+        self,
+        *,
+        batch_size: int,
+        now: datetime,
+        complex_ids: Iterable[int] | None = None,
+    ) -> GeocodeBackfillStats:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         if not self.geocoder.is_configured:
             raise RuntimeError("NAVER_MAP_CLIENT_ID and NAVER_MAP_CLIENT_SECRET are required")
 
-        candidates = self.session.scalars(
-            select(ComplexCurrent)
-            .where(
-                or_(
-                    ComplexCurrent.geocode_status == GEOCODE_STATUS_PENDING,
-                    and_(
-                        ComplexCurrent.geocode_status == GEOCODE_STATUS_FAILED,
-                        ComplexCurrent.geocode_retry_after.is_not(None),
-                        ComplexCurrent.geocode_retry_after <= now,
-                    ),
-                )
+        statement = select(ComplexCurrent).where(
+            or_(
+                ComplexCurrent.geocode_status == GEOCODE_STATUS_PENDING,
+                and_(
+                    ComplexCurrent.geocode_status == GEOCODE_STATUS_FAILED,
+                    ComplexCurrent.geocode_retry_after.is_not(None),
+                    ComplexCurrent.geocode_retry_after <= now,
+                ),
             )
-            .order_by(ComplexCurrent.complex_id)
-            .limit(batch_size)
+        )
+        if complex_ids is not None:
+            statement = statement.where(ComplexCurrent.complex_id.in_(sorted({int(item) for item in complex_ids})))
+        candidates = self.session.scalars(
+            statement.order_by(ComplexCurrent.complex_id).limit(batch_size)
         ).all()
 
         ok_count = 0

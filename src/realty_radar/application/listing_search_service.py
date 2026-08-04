@@ -28,6 +28,7 @@ from realty_radar.domain.loan.candidate_plan import (
 )
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.models import ComplexCurrent, ListingCurrent
+from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK
 
 
 LIFECYCLE_ACTIVE = 1
@@ -862,6 +863,19 @@ class ListingSearchService:
 
     def _filtered_rows(self, filters: ListingSearchFilter):
         statement = select(ListingCurrent).where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE)
+        if filters.has_map_bounds:
+            statement = statement.join(
+                ComplexCurrent,
+                ComplexCurrent.complex_id == ListingCurrent.complex_id,
+            ).where(
+                ComplexCurrent.geocode_status == GEOCODE_STATUS_OK,
+                ComplexCurrent.latitude.is_not(None),
+                ComplexCurrent.longitude.is_not(None),
+                ComplexCurrent.longitude >= filters.map_west,
+                ComplexCurrent.longitude <= filters.map_east,
+                ComplexCurrent.latitude >= filters.map_south,
+                ComplexCurrent.latitude <= filters.map_north,
+            )
         if filters.exclude_short_term:
             statement = statement.where(ListingCurrent.is_short_term == false())
         # 단일 지정 기본 필터 (지역 관련 필터 제외)
@@ -1234,6 +1248,15 @@ class ListingSearchService:
             raise ListingSearchValidationError("unsupported municipality")
         if filters.complex_keyword and len("".join(filters.complex_keyword.split())) < 2:
             raise ListingSearchValidationError("complex keyword must be at least two characters")
+        bounds = (filters.map_west, filters.map_south, filters.map_east, filters.map_north)
+        if any(value is not None for value in bounds) and not filters.has_map_bounds:
+            raise ListingSearchValidationError("all map bounds are required")
+        if filters.has_map_bounds:
+            west, south, east, north = bounds
+            if not all(value.is_finite() for value in bounds):
+                raise ListingSearchValidationError("map bounds must be finite")
+            if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
+                raise ListingSearchValidationError("invalid map bounds")
 
     @staticmethod
     def _validate_purchase_affordability_profile(filters: ListingSearchFilter, applicant: Any) -> None:

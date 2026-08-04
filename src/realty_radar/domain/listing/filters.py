@@ -74,6 +74,10 @@ class ListingSearchFilter:
     invalid_municipality: bool = False
     complex_id: int | None = None
     complex_keyword: str | None = None
+    map_west: Decimal | None = None
+    map_south: Decimal | None = None
+    map_east: Decimal | None = None
+    map_north: Decimal | None = None
     trade_type: int | None = None
     trade_types: list[int] | None = None
     min_price: int | None = None
@@ -121,9 +125,18 @@ class ListingSearchFilter:
         values.pop("page_size", None)
         return values
 
+    @property
+    def has_map_bounds(self) -> bool:
+        return all(
+            value is not None
+            for value in (self.map_west, self.map_south, self.map_east, self.map_north)
+        )
+
     def to_dict(self) -> dict[str, object]:
         values = asdict(self)
         values.pop("complex_id", None)
+        for key in ("map_west", "map_south", "map_east", "map_north"):
+            values.pop(key, None)
         for key in ("min_exclusive_area", "max_exclusive_area", "min_parking_per_household"):
             if values[key] is not None:
                 values[key] = str(values[key])
@@ -169,6 +182,8 @@ class ListingSearchFilter:
             if copied.get("min_parking_per_household") is not None
             else None
         )
+        for key in ("map_west", "map_south", "map_east", "map_north"):
+            copied[key] = Decimal(str(copied[key])) if copied.get(key) is not None else None
         copied["move_in_by"] = cls._date_value(copied.get("move_in_by"))
         for key in (
             "min_room_count",

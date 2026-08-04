@@ -154,3 +154,18 @@ def test_marker_payload_excludes_unverified_coordinate_instead_of_inventing_one(
     markers = ListingMapService(session).build_markers(result)
 
     assert markers == []
+
+
+def test_complex_ids_returns_each_normal_result_complex_once_in_result_order():
+    session = _session()
+    result = SearchResult(
+        items=[
+            SimpleNamespace(complex_id=7, complex_name="단지 7", address="서울 7", primary_price=700_000_000),
+            SimpleNamespace(complex_id=3, complex_name="단지 3", address="서울 3", primary_price=300_000_000),
+            SimpleNamespace(complex_id=7, complex_name="단지 7", address="서울 7", primary_price=710_000_000),
+        ],
+        next_cursor=None,
+        has_more=False,
+    )
+
+    assert ListingMapService(session).complex_ids(result) == [7, 3]

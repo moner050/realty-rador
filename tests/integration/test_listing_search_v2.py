@@ -14,6 +14,7 @@ from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
 from realty_radar.domain.loan.entities import ApplicantProfile
 from realty_radar.infrastructure.database.models import Base, ComplexCurrent, ListingCurrent
+from realty_radar.infrastructure.database.models.v2 import GEOCODE_STATUS_OK
 
 
 def _session():
@@ -149,6 +150,101 @@ def test_cursor_cannot_be_reused_with_different_filters():
     with pytest.raises(ValueError, match="cursor"):
         service.search_listings(
             ListingSearchFilter(trade_type=2, sort_by="price_asc", page_size=1, cursor=first.next_cursor)
+        )
+
+
+def test_map_bounds_include_edges_but_exclude_unverified_and_outside_listings():
+    session = _session()
+    _seed(session)
+    complexes = {row.complex_id: row for row in session.query(ComplexCurrent).all()}
+    complexes[1001].latitude = Decimal("37.5000000")
+    complexes[1001].longitude = Decimal("126.8000000")
+    complexes[1001].geocode_status = GEOCODE_STATUS_OK
+    complexes[1002].latitude = Decimal("37.5000000")
+    complexes[1002].longitude = Decimal("126.8000000")
+    complexes[1002].geocode_status = 0
+    session.add(
+        ComplexCurrent(
+            complex_id=1003,
+            region_code=1150010200,
+            name="지도 밖 테스트",
+            normalized_name="지도밖테스트",
+            address="서울특별시 강서구 테스트로 3",
+            latitude=Decimal("37.6000000"),
+            longitude=Decimal("126.9000000"),
+            geocode_status=GEOCODE_STATUS_OK,
+            state_hash=b"o" * 16,
+            first_seen_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+            last_seen_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+        )
+    )
+    session.add(
+        ListingCurrent(
+            article_id=2005,
+            complex_id=1003,
+            region_code=1150010200,
+            complex_name="지도 밖 테스트",
+            address="서울특별시 강서구 테스트로 3",
+            trade_type=1,
+            primary_price=700_000_000,
+            state_hash=b"o" * 16,
+            last_seen_job_id=1,
+            first_seen_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+            last_seen_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+            last_changed_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+        )
+    )
+    session.commit()
+
+    result = ListingSearchService(session, cursor_secret="test-secret").search_listings(
+        ListingSearchFilter(
+            map_west=Decimal("126.8000000"),
+            map_south=Decimal("37.5000000"),
+            map_east=Decimal("126.8500000"),
+            map_north=Decimal("37.5500000"),
+        )
+    )
+
+    assert [row.article_id for row in result.items] == [2001, 2002]
+
+
+def test_map_bounds_change_the_cursor_fingerprint_but_are_not_persisted():
+    session = _session()
+    _seed(session)
+    for complex in session.query(ComplexCurrent).all():
+        complex.latitude = Decimal("37.5000000")
+        complex.longitude = Decimal("126.8000000")
+        complex.geocode_status = GEOCODE_STATUS_OK
+    session.commit()
+    service = ListingSearchService(session, cursor_secret="test-secret")
+    first = service.search_listings(
+        ListingSearchFilter(
+            map_west=Decimal("126.7900000"),
+            map_south=Decimal("37.4900000"),
+            map_east=Decimal("126.8500000"),
+            map_north=Decimal("37.5500000"),
+            page_size=1,
+        )
+    )
+
+    assert first.next_cursor is not None
+    assert "map_west" not in ListingSearchFilter(
+        map_west=Decimal("126.7900000"),
+        map_south=Decimal("37.4900000"),
+        map_east=Decimal("126.8500000"),
+        map_north=Decimal("37.5500000"),
+    ).to_dict()
+    with pytest.raises(ValueError, match="cursor"):
+        service.search_listings(
+            ListingSearchFilter(
+                map_west=Decimal("126.7900000"),
+                map_south=Decimal("37.4900000"),
+                map_east=Decimal("126.8600000"),
+                map_north=Decimal("37.5500000"),
+                page_size=1,
+                cursor=first.next_cursor,
+            )
         )
 
 

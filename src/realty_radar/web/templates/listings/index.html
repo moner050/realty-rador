@@ -2,11 +2,15 @@
 
 {% block title %}아파트 매물 검색{% endblock %}
 
-{% block content %}
+{% block head_extra %}
 {% if naver_map_client_id %}
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={{ naver_map_client_id }}" defer></script>
 <script src="/static/listing-map.js" defer></script>
 {% endif %}
+{% endblock %}
+
+{% block content %}
+
 <style>
 /* 듀얼 레인지 슬라이더 투명 트랙 pointer-events 투과 및 손잡이 썸 수직 중앙 정렬/크기 축소 */
 input[type="range"].range-handle-input {
@@ -71,7 +75,6 @@ input[type="range"].range-handle-input::-moz-range-thumb:active {
     background-color: #4338ca;
 }
 
-/* 겹침 상태일 때 최소 원은 좌측, 최대 원은 우측으로 나란히 가로 배치 */
 input[type="range"].range-handle-input.is-overlapping-min::-webkit-slider-thumb {
     transform: translateX(-7px);
 }
@@ -91,23 +94,24 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
     transform: translateX(7px) scale(1.35);
 }
 
-input[type="range"].range-handle-input.is-overlapping-min::-moz-range-thumb {
-    transform: translateX(-7px);
+/* 커스텀 가격 마커 Badge */
+.map-price-badge {
+    background-color: #4f46e5;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    border: 2px solid #ffffff;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
 }
-input[type="range"].range-handle-input.is-overlapping-min::-moz-range-thumb:hover {
-    transform: translateX(-7px) scale(1.25);
-}
-input[type="range"].range-handle-input.is-overlapping-min::-moz-range-thumb:active {
-    transform: translateX(-7px) scale(1.35);
-}
-input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb {
-    transform: translateX(7px);
-}
-input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:hover {
-    transform: translateX(7px) scale(1.25);
-}
-input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:active {
-    transform: translateX(7px) scale(1.35);
+.map-price-badge:hover, .map-price-badge.is-active {
+    background-color: #e11d48;
+    transform: scale(1.15);
+    z-index: 1000 !important;
 }
 </style>
 
@@ -115,7 +119,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 <div data-single-slider data-scale="{{ scale }}" data-unit="{{ unit }}" class="group relative rounded-xl border border-slate-300/80 dark:border-slate-700/70 bg-white dark:bg-slate-950/60 p-3.5 shadow-sm transition-all hover:border-slate-400 dark:hover:border-slate-600 text-slate-900 dark:text-slate-100">
     <input id="{{ id }}-value" type="hidden" name="{{ name }}" data-slider-name="{{ name }}" value="{{ value if value is not none else '' }}">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-        <label for="{{ id }}" class="text-sm font-extrabold text-slate-900 dark:text-slate-200">{{ label }}</label>
+        <label for="{{ id }}" class="text-xs font-bold text-slate-900 dark:text-slate-200">{{ label }}</label>
         <div class="flex items-center gap-1.5">
             <div class="relative flex items-center">
                 <input type="number" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"
@@ -125,19 +129,16 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
                        class="w-16 sm:w-20 px-2 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700/80 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-right">
                 <span class="ml-1 text-xs text-slate-700 dark:text-slate-300 font-bold shrink-0">{{ unit }}</span>
             </div>
-            <button type="button" data-slider-clear class="min-h-8 rounded px-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">초기화</button>
+            <button type="button" data-slider-clear class="min-h-7 rounded px-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">초기화</button>
         </div>
     </div>
     <div class="relative pt-7 pb-3">
-        <!-- 동적 위치 툴팁 -->
         <output data-slider-tooltip class="absolute top-0 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 bg-indigo-600 text-white text-[11px] font-bold px-2 py-0.5 rounded shadow-lg pointer-events-none z-20 whitespace-nowrap">
             {% if value is not none %}{{ value / scale }}{{ unit }}{% else %}{{ minimum }}{{ unit }}{% endif %}
         </output>
-        <!-- 슬라이더 트랙 배경 & Progress Bar -->
         <div class="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden pointer-events-none my-0.5">
             <div data-slider-progress class="absolute top-0 left-0 h-full bg-indigo-500 rounded-full transition-all duration-75" style="width: 0%;"></div>
         </div>
-        <!-- 실제 핸들 Input -->
         <input id="{{ id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ value / scale if value is not none else minimum }}" data-slider-handle aria-label="{{ label }}" class="range-handle-input z-10">
     </div>
     <div class="flex justify-between text-[11px] text-slate-700 dark:text-slate-300 font-bold mt-1">
@@ -153,13 +154,11 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
     <input id="{{ min_id }}-value" type="hidden" name="{{ min_name }}" data-slider-name="{{ min_name }}" value="{{ min_value if min_value is not none else '' }}">
     <input id="{{ max_id }}-value" type="hidden" name="{{ max_name }}" data-slider-name="{{ max_name }}" value="{{ max_value if max_value is not none else '' }}">
     
-    <!-- 상단 요약 헤더, 수치 직접 입력 폼 및 전체 초기화 -->
     <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
         <div class="flex flex-wrap items-center gap-2">
-            <p {% if key == 'price' %}data-price-label{% endif %} class="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+            <p {% if key == 'price' %}data-price-label{% endif %} class="text-xs font-extrabold text-slate-900 dark:text-slate-100">
                 <span>{{ label }}</span>
             </p>
-            <!-- 최소 ~ 최대 수치 직접 입력 폼 -->
             <div class="flex items-center gap-1 text-xs">
                 <div class="flex items-center gap-1">
                     <input type="number" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}"
@@ -188,31 +187,25 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             <span data-range-pyeong="max" class="hidden"></span>
             {% endif %}
         </div>
-        <button type="button" data-range-clear-all class="min-h-8 rounded px-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">초기화</button>
+        <button type="button" data-range-clear-all class="min-h-7 rounded px-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">초기화</button>
     </div>
 
-    <!-- 단일 듀얼 핸들 트랙 영역 -->
     <div data-range-track-container class="relative my-4 pt-7 pb-3 px-1">
-        <!-- 최소 핸들 툴팁 -->
         <output data-range-tooltip="min" class="absolute top-0 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 bg-indigo-600 text-white text-[11px] font-bold px-2 py-0.5 rounded shadow-lg pointer-events-none z-30 whitespace-nowrap">
             {% if min_value is not none %}{{ min_value }}{{ unit }}{% else %}최소{% endif %}
         </output>
-        <!-- 최대 핸들 툴팁 -->
         <output data-range-tooltip="max" class="absolute top-0 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 bg-indigo-600 text-white text-[11px] font-bold px-2 py-0.5 rounded shadow-lg pointer-events-none z-30 whitespace-nowrap">
             {% if max_value is not none %}{{ max_value }}{{ unit }}{% else %}최대{% endif %}
         </output>
 
-        <!-- 단일 레일 트랙 및 활성 채움 바 -->
         <div class="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 pointer-events-none my-0.5">
             <div data-range-progress class="absolute top-0 h-full bg-indigo-500 rounded-full transition-all duration-75" style="left: 0%; width: 100%;"></div>
         </div>
 
-        <!-- 듀얼 range 핸들 겹침 구조 -->
         <input id="{{ min_id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ min_value if min_value is not none else minimum }}" data-range-handle="min" aria-label="{{ label }} 최소" class="range-handle-input z-20">
         <input id="{{ max_id }}" type="range" min="{{ minimum }}" max="{{ maximum }}" step="{{ step }}" value="{{ max_value if max_value is not none else maximum }}" data-range-handle="max" aria-label="{{ label }} 최대" class="range-handle-input z-20">
     </div>
 
-    <!-- 하단 최소/최대 가이드 라벨 -->
     <div class="flex justify-between text-[11px] text-slate-700 dark:text-slate-300 font-bold px-0.5">
         <span>최소: {{ minimum }}{{ unit }}</span>
         <span>최대: {{ maximum }}{{ unit }}</span>
@@ -226,12 +219,15 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 {% set selected_floors = filters.floor_bands or [] %}
 {% set min_price_eok = filters.min_price / 100000000 if filters.min_price is not none else none %}
 {% set max_price_eok = filters.max_price / 100000000 if filters.max_price is not none else none %}
+
 <div class="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
     {% include "settings/_inline_profile_modal.html" %}
-    <div class="min-w-0 space-y-6">
-    <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+
+    <div class="min-w-0 space-y-4">
+    <!-- 1. 헤더 & 뷰 모드 컨트롤러 (View Mode Switcher) -->
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -239,331 +235,205 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
             </h1>
             <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">조건을 바꾸면 자동으로 새 검색을 시작합니다. 전체 건수 대신 빠른 cursor 조회를 사용합니다.</p>
         </div>
-        <a href="/" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm">전체 초기화</a>
+
+        <div class="flex items-center gap-2">
+            <a href="/" class="min-h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center shadow-sm">전체 초기화</a>
+        </div>
     </header>
 
-    <form id="listing-search-form" class="theme-filter-choice theme-surface space-y-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-5 shadow-xl backdrop-blur-sm transition-colors text-slate-900 dark:text-slate-100" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#search-results" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
+    <!-- 2. 메인 검색 폼 (정돈된 콤팩트 검색 바) -->
+    <form id="listing-search-form" class="theme-filter-choice theme-surface space-y-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-lg text-slate-900 dark:text-slate-100" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#search-results" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
         <input type="hidden" name="page_size" value="{{ filters.page_size }}">
-
-        <!-- 0. 원클릭 퀵 필터 (Quick Preset Chips) -->
-        <section class="rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/90 via-purple-50/40 to-slate-50 dark:from-slate-950 dark:via-indigo-950/30 dark:to-slate-950 p-4 shadow-md space-y-3">
-            <div class="flex items-center justify-between flex-wrap gap-2 border-b border-indigo-200/60 dark:border-indigo-900/40 pb-2">
-                <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center justify-center rounded-lg bg-indigo-600/10 dark:bg-indigo-600/30 p-1.5 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 dark:border-indigo-500/30">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                    </span>
-                    <h2 class="font-bold text-xs sm:text-sm text-indigo-900 dark:text-indigo-200">원클릭 퀵 필터 (맞춤 프리셋)</h2>
-                </div>
-                <span class="text-[11px] text-slate-500 dark:text-slate-400">클릭하면 조건이 자동으로 세팅 및 검색됩니다</span>
-            </div>
-
-            <!-- 그룹 1: 🌟 대출 + 주거환경 꿀조합 -->
-            <div class="space-y-1.5">
-                <div class="text-[11px] font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1">
-                    <span>🌟 대출 + 정돈된 주거환경 꿀조합</span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" data-quick-preset="combo-didimdol-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
-                        <span>🌟 디딤돌+정돈된타운</span>
-                        <span class="text-[10px] opacity-80 font-normal">(매매 5억/85㎡ + 800세대)</span>
-                    </button>
-                    <button type="button" data-quick-preset="combo-bogeum-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
-                        <span>🌟 보금자리론+정돈된타운</span>
-                        <span class="text-[10px] opacity-80 font-normal">(매매 6억/전체평형 + 800세대)</span>
-                    </button>
-                    <button type="button" data-quick-preset="combo-newborn-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
-                        <span>🌟 신생아특례+정돈된타운</span>
-                        <span class="text-[10px] opacity-80 font-normal">(매매 9억/85㎡ + 800세대)</span>
-                    </button>
-                    <button type="button" data-quick-preset="combo-newborn-jeonse-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
-                        <span>🌟 신생아전세+정돈된타운</span>
-                        <span class="text-[10px] opacity-80 font-normal">(전세 5억/85㎡ + 800세대)</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 그룹 2: 🏛️ 주택 구입자금 대출 -->
-            <div class="space-y-1.5 border-t border-indigo-200/50 dark:border-slate-800/80 pt-2.5">
-                <div class="text-[11px] font-bold text-sky-700 dark:text-sky-400 flex items-center gap-1">
-                    <span>🏛️ 주택 구입자금 정책대출</span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" data-quick-preset="loan-didimdol" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
-                        <span>🏛️ 일반 디딤돌 (5억/85㎡)</span>
-                    </button>
-                    <button type="button" data-quick-preset="loan-bogeum" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
-                        <span>💒 보금자리론 (6억/전체평형)</span>
-                    </button>
-                    <button type="button" data-quick-preset="loan-bogeum-first" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
-                        <span>🏡 생애최초 보금자리론 (6억/전체평형)</span>
-                    </button>
-                    <button type="button" data-quick-preset="loan-newborn-buy" class="min-h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-1 shadow-sm">
-                        <span>👶 신생아 특례 (9억/85㎡)</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 그룹 3: 💵 전세자금 대출 -->
-            <div class="space-y-1.5 border-t border-slate-800/80 pt-2.5">
-                <div class="text-[11px] font-bold text-amber-400 flex items-center gap-1">
-                    <span>💵 전세자금 정책대출</span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" data-quick-preset="loan-butimmok" class="min-h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1">
-                        <span>🏠 청년/일반 버팀목 (3억/85㎡)</span>
-                    </button>
-                    <button type="button" data-quick-preset="loan-shinhon-rent" class="min-h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1">
-                        <span>💍 신혼 버팀목 (4억/85㎡)</span>
-                    </button>
-                    <button type="button" data-quick-preset="loan-newborn-rent" class="min-h-9 px-3 rounded-lg border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1">
-                        <span>🍼 신생아 전세 (5억/85㎡)</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 그룹 4: 🏘️ 대출 외 주거환경 중심 필터 (맨 아래에 정돈) -->
-            <div class="space-y-1.5 border-t border-slate-800/80 pt-2.5">
-                <div class="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                    <span>🏘️ 주거환경 중심 필터 (대출 외 조건)</span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" data-quick-preset="tidy-town" class="theme-soft-emerald min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm">
-                        <span>🏘️ 정돈된 아파트 타운</span>
-                        <span class="text-[10px] opacity-75 font-normal">(800세대 이상 대단지)</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 그룹 5: ⚡ 강남역 대중교통 통근시간 퀵 필터 -->
-            <div class="relative space-y-1.5 border-t border-indigo-200/50 dark:border-slate-800/80 pt-2.5">
-                <div class="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <span>⚡ 강남역 대중교통 통근시간 퀵 필터</span>
-                    <span class="text-[10px] text-slate-400 dark:text-slate-500 font-normal">(버튼에 마우스를 1초간 올리면 포함 구역 표시)</span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" data-quick-preset="commute-gangnam-60" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm {% if filters.max_commute_gangnam == 60 %}is-active !border-amber-500 !bg-amber-100 !text-amber-950 dark:!bg-amber-950/70 dark:!text-amber-200 ring-2 ring-amber-500 font-bold shadow-md{% endif %}">
-                        <span>⚡ 강남까지 1시간 이내</span>
-                        <span class="text-[10px] opacity-80 font-normal">(강남/서초/송파/마포/분당/수지 등)</span>
-                    </button>
-                    <button type="button" data-quick-preset="commute-gangnam-90" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm {% if filters.max_commute_gangnam == 90 %}is-active !border-amber-500 !bg-amber-100 !text-amber-950 dark:!bg-amber-950/70 dark:!text-amber-200 ring-2 ring-amber-500 font-bold shadow-md{% endif %}">
-                        <span>⚡ 강남까지 1시간 30분 이내</span>
-                        <span class="text-[10px] opacity-80 font-normal">(수원/일산/동탄/부천/하남 등)</span>
-                    </button>
-                </div>
-                <!-- 1초 마우스 호버 툴팁 레이어 -->
-                <div id="commute-hover-tooltip" class="hidden absolute left-0 top-full mt-2 z-50 w-80 md:w-96 rounded-xl border border-amber-500/30 bg-slate-900/95 p-3.5 text-xs text-slate-200 shadow-2xl backdrop-blur-md transition-all duration-200">
-                    <div class="flex items-center gap-1.5 font-bold text-amber-400 mb-2 border-b border-slate-700/60 pb-1.5" id="commute-tooltip-title">
-                        <span>⚡ 강남역 통근권 구역 안내</span>
-                    </div>
-                    <div class="space-y-2 text-[11px] leading-relaxed">
-                        <div>
-                            <span class="font-bold text-indigo-300">🏢 서울:</span>
-                            <span id="commute-tooltip-seoul" class="text-slate-300"></span>
-                        </div>
-                        <div>
-                            <span class="font-bold text-emerald-300">🌳 경기:</span>
-                            <span id="commute-tooltip-gyeonggi" class="text-slate-300"></span>
-                        </div>
-                        <div id="commute-tooltip-incheon-wrap">
-                            <span class="font-bold text-sky-300">🌊 인천:</span>
-                            <span id="commute-tooltip-incheon" class="text-slate-300"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
         <input type="hidden" name="max_commute_gangnam" id="input-max-commute-gangnam" value="{{ filters.max_commute_gangnam or '' }}">
 
-        <!-- 1. 기본 검색 카드 (지역 및 키워드) -->
-        <section class="rounded-xl border border-slate-800 bg-slate-950/50 p-4 shadow-sm">
-            <div class="mb-3 flex items-center gap-2 border-b border-slate-800/80 pb-2">
-                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <h2 class="font-semibold text-sm text-slate-100">기본 검색</h2>
-                <span class="text-[11px] text-slate-400 ml-auto">지역을 먼저 지정해 보세요</span>
-            </div>
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>시도</span><select id="sido-select" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">전체</option>{% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}</select></label>
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>시/군</span><select id="municipality-select" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시도를 먼저 선택하세요</option></select></label>
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>구</span><select id="district-select" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"><option value="">시/군을 먼저 선택하세요</option></select></label>
-                <label class="space-y-1 text-xs font-medium text-slate-300"><span>단지명·주소</span><input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="예: 래미안, 강남구" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"></label>
+        <!-- 상단 1열 콤팩트 필터 바 (Primary Filter Bar) -->
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-lg space-y-3">
+            <div class="hidden"><h2 class="font-semibold text-sm text-slate-100">기본 검색</h2></div>
+            <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-12 items-center">
+                <!-- 지역 선택 3종 세트 (시도 / 시군 / 구) -->
+                <div class="lg:col-span-4 grid grid-cols-3 gap-1.5">
+                    <select id="sido-select" class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500">
+                        <option value="">시도 전체</option>
+                        {% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}
+                    </select>
+                    <select id="municipality-select" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500">
+                        <option value="">시/군</option>
+                    </select>
+                    <select id="district-select" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500">
+                        <option value="">구 선택</option>
+                    </select>
+                </div>
+
+                <!-- 키워드 검색 -->
+                <div class="lg:col-span-3">
+                    <input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="단지명·주소 검색 (예: 래미안, 대치동)" class="min-h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-indigo-500">
+                </div>
+
+                <!-- 거래 유형 퀵 체크박스 칩 -->
+                <div class="lg:col-span-3 flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                    {% for code, label in [(1, '매매'), (2, '전세'), (3, '월세'), (4, '단기')] %}
+                    <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 px-3 text-xs font-bold text-slate-700 dark:text-slate-300 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600 has-[:checked]:text-white transition-all shadow-sm">
+                        <input class="sr-only" type="checkbox" name="trade_types" value="{{ ['SALE', 'JEONSE', 'MONTHLY_RENT', 'SHORT_TERM'][loop.index0] }}" {% if code == 4 %}id="short-term-trade"{% endif %} {% if code in selected_trades %}checked{% endif %}>
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <!-- 상세 필터 팝업 모달 토글 버튼 & 검색 실행 -->
+                <div class="lg:col-span-2 flex items-center gap-2">
+                    <button type="button" id="btn-toggle-detailed-filter" class="flex-1 min-h-10 rounded-lg border border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                        <span>상세 필터 ⚙️</span>
+                    </button>
+                    <button type="submit" class="min-h-10 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-1 shrink-0">
+                        <span>검색</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- 다중 선택된 지역 칩 및 퀵 묶음 프리셋 -->
-            <div id="multi-region-container" class="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
-                <div class="flex items-center justify-between flex-wrap gap-2">
-                    <span class="text-xs font-semibold text-slate-300 flex items-center gap-1">
-                        <span>선택된 다중 지역:</span>
-                        <span class="text-[11px] text-slate-400 font-normal">(여러 지역을 함께 추가/삭제 가능)</span>
-                    </span>
-                    <!-- 주요 권역 묶음 단축 버튼 -->
-                    <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-                        <span class="text-slate-400 font-medium">인기 묶음:</span>
-                        <button type="button" data-region-bundle="gangnam3" class="px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-all font-medium">강남3구</button>
-                        <button type="button" data-region-bundle="mayongseong" class="px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-all font-medium">마용성</button>
-                        <button type="button" data-region-bundle="suyongseong" class="px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition-all font-medium">수용성</button>
-                        <button type="button" id="btn-clear-regions" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all font-medium">지역 초기화</button>
-                    </div>
+            <!-- 활성 필터 요약 칩 Bar (Active Filter Chips) -->
+            <div id="active-filter-chips-bar" class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800/80 text-xs">
+                <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용된 조건:</span>
+                <div id="selected-region-chips" class="flex flex-wrap gap-1.5">
+                    <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
                 </div>
-                <!-- 칩 태그 영역 -->
-                <div id="selected-region-chips" class="flex flex-wrap gap-1.5 min-h-7 p-1 rounded-lg bg-slate-900/60 border border-slate-800">
-                    <span class="text-xs text-slate-500 italic p-1 text-[11px]" id="no-region-msg">선택된 추가 지역이 없습니다.</span>
+                <div class="ml-auto flex items-center gap-1 text-[11px]">
+                    <span class="text-slate-400">인기 묶음:</span>
+                    <button type="button" data-region-bundle="gangnam3" class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 hover:bg-indigo-200 text-indigo-700 dark:text-indigo-200 font-bold border border-indigo-300 dark:border-indigo-700/60">강남3구</button>
+                    <button type="button" data-region-bundle="mayongseong" class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 hover:bg-indigo-200 text-indigo-700 dark:text-indigo-200 font-bold border border-indigo-300 dark:border-indigo-700/60">마용성</button>
+                    <button type="button" id="btn-clear-regions" class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold">초기화</button>
                 </div>
                 <div id="hidden-sigungu-inputs"></div>
                 <div id="hidden-sido-inputs"></div>
             </div>
-
-            <!-- 거래 유형 -->
-            <fieldset class="mt-4 border-t border-slate-800/80 pt-3"><legend class="text-xs font-semibold text-slate-200 mb-2 flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>거래</span></legend><div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">{% for code, label in [(1, '매매'), (2, '전세'), (3, '월세'), (4, '단기임대')] %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-lg border border-slate-700/80 bg-slate-900 px-3.5 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium"><input class="sr-only" type="checkbox" name="trade_types" value="{{ ['SALE', 'JEONSE', 'MONTHLY_RENT', 'SHORT_TERM'][loop.index0] }}" {% if code == 4 %}id="short-term-trade"{% endif %} {% if code in selected_trades %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
-
-            <!-- 가격 및 면적 조건 -->
-            <details id="transaction-advanced-filters" class="theme-subtle-surface group mt-4 rounded-xl border p-4 transition-all">
-                <summary class="theme-primary-text flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">
-                    <span class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span>가격·면적 상세 조건</span>
-                    </span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-[11px] font-normal text-slate-400">통합 듀얼 슬라이더로 손쉽게 범위를 조절하세요</span>
-                        <svg class="w-4 h-4 text-indigo-400 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </div>
-                </summary>
-                <div data-trade-filter class="mt-4 space-y-4">
-                    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        {{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억') }}
-                        <div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.') }}</div>
-                    </div>
-                    <!-- 빠른 선택 칩 -->
-                    <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="가격 빠른 선택">
-                        <span class="text-xs text-slate-400 font-medium self-center mr-1">가격 빠른선택:</span>
-                        <button type="button" data-price-range=";6" class="min-h-11 shrink-0 rounded-lg border border-slate-700/80 bg-slate-950 px-3 text-xs text-slate-300 hover:border-indigo-400 hover:text-white transition-all">6억 이하</button>
-                        <button type="button" data-price-range="6;9" class="min-h-11 shrink-0 rounded-lg border border-slate-700/80 bg-slate-950 px-3 text-xs text-slate-300 hover:border-indigo-400 hover:text-white transition-all">6~9억</button>
-                        <button type="button" data-price-range="9;" class="min-h-11 shrink-0 rounded-lg border border-slate-700/80 bg-slate-950 px-3 text-xs text-slate-300 hover:border-indigo-400 hover:text-white transition-all">9억 이상</button>
-                    </div>
-
-                    {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '84㎡는 약 25평이며, 1평은 약 3.3㎡입니다.') }}
-                    <div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap" aria-label="평형 빠른 선택">
-                        <span class="text-xs text-slate-400 font-medium self-center mr-1">평형 빠른선택:</span>
-                        {% for area, pyeong in [(59, 18), (74, 22), (84, 25), (102, 31)] %}
-                        <button type="button" data-area="{{ area }}" class="min-h-11 shrink-0 rounded-lg border border-slate-700/80 bg-slate-950 px-3 text-xs text-slate-300 hover:border-indigo-400 hover:text-white transition-all">{{ area }}㎡ (약 {{ pyeong }}평)</button>
-                        {% endfor %}
-                    </div>
-                </div>
-            </details>
-        </section>
-
-        <!-- 2. 고급 조건 카드 -->
-        <details class="theme-subtle-surface group rounded-xl border p-4 transition-all">
-            <summary class="theme-primary-text cursor-pointer font-semibold text-xs hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center justify-between">
-                <span class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                    <span>고급 상세 조건</span>
-                </span>
-                <svg class="w-4 h-4 text-indigo-400 transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </summary>
-            
-            <div class="mt-4 space-y-5">
-                <!-- 건물 기본 스펙 슬라이더 -->
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년') }}
-                    {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대') }}
-                    {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일') }}
-                    <label class="theme-secondary-text space-y-1 text-xs font-medium"><span>동 코드 직접 입력</span><input inputmode="numeric" name="region_code" value="{{ filters.region_code or '' }}" placeholder="고급: cortarNo" class="theme-control w-full rounded-lg px-3 text-xs placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"></label>
-                </div>
-
-                <!-- 융자 상태 -->
-                <fieldset class="border-t border-slate-800/80 pt-3"><legend class="text-xs font-medium text-slate-200 mb-1.5">융자 상태 (상세 확인 완료 매물만)</legend><div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">{% for code, label in [(0, '정보 미상'), (1, '융자 없음'), (2, '융자 있음')] %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200"><input class="sr-only" type="checkbox" name="mortgage_codes" value="{{ code }}" {% if code in (filters.mortgage_codes or []) %}checked{% endif %}>{{ label }}</label>{% endfor %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200"><input class="sr-only" type="checkbox" name="exclude_unknown_mortgage" value="true" {% if filters.exclude_unknown_mortgage %}checked{% endif %}>정보 미상 제외</label></div></fieldset>
-
-                <!-- 방향 -->
-                <fieldset class="border-t border-slate-800/80 pt-3"><legend class="text-xs font-medium text-slate-200 mb-1.5">방향</legend><div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">{% for code, label in [(1, '남'), (2, '남동'), (3, '동'), (4, '북동'), (5, '북'), (6, '북서'), (7, '서'), (8, '남서')] %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200"><input class="sr-only" type="checkbox" name="direction_codes" value="{{ code }}" {% if code in selected_directions %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
-
-                <!-- 층수 -->
-                <fieldset class="border-t border-slate-800/80 pt-3"><legend class="text-xs font-medium text-slate-200 mb-1.5">층</legend><div class="flex gap-2 overflow-x-auto pb-1 whitespace-nowrap">{% for code, label in [(1, '저층'), (2, '중층'), (3, '고층'), (4, '탑층'), (5, '지하')] %}<label class="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200"><input class="sr-only" type="checkbox" name="floor_bands" value="{{ code }}" {% if code in selected_floors %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
-
-                <!-- 주거 상세 조건 -->
-                <section id="advanced-housing-conditions" class="border-t border-slate-800 pt-4">
-                    <div class="mb-3">
-                        <h2 class="font-semibold text-xs text-slate-200">주거 조건</h2>
-                        <p class="mt-0.5 text-[11px] text-slate-400">상세 정보 수집이 완료된 매물에서만 조건을 적용합니다.</p>
-                    </div>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {{ single_slider('min-room-count', 'min_room_count', filters.min_room_count, 0, 10, 1, '방 최소', '개') }}
-                        {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개') }}
-                        {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대') }}
-                        {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000) }}
-                        <label class="space-y-1 rounded-xl border border-slate-700/70 bg-slate-950/60 p-3.5 text-xs text-slate-300">
-                            <span class="font-medium text-slate-200">입주 가능일</span>
-                            <input type="date" name="move_in_by" value="{{ filters.move_in_by or '' }}" class="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-white focus:border-indigo-500">
-                        </label>
-                        {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분') }}
-                        <label class="flex min-h-11 items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-950/60 px-3.5 text-xs text-slate-200 cursor-pointer sm:col-span-2"><input type="checkbox" name="parking_possible_only" value="true" class="rounded accent-indigo-500" {% if filters.parking_possible_only %}checked{% endif %}>주차 가능만</label>
-                    </div>
-                </section>
-            </div>
-        </details>
-
-        <!-- 3. 검색결과 부근 핵심 6개 토글 체크박스 컨트롤 바 (Quick Options Section) -->
-        <section class="rounded-xl border border-slate-800/90 bg-slate-950/80 p-3.5 shadow-md">
-            <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800/60">
-                <span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                    <span>주요 매물 필터 옵션</span>
-                </span>
-                <span class="text-[11px] text-slate-400">검색결과와 연동되는 빠른 토글</span>
-            </div>
-            <div class="flex flex-wrap gap-2">
-                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="checkbox" name="direct_trade_only" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.direct_trade_only %}checked{% endif %}>
-                    <span>직거래만</span>
-                </label>
-                <label title="네이버 응답 표기이며 법적·금융적 보증이 아닙니다." class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="checkbox" name="safe_lessor_hug_only" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}>
-                    <span>HUG 안심임대인 표기만</span>
-                </label>
-                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="checkbox" name="exclude_first_floor" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.exclude_first_floor %}checked{% endif %}>
-                    <span>1층 제외</span>
-                </label>
-                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="hidden" name="exclude_short_term" value="false">
-                    <input id="exclude-short-term" type="checkbox" name="exclude_short_term" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.exclude_short_term %}checked{% endif %}>
-                    <span>단기임대 제외</span>
-                </label>
-                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="checkbox" name="group_by_complex" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.group_by_complex %}checked{% endif %}>
-                    <span>단지별 묶기</span>
-                </label>
-                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="checkbox" name="only_eligible_loans" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}>
-                    <span>가능 대출 있는 매물만</span>
-                </label>
-                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900 px-3 text-xs text-slate-300 transition-all hover:border-slate-500 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/20 has-[:checked]:text-indigo-200 font-medium shadow-sm">
-                    <input type="checkbox" name="only_purchase_affordable" value="true" class="w-3.5 h-3.5 rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}>
-                    <span>실구매 가능 매물만</span>
-                </label>
-            </div>
-        </section>
-
-        <!-- Sticky Bottom Action Bar -->
-        <div class="sticky bottom-4 z-20 flex min-h-11 items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/95 p-2.5 shadow-2xl backdrop-blur-md">
-            <button class="min-h-11 rounded-lg bg-indigo-600 px-6 text-xs font-bold text-white hover:bg-indigo-500 shadow-md shadow-indigo-600/30 transition-all flex items-center gap-2" type="submit">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                <span>검색</span>
-            </button>
-            <span id="search-loading" class="htmx-indicator text-xs text-indigo-300 font-medium flex items-center gap-1.5" role="status">
-                <svg class="w-3.5 h-3.5 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <span>검색 중…</span>
-            </span>
-            <a href="/" class="ml-auto text-xs text-slate-400 underline underline-offset-4 hover:text-white transition-colors px-2">초기화</a>
         </div>
+
+        <!-- 3. 상세 필터 카테고리 탭 모달/드로어 (Detailed Filter Container) -->
+        <dialog id="detailed-filter-modal" class="w-[min(54rem,calc(100vw-1.5rem))] rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
+            <div class="p-4 sm:p-5 flex flex-col max-h-[85vh]">
+                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>⚙️ 상세 검색 조건 설정</span>
+                    </h3>
+                    <button type="button" onclick="document.getElementById('detailed-filter-modal').close()" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+                </div>
+
+                <!-- 상세 필터 카테고리 탭 (Tab Bar) -->
+                <div class="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto my-3 gap-2">
+                    <button type="button" data-filter-tab="presets" class="filter-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400">🏛️ 대출/퀵프리셋</button>
+                    <button type="button" data-filter-tab="housing" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">🏠 주거/건물스펙</button>
+                    <button type="button" data-filter-tab="commute" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚡ 통근시간(강남)</button>
+                    <button type="button" data-filter-tab="options" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚙️ 옵션/융자상태</button>
+                </div>
+
+                <!-- 탭 1: 대출 & 원클릭 퀵 프리셋 -->
+                <div id="filter-tab-content-presets" class="filter-tab-content space-y-4 overflow-y-auto pr-1">
+                    <div class="rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/80 to-slate-50 dark:from-slate-950 dark:to-slate-900 p-3.5 space-y-3">
+                        <div class="text-xs font-bold text-indigo-900 dark:text-indigo-200">🌟 정책대출 + 정돈된 주거환경 꿀조합</div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" data-quick-preset="combo-didimdol-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 디딤돌+정돈된타운 (매매 5억/85㎡ + 800세대)</button>
+                            <button type="button" data-quick-preset="combo-bogeum-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 보금자리론+정돈된타운 (매매 6억 + 800세대)</button>
+                            <button type="button" data-quick-preset="combo-newborn-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아특례+정돈된타운 (매매 9억/85㎡ + 800세대)</button>
+                            <button type="button" data-quick-preset="combo-newborn-jeonse-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아전세+정돈된타운 (전세 5억/85㎡ + 800세대)</button>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="text-xs font-bold text-slate-700 dark:text-slate-300">🏛️ 구입/전세자금 정책대출 전용 프리셋</div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" data-quick-preset="loan-didimdol" data-price-range=";6" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏛️ 디딤돌 (5억/85㎡)</button>
+                            <button type="button" data-quick-preset="loan-bogeum" data-price-range="6;9" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">💒 보금자리론 (6억)</button>
+                            <button type="button" data-quick-preset="loan-newborn-buy" data-price-range="9;" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">👶 신생아 특례 (9억/85㎡)</button>
+                            <button type="button" data-quick-preset="loan-butimmok" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏠 청년/버팀목전세 (3억)</button>
+                            <button type="button" data-quick-preset="loan-newborn-rent" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🍼 신생아 전세 (5억)</button>
+                            <button type="button" data-quick-preset="tidy-town" class="theme-soft-emerald min-h-8 px-3 rounded-lg border text-xs font-semibold">🏘️ 정돈된 아파트 타운</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 탭 2: 주거 & 건물 스펙 (가격, 면적, 준공년도, 세대수) -->
+                <div id="filter-tab-content-housing" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
+                    <details id="transaction-advanced-filters" class="theme-subtle-surface group rounded-xl border p-4 transition-all" open>
+                        <summary class="theme-primary-text flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">
+                            <span>가격·면적 조건</span>
+                        </summary>
+                        <div data-trade-filter class="mt-3 space-y-4">
+                            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                {{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억') }}
+                                <div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.') }}</div>
+                            </div>
+                            {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '59㎡는 약 18평, 84㎡는 약 25평입니다.') }}
+                        </div>
+                    </details>
+
+                    <section id="advanced-housing-conditions" class="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
+                        <div class="mb-2">
+                            <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">주거 조건</h2>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년') }}
+                            {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대') }}
+                            {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일') }}
+                            {{ single_slider('min-room-count', 'min_room_count', filters.min_room_count, 0, 10, 1, '방 최소', '개') }}
+                            {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개') }}
+                            {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대') }}
+                            {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000) }}
+                            {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분') }}
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 탭 3: 강남역 통근시간 퀵 필터 -->
+                <div id="filter-tab-content-commute" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
+                    <div class="p-4 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
+                        <div class="text-xs font-bold text-amber-900 dark:text-amber-300">⚡ 강남역 대중교통 통근시간 퀵 필터</div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" data-quick-preset="commute-gangnam-30" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 30 %} commute-active-btn{% endif %}">⚡ 강남까지 30분 이내</button>
+                            <button type="button" data-quick-preset="commute-gangnam-60" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 60 %} commute-active-btn{% endif %}">⚡ 강남까지 1시간 이내</button>
+                            <button type="button" data-quick-preset="commute-gangnam-90" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 90 %} commute-active-btn{% endif %}">⚡ 강남까지 1시간 30분 이내</button>
+                        </div>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">버튼 선택 시 해당 시간 이내에 이동 가능한 수도권 시군구가 자동으로 검색됩니다.</p>
+                    </div>
+                </div>
+
+                <!-- 탭 4: 기타 옵션 & 융자상태 -->
+                <div id="filter-tab-content-options" class="filter-tab-content hidden space-y-4 overflow-y-auto pr-1">
+                    <div class="space-y-3">
+                        <div class="hidden"><h2 class="font-bold text-xs">고급 조건</h2></div>
+                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200">주요 토글 옵션</div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="direct_trade_only" value="true" class="rounded accent-indigo-500" {% if filters.direct_trade_only %}checked{% endif %}><span>직거래만</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="safe_lessor_hug_only" value="true" class="rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}><span>HUG 안심임대인만</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="parking_possible_only" value="true" class="rounded accent-indigo-500" {% if filters.parking_possible_only %}checked{% endif %}><span>주차 가능만</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="exclude_first_floor" value="true" class="rounded accent-indigo-500" {% if filters.exclude_first_floor %}checked{% endif %}><span>1층 제외</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="hidden" name="exclude_short_term" value="false"><input id="exclude-short-term" type="checkbox" name="exclude_short_term" value="true" class="rounded accent-indigo-500" {% if filters.exclude_short_term %}checked{% endif %}><span>단기임대 제외</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="group_by_complex" value="true" class="rounded accent-indigo-500" {% if filters.group_by_complex %}checked{% endif %}><span>단지별 묶기</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_eligible_loans" value="true" class="rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}><span>가능대출 매물만</span></label>
+                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_purchase_affordable" value="true" class="rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}><span>실구매 가능 매물만</span></label>
+                        </div>
+                        <div class="hidden"><input type="date" name="move_in_by" value="{{ filters.move_in_by or '' }}"></div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                    <button type="button" onclick="document.getElementById('detailed-filter-modal').close()" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
+                </div>
+            </div>
+        </dialog>
     </form>
 
-    {% if search_error %}{% include "listings/search_error.html" %}{% else %}{% include "listings/list_partial.html" %}{% endif %}
+    <!-- 4. 매물 검색 결과 레이아웃 영역 (상단 전면 툴바 + 하단 목록/지도 스플릿 뷰) -->
+    <div id="search-loading-container">
+        <span id="search-loading" class="htmx-indicator text-xs text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-2 pb-2" role="status">
+            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span>매물 검색 중…</span>
+        </span>
     </div>
+
+    {% if search_error %}
+        {% include "listings/search_error.html" %}
+    {% else %}
+        {% include "listings/list_partial.html" %}
+    {% endif %}
 </div>
 
 <script type="application/json" id="region-options-data">{{ region_options | tojson | safe }}</script>
@@ -1043,18 +913,18 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         });
     });
 
-    // 강남역 통근시간 퀵 필터 버튼 처리 (60분 / 90분)
+    // 강남역 통근시간 퀵 필터 버튼 처리 (30분 / 60분 / 90분)
     const gangnamButtons = document.querySelectorAll('[data-quick-preset^="commute-gangnam-"]');
     const gangnamInput = document.getElementById("input-max-commute-gangnam");
-    const activeClasses = ["is-active", "!border-amber-500", "!bg-amber-100", "!text-amber-950", "dark:!bg-amber-950/70", "dark:!text-amber-200", "ring-2", "ring-amber-500", "font-bold", "shadow-md"];
+    const COMMUTE_ACTIVE_CLS = "commute-active-btn";
 
     const updateGangnamButtonsUI = (activeMinutes) => {
         gangnamButtons.forEach((btn) => {
             const minutes = btn.dataset.quickPreset.replace("commute-gangnam-", "");
             if (String(minutes) === String(activeMinutes)) {
-                btn.classList.add(...activeClasses);
+                btn.classList.add(COMMUTE_ACTIVE_CLS);
             } else {
-                btn.classList.remove(...activeClasses);
+                btn.classList.remove(COMMUTE_ACTIVE_CLS);
             }
         });
     };
@@ -1076,17 +946,23 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 
     // 강남역 통근시간 퀵 필터 1초 마우스 호버 툴팁 데이터 및 이벤트 처리
     const commuteTooltipData = {
+        "30": {
+            title: "⚡ 강남역 30분 이내 포함 구역",
+            seoul: "강남구, 서초구, 송파구(잠실 중심 / 경계)",
+            gyeonggi: "해당 없음 (시·군 전체 단위 30분권 없음, 분당구 판교역·정자역 도보권만 부분 포함)",
+            incheon: "해당 없음"
+        },
         "60": {
             title: "⚡ 강남역 1시간(60분) 이내 포함 구역",
-            seoul: "서울 25개 자치구 전체 (강남, 서초, 송파, 동작, 관악, 성동, 용산, 강동, 마포, 영등포, 구로, 양천, 금천, 강서, 성북, 동대문, 서대문, 중랑, 은평, 노원, 도봉, 강북 등)",
-            gyeonggi: "과천시, 성남시(분당구/수정구/중원구), 용인시(수지구/기흥구), 안양시(동안구/만안구), 광명시, 의왕시, 군포시, 하남시, 구리시",
+            seoul: "강남·서초·송파 + 성동, 동작, 관악, 용산, 중구, 광진, 종로, 동대문, 영등포, 마포, 강동, 중랑, 서대문, 구로, 성북, 강북, 은평, 양천, 강서, 노원, 금천",
+            gyeonggi: "과천시, 성남시(분당/수정/중원), 용인시(수지/기흥), 안양시(동안/만안), 광명시, 군포시, 하남시, 구리시, 광주시, 수원시(영통/팔달), 부천시(원미/소사), 의왕시",
             incheon: "해당 없음 (60분 초과권)"
         },
         "90": {
             title: "⚡ 강남역 1시간 30분(90분) 이내 포함 구역",
-            seoul: "서울 25개 자치구 전체",
-            gyeonggi: "60분 지역 전체 + 수원시(영통/장안/팔달/권선), 고양시(덕양/일산동/일산서), 부천시(원미/소사/오정), 화성시(동탄/효행/향남/우정), 남양주시, 안산시(상록/단원), 의정부시, 오산시, 시흥시, 파주시, 김포시, 광주시, 이천시, 평택시, 양주시, 안성시 등 경기 전역",
-            incheon: "부평구, 계양구, 남동구, 연수구, 서구, 검단구, 서해구, 미추홀구, 영종구, 미단구 등 인천 전역"
+            seoul: "서울 25개 자치구 전체 (도봉구 65분 포함)",
+            gyeonggi: "60분 지역 + 수원시(장안/권선), 고양시(덕양/일산동/일산서), 부천시(오정), 화성시(동탄/병점/효행), 남양주, 안산시(상록/단원), 의정부, 시흥, 이천, 김포, 오산, 파주, 평택, 양주, 여주, 안성, 포천, 가평, 양평",
+            incheon: "부평구, 계양구, 서해구, 미추홀구, 검단구, 남동구, 연수구, 제물포구, 영종구"
         }
     };
 
@@ -1401,6 +1277,37 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
         });
     });
 
+    // --- 1. 상세 필터 팝업 모달 & 카테고리 탭 (Detailed Filter Modal & Tabs) ---
+    const detailedFilterModal = document.getElementById("detailed-filter-modal");
+    const toggleDetailedFilterBtn = document.getElementById("btn-toggle-detailed-filter");
+    if (toggleDetailedFilterBtn && detailedFilterModal) {
+        toggleDetailedFilterBtn.addEventListener("click", () => {
+            detailedFilterModal.showModal();
+        });
+    }
+
+    const tabBtns = document.querySelectorAll(".filter-tab-btn");
+    const tabContents = document.querySelectorAll(".filter-tab-content");
+    tabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const target = btn.dataset.filterTab;
+            tabBtns.forEach(b => {
+                b.classList.remove("border-b-2", "border-indigo-600", "text-indigo-600", "dark:text-indigo-400");
+                b.classList.add("text-slate-500");
+            });
+            btn.classList.add("border-b-2", "border-indigo-600", "text-indigo-600", "dark:text-indigo-400");
+            btn.classList.remove("text-slate-500");
+
+            tabContents.forEach(c => {
+                if (c.id === `filter-tab-content-${target}`) {
+                    c.classList.remove("hidden");
+                } else {
+                    c.classList.add("hidden");
+                }
+            });
+        });
+    });
+
     renderRegionChips();
 })();
 </script>
@@ -1481,6 +1388,11 @@ input[type="range"].range-handle-input.is-overlapping-max::-moz-range-thumb:acti
 <!-- ================================================================= -->
 <!-- ⚖️ 즐겨찾기 한눈에 비교하기 모달 (Comparison Modal) -->
 <!-- ================================================================= -->
+<aside id="favorite-compare-tray" hidden class="fixed inset-x-4 bottom-4 z-40 mx-auto flex w-[min(34rem,calc(100vw-2rem))] items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-white p-3 text-slate-900 shadow-2xl dark:border-indigo-800 dark:bg-slate-950 dark:text-slate-100">
+    <p class="min-w-0 text-sm font-bold"><strong data-favorite-compare-count>0</strong>개 매물을 비교할 수 있어요</p>
+    <button data-favorite-compare-button type="button" onclick="openFavoriteCompareModal()" class="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400">비교하기</button>
+</aside>
+
 <dialog id="favorite-compare-modal" class="w-[min(64rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
     <div class="max-h-[85vh] flex flex-col p-6">
         <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -1624,6 +1536,11 @@ class FavoritesManager {
 
         const drawerCount = document.getElementById("fav-drawer-count");
         if (drawerCount) drawerCount.textContent = count;
+
+        const compareTray = document.getElementById("favorite-compare-tray");
+        const compareCount = document.querySelector("[data-favorite-compare-count]");
+        if (compareTray) compareTray.hidden = count < 2;
+        if (compareCount) compareCount.textContent = count;
 
         document.querySelectorAll("[data-fav-btn-listing]").forEach(btn => {
             const id = btn.getAttribute("data-fav-btn-listing");
@@ -1800,6 +1717,7 @@ function openFavoriteCompareModal() {
         { label: "층 / 방향", fn: x => `${x.floor_no || '-'}층 / ${x.direction_code == 1 ? '남향' : '기타'}` },
         { label: "세대수 / 준공년도", fn: x => `${x.household_count || '-'}세대 (${x.construction_year || '-'}년)` },
         { label: "정책대출 가능여부", fn: x => (x.eligible_loans && x.eligible_loans.length > 0) ? `✅ ${x.eligible_loans.map(l=>l.loan_type_name).join(', ')}` : "❌ 불가/확인필요" },
+        { label: "통근 검색 조건", fn: x => x.commute_label || "확인 대기" },
         { label: "네이버 바로가기", fn: x => `<a href="${'https://fin.land.' + 'naver.com/articles/' + x.article_id}" target="_blank" class="text-indigo-400 underline font-bold">링크 이동 ↗</a>` }
     ];
 
