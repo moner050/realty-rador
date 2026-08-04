@@ -192,6 +192,28 @@ def test_map_cards_endpoint_returns_collection_without_a_second_map_root(monkeyp
     assert "data-listing-map-root" not in response.text
 
 
+def test_authenticated_map_cards_do_not_persist_transient_search_bounds(monkeypatch):
+    factory = _factory_with_three_complexes(two_verified=True)
+    saved_filters = []
+    monkeypatch.setattr(home, "verify_session_token", lambda _token: "map-user")
+    monkeypatch.setattr(
+        home,
+        "save_user_search_filter",
+        lambda filters, username: saved_filters.append((filters, username)),
+    )
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app, cookies={home.SESSION_COOKIE_NAME: "signed-session"}).get(
+            "/listings/map-cards?map_west=126.80&map_south=37.50&map_east=126.90&map_north=37.60",
+            headers={"HX-Request": "true"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert saved_filters == []
+
+
 def test_map_cards_pager_targets_only_the_listing_collection():
     factory = _factory_with_three_complexes(two_verified=True)
     app.dependency_overrides[get_db] = _override(factory)

@@ -646,13 +646,20 @@ def _complex_listing_urls(
     }
 
 
-def _render_result(request: Request, db: Session, filters: ListingSearchFilter, template_name: str):
+def _render_result(
+    request: Request,
+    db: Session,
+    filters: ListingSearchFilter,
+    template_name: str,
+    *,
+    persist_filters: bool = True,
+):
     started_at = perf_counter()
     token = request.cookies.get(SESSION_COOKIE_NAME)
     username = verify_session_token(token)
     if username and not request.query_params:
         filters = load_user_search_filter(username) or filters
-    elif username:
+    elif username and persist_filters:
         save_user_search_filter(filters, username)
     applicant = get_request_user_profile(request)
     result = ListingSearchService(db).search_listings(filters, applicant=applicant)
@@ -754,9 +761,10 @@ def _render_or_client_error(
     *,
     is_htmx: bool,
     error_target: str = "#search-results",
+    persist_filters: bool = True,
 ):
     try:
-        return _render_result(request, db, filters, template_name)
+        return _render_result(request, db, filters, template_name, persist_filters=persist_filters)
     except ListingSearchValidationError as error:
         reason = "purchase_profile_incomplete" if str(error) == "purchase affordability profile incomplete" else None
         return _render_search_error(request, filters, is_htmx=is_htmx, reason=reason, target=error_target)
@@ -826,6 +834,7 @@ def map_cards(
         "listings/_listing_collection.html",
         is_htmx=True,
         error_target="#listing-collection",
+        persist_filters=False,
     )
 
 
