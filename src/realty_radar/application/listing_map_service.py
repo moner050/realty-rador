@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_FLOOR
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from realty_radar.domain.listing.models import SearchResult
@@ -168,6 +168,7 @@ class ListingMapService:
     ) -> ListingMapViewport:
         candidates = statement.with_only_columns(
             ListingCurrent.complex_id,
+            ListingCurrent.article_id,
             ListingCurrent.complex_name,
             ListingCurrent.address,
             ListingCurrent.primary_price,
@@ -176,25 +177,51 @@ class ListingMapService:
         matching_complex_count = self.session.scalar(
             select(func.count(func.distinct(candidates.c.complex_id)))
         ) or 0
-        aggregate_statement = (
+        aggregates = (
             select(
                 candidates.c.complex_id,
-                func.min(candidates.c.complex_name).label("complex_name"),
-                func.min(candidates.c.address).label("address"),
-                ComplexCurrent.latitude,
-                ComplexCurrent.longitude,
+                func.min(candidates.c.article_id).label("first_article_id"),
                 func.count().label("listing_count"),
                 func.min(candidates.c.primary_price).label("min_price"),
                 func.max(candidates.c.primary_price).label("max_price"),
             )
-            .join(ComplexCurrent, ComplexCurrent.complex_id == candidates.c.complex_id)
+            .group_by(candidates.c.complex_id)
+            .cte("map_complex_aggregates")
+        )
+        first_text = (
+            select(
+                candidates.c.complex_id,
+                candidates.c.complex_name,
+                candidates.c.address,
+            )
+            .join(
+                aggregates,
+                and_(
+                    aggregates.c.complex_id == candidates.c.complex_id,
+                    aggregates.c.first_article_id == candidates.c.article_id,
+                ),
+            )
+            .cte("map_first_listing_text")
+        )
+        aggregate_statement = (
+            select(
+                aggregates.c.complex_id,
+                first_text.c.complex_name,
+                first_text.c.address,
+                ComplexCurrent.latitude,
+                ComplexCurrent.longitude,
+                aggregates.c.listing_count,
+                aggregates.c.min_price,
+                aggregates.c.max_price,
+            )
+            .join(first_text, first_text.c.complex_id == aggregates.c.complex_id)
+            .join(ComplexCurrent, ComplexCurrent.complex_id == aggregates.c.complex_id)
             .where(
                 ComplexCurrent.geocode_status == GEOCODE_STATUS_OK,
                 ComplexCurrent.latitude.is_not(None),
                 ComplexCurrent.longitude.is_not(None),
             )
-            .group_by(candidates.c.complex_id, ComplexCurrent.latitude, ComplexCurrent.longitude)
-            .order_by(candidates.c.complex_id)
+            .order_by(aggregates.c.complex_id)
         )
         complexes = tuple(
             ListingMapMarker(

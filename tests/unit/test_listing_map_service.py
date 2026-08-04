@@ -250,6 +250,35 @@ def test_sql_map_viewport_matches_reference_stream_for_ordinary_filters():
     assert service.build_viewport(filters, None, zoom=14) == expected
 
 
+def test_sql_map_viewport_uses_lowest_article_text_when_complex_text_differs():
+    session = _session()
+    first_listing = _listing(1, 1, 510_000_000)
+    first_listing.complex_name = "z first complex"
+    first_listing.address = "z first address"
+    later_listing = _listing(2, 1, 500_000_000)
+    later_listing.complex_name = "a later complex"
+    later_listing.address = "a later address"
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            first_listing,
+            later_listing,
+        ]
+    )
+    session.commit()
+    service = ListingMapService(session)
+    filters = ListingSearchFilter()
+
+    expected = service._build_stream_viewport(filters, None, zoom=14)
+    actual = service.build_viewport(filters, None, zoom=14)
+
+    assert actual == expected
+    assert (actual.markers[0].complex_name, actual.markers[0].address) == (
+        "z first complex",
+        "z first address",
+    )
+
+
 def test_ordinary_map_viewport_does_not_stream_listing_entities(monkeypatch):
     session = _session()
     session.add_all(
@@ -299,7 +328,7 @@ def test_ordinary_map_viewport_projects_only_aggregate_candidate_columns():
 
     assert select_statements
     assert all("listing_current.description" not in statement for statement in select_statements)
-    assert all("listing_current.article_id" not in statement for statement in select_statements)
+    assert all("listing_current.building_name" not in statement for statement in select_statements)
 
 
 def test_policy_map_viewport_keeps_stream_fallback(monkeypatch):
