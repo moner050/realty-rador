@@ -204,7 +204,11 @@
         const replacements = template.content.querySelectorAll("#listing-collection");
         const target = document.querySelector("#listing-collection");
         if (replacements.length !== 1 || !target) return false;
-        target.replaceWith(replacements[0]);
+        const replacement = replacements[0];
+        target.replaceWith(replacement);
+        if (window.htmx && typeof window.htmx.process === "function") {
+            window.htmx.process(replacement);
+        }
         return true;
     }
 

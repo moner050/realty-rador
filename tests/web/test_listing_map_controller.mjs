@@ -58,7 +58,9 @@ function createRoot({ mapDataUrl, mapCardsUrl }) {
   };
 }
 
-function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl, fitBoundsEventDelay = null } = {}) {
+function loadController({
+  zoom = 7, mapData = singleClusterPayload, fetchImpl, fitBoundsEventDelay = null, htmx = {},
+} = {}) {
   let currentZoom = zoom;
   let currentViewport = { west: 126.8, south: 37.5, east: 126.9, north: 37.6 };
   const state = {
@@ -89,7 +91,7 @@ function loadController({ zoom = 7, mapData = singleClusterPayload, fetchImpl, f
       if (isMapRequest) return Promise.resolve({ ok: true, json: async () => mapData });
       return Promise.resolve({ ok: true, text: async () => '<section id="listing-collection"></section>' });
     },
-    htmx: {},
+    htmx,
     naver: {
       maps: {
         LatLng: class LatLng {
@@ -288,6 +290,59 @@ test('a valid cards response replaces the collection without an HTMX swap API an
   assert.notEqual(state.collection, collectionBefore);
   assert.equal(state.collection.outerHTML, '<section id="listing-collection">latest</section>');
   assert.equal(state.collection.textContent, 'latest');
+});
+
+test('a valid cards response processes the replacement exactly once when HTMX process is available', async () => {
+  const processed = [];
+  const { controller, state } = loadController({
+    zoom: 12,
+    htmx: { process(element) { processed.push(element); } },
+    fetchImpl: (url) => String(url).includes('/api/listings/map-data')
+      ? Promise.resolve({ ok: true, json: async () => singleClusterPayload })
+      : Promise.resolve({ ok: true, text: async () => '<section id="listing-collection">processed</section>' }),
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+  state.mapRoot = root;
+  const mapRootBefore = state.document.querySelector('[data-listing-map-root]');
+  const collectionBefore = state.collection;
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitMap('dragstart');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.notEqual(state.collection, collectionBefore);
+  assert.deepEqual(processed, [state.collection]);
+  assert.equal(state.collection.textContent, 'processed');
+  assert.equal(state.document.querySelector('[data-listing-map-root]'), mapRootBefore);
+});
+
+test('an HTMX process failure keeps the replaced cards and map root visible while reporting the error', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    htmx: { process() { throw new Error('process failed'); } },
+    fetchImpl: (url) => String(url).includes('/api/listings/map-data')
+      ? Promise.resolve({ ok: true, json: async () => singleClusterPayload })
+      : Promise.resolve({ ok: true, text: async () => '<section id="listing-collection">still visible</section>' }),
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+  state.mapRoot = root;
+  const mapRootBefore = state.document.querySelector('[data-listing-map-root]');
+  const collectionBefore = state.collection;
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitMap('dragstart');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.notEqual(state.collection, collectionBefore);
+  assert.equal(state.collection.textContent, 'still visible');
+  assert.equal(state.document.querySelector('[data-listing-map-root]'), mapRootBefore);
+  assert.notEqual(root.status.textContent, '');
 });
 
 test('malformed cards HTML keeps the current collection visible and reports the map-card error', async () => {
