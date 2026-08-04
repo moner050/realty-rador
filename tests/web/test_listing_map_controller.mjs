@@ -221,6 +221,44 @@ test('initial fitBounds events do not schedule a viewport refresh', async () => 
   assert.equal(state.cardFetches.length, 0);
 });
 
+test('a user drag before the initial fitBounds idle still refreshes the viewport', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+  controller.mount(root);
+  await state.flushFetches();
+  state.emitMap('dragstart');
+  state.emitMap('zoom_changed');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.mapFetches.length, 2);
+  assert.equal(state.cardFetches.length, 1);
+});
+
+test('a cluster click before the initial fitBounds idle still refreshes the viewport', async () => {
+  const { controller, state } = loadController({
+    zoom: 12,
+    mapData: { ...singleClusterPayload, bounds: [126.8, 37.5, 126.9, 37.6] },
+  });
+  const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
+
+  controller.mount(root);
+  await state.flushFetches();
+  await state.clickOverlay(0);
+  state.emitMap('zoom_changed');
+  state.emitMap('idle');
+  await state.advanceDebounce();
+  await state.flushFetches();
+
+  assert.equal(state.mapFetches.length, 2);
+  assert.equal(state.cardFetches.length, 1);
+});
+
 test('cluster click fits its stored bounds and a valid idle later refreshes cards only', async () => {
   const { controller, state } = loadController({ zoom: 12, mapData: singleClusterPayload });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });

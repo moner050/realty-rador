@@ -77,6 +77,7 @@
     }
 
     function markViewportDirty(instance) {
+        instance.suppressInitialFitBounds = false;
         instance.mapRequestId += 1;
         instance.cardsRequestId += 1;
         instance.viewportDirty = true;
