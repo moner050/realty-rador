@@ -145,6 +145,28 @@ def test_search_result_exposes_public_map_urls_without_marker_payload(monkeypatc
     assert response.text.index('src="/static/listing-map.js"') < response.text.index("<body")
 
 
+def test_search_result_renders_one_map_first_workspace(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.text.count('id="listing-search-form"') == 1
+    assert "data-search-workspace" in response.text
+    assert "data-search-toolbar" in response.text
+    assert "data-applied-filter-summary" in response.text
+    assert "data-map-filter-trigger" in response.text
+    assert response.text.index("data-search-toolbar") < response.text.index("data-listing-map-root")
+    assert response.text.index("data-listing-map-root") < response.text.index('id="listing-collection"')
+    assert "data-map-data-url=" in response.text
+    assert "data-map-cards-url=" in response.text
+    assert "data-map-complex-url-template=" in response.text
+
+
 def test_map_data_endpoint_returns_labelled_sido_circle_without_geocoding(monkeypatch):
     factory = _factory_with_three_complexes(two_verified=True)
     monkeypatch.setattr(

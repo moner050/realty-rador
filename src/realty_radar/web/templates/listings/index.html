@@ -224,7 +224,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 {% set min_price_eok = filters.min_price / 100000000 if filters.min_price is not none else none %}
 {% set max_price_eok = filters.max_price / 100000000 if filters.max_price is not none else none %}
 
-<div class="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+<main data-search-workspace class="mx-auto w-full max-w-7xl">
     {% include "settings/_inline_profile_modal.html" %}
 
     <div class="min-w-0 space-y-4">
@@ -251,7 +251,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
         <input type="hidden" name="max_commute_gangnam" id="input-max-commute-gangnam" value="{{ filters.max_commute_gangnam or '' }}" data-filter-owner="commute">
 
         <!-- 상단 1열 콤팩트 필터 바 (Primary Filter Bar) -->
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-lg space-y-3">
+        <div data-search-toolbar class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-lg space-y-3">
             <div class="hidden"><h2 class="font-semibold text-sm text-slate-100">기본 검색</h2></div>
             <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-12 items-center">
                 <!-- 지역 선택 3종 세트 (시도 / 시군 / 구) -->
@@ -296,7 +296,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
             </div>
 
             <!-- 활성 필터 요약 칩 Bar (Active Filter Chips) -->
-            <div id="active-filter-chips-bar" class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800/80 text-xs">
+            <div id="active-filter-chips-bar" data-applied-filter-summary class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800/80 text-xs">
                 <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용된 조건:</span>
                 <div id="selected-region-chips" class="flex flex-wrap gap-1.5">
                     <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
@@ -458,6 +458,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
         {% include "listings/list_partial.html" %}
     {% endif %}
 </div>
+</main>
 
 <script type="application/json" id="region-options-data">{{ region_options | tojson | safe }}</script>
 <script type="application/json" id="selected-sido-codes-data">{{ selected_sido_codes | tojson | safe }}</script>
