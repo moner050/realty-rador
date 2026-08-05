@@ -12,7 +12,9 @@ from sqlalchemy.pool import StaticPool
 from realty_radar.application.listing_map_service import (
     ListingMapMarker,
     ListingMapService,
+    aggregate_map_regions,
     cluster_map_complexes,
+    map_viewport_mode,
 )
 from realty_radar.domain.listing.filters import ListingSearchFilter
 from realty_radar.domain.listing.models import ComplexGroupItem, SearchResult
@@ -142,11 +144,11 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
-def _complex(complex_id, *, latitude=None, longitude=None, status=0):
+def _complex(complex_id, *, latitude=None, longitude=None, status=0, region_code=1150010200):
     observed_at = datetime(2026, 8, 3, 6, 0)
     return ComplexCurrent(
         complex_id=complex_id,
-        region_code=1150010200,
+        region_code=region_code,
         name=f"테스트 아파트 {complex_id}",
         normalized_name=f"테스트아파트{complex_id}",
         address=f"서울특별시 강서구 테스트로 {complex_id}",
@@ -160,12 +162,12 @@ def _complex(complex_id, *, latitude=None, longitude=None, status=0):
     )
 
 
-def _listing(article_id, complex_id, price):
+def _listing(article_id, complex_id, price, *, region_code=1150010200):
     observed_at = datetime(2026, 8, 3, 6, 0)
     return ListingCurrent(
         article_id=article_id,
         complex_id=complex_id,
-        region_code=1150010200,
+        region_code=region_code,
         complex_name=f"test complex {complex_id}",
         address=f"test address {complex_id}",
         trade_type=1,
@@ -176,6 +178,175 @@ def _listing(article_id, complex_id, price):
         last_seen_at=observed_at,
         last_changed_at=observed_at,
     )
+
+
+def test_map_viewport_mode_uses_the_four_zoom_tiers():
+    assert map_viewport_mode(8) == "sido"
+    assert map_viewport_mode(9) == "sigungu"
+    assert map_viewport_mode(13) == "clusters"
+    assert map_viewport_mode(15) == "markers"
+
+
+def test_sido_circle_sums_matching_listings_and_keeps_click_bounds():
+    clusters = aggregate_map_regions(
+        (
+            ListingMapMarker(
+                complex_id=1,
+                complex_name="one",
+                address="서울특별시 강남구 one",
+                latitude=37.50,
+                longitude=126.80,
+                listing_count=2,
+                min_price=500_000_000,
+                max_price=500_000_000,
+                sido_code=11,
+            ),
+            ListingMapMarker(
+                complex_id=2,
+                complex_name="two",
+                address="서울특별시 강남구 two",
+                latitude=37.60,
+                longitude=126.90,
+                listing_count=3,
+                min_price=600_000_000,
+                max_price=610_000_000,
+                sido_code=11,
+            ),
+        ),
+        "sido",
+    )
+
+    assert len(clusters) == 1
+    assert clusters[0].label == "서울특별시"
+    assert (clusters[0].listing_count, clusters[0].complex_count) == (5, 2)
+    assert (clusters[0].west, clusters[0].south, clusters[0].east, clusters[0].north) == (
+        126.8,
+        37.5,
+        126.9,
+        37.6,
+    )
+
+
+def test_sql_viewport_groups_verified_bound_results_by_sigungu_at_zoom_twelve():
+    session = _session()
+    session.add_all(
+        [
+            _complex(
+                1,
+                latitude=Decimal("37.5000000"),
+                longitude=Decimal("126.8000000"),
+                status=GEOCODE_STATUS_OK,
+            ),
+            _complex(
+                2,
+                latitude=Decimal("37.5100000"),
+                longitude=Decimal("126.8100000"),
+                status=GEOCODE_STATUS_OK,
+            ),
+            _listing(1, 1, 500_000_000),
+            _listing(2, 1, 510_000_000),
+            _listing(3, 2, 600_000_000),
+        ]
+    )
+    session.commit()
+
+    viewport = ListingMapService(session).build_viewport(
+        ListingSearchFilter(
+            map_west=Decimal("126.7900000"),
+            map_south=Decimal("37.4900000"),
+            map_east=Decimal("126.8500000"),
+            map_north=Decimal("37.5500000"),
+        ),
+        applicant=None,
+        zoom=12,
+    )
+
+    assert viewport.mode == "sigungu"
+    assert [(cluster.label, cluster.listing_count) for cluster in viewport.clusters] == [
+        ("서울특별시 강서구", 3)
+    ]
+    assert viewport.markers == ()
+
+
+def test_sido_viewport_does_not_select_listing_text_columns():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _listing(1, 1, 500_000_000),
+        ]
+    )
+    session.commit()
+    select_statements = []
+
+    def capture_selects(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith(("SELECT", "WITH")):
+            select_statements.append(statement.lower())
+
+    event.listen(session.bind, "before_cursor_execute", capture_selects)
+    try:
+        ListingMapService(session).build_viewport(ListingSearchFilter(), None, zoom=8)
+    finally:
+        event.remove(session.bind, "before_cursor_execute", capture_selects)
+
+    assert select_statements
+    assert all("listing_current.complex_name" not in statement for statement in select_statements)
+    assert all("listing_current.address" not in statement for statement in select_statements)
+
+
+def test_stream_viewport_uses_the_same_sido_contract(monkeypatch):
+    session = _session()
+    session.add(
+        _complex(
+            1,
+            latitude=Decimal("37.5000000"),
+            longitude=Decimal("126.8000000"),
+            status=GEOCODE_STATUS_OK,
+        )
+    )
+    session.commit()
+    from realty_radar.application.listing_search_service import ListingSearchService
+
+    monkeypatch.setattr(
+        ListingSearchService,
+        "stream_map_matching_rows",
+        lambda *args, **kwargs: iter(
+            [
+                SimpleNamespace(
+                    complex_id=1,
+                    complex_name="test complex",
+                    address="서울특별시 강서구 test",
+                    primary_price=500_000_000,
+                )
+            ]
+        ),
+    )
+
+    viewport = ListingMapService(session)._build_stream_viewport(ListingSearchFilter(), None, zoom=8)
+
+    assert viewport.mode == "sido"
+    assert [(cluster.label, cluster.listing_count) for cluster in viewport.clusters] == [
+        ("서울특별시", 1)
+    ]
+
+
+def test_zoom_fifteen_returns_complex_markers_without_grid_clustering():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.5001000"), longitude=Decimal("126.8001000"), status=GEOCODE_STATUS_OK),
+            _listing(1, 1, 500_000_000),
+            _listing(2, 2, 600_000_000),
+        ]
+    )
+    session.commit()
+
+    viewport = ListingMapService(session).build_viewport(ListingSearchFilter(), applicant=None, zoom=15)
+
+    assert viewport.mode == "markers"
+    assert [marker.complex_id for marker in viewport.markers] == [1, 2]
+    assert viewport.clusters == ()
 
 
 def test_normal_result_builds_one_verified_marker_per_complex_with_one_coordinate_query():
@@ -332,11 +503,49 @@ def test_map_viewport_aggregates_all_matching_complexes_even_when_listing_page_s
     assert viewport.matching_complex_count == 3
     assert viewport.mapped_complex_count == 2
     assert viewport.unmapped_complex_count == 1
+    assert viewport.mode == "sido"
+    assert viewport.mapped_listing_count == 3
     assert viewport.markers == ()
-    assert [
-        (cluster.complex_count, cluster.listing_count, cluster.min_price, cluster.max_price)
-        for cluster in viewport.clusters
-    ] == [(2, 3, 500_000_000, 600_000_000)]
+    assert [(cluster.label, cluster.complex_count, cluster.listing_count) for cluster in viewport.clusters] == [
+        ("서울특별시", 2, 3)
+    ]
+
+
+def test_sigungu_map_groups_respect_bounds_and_exclude_unverified_coordinates():
+    session = _session()
+    session.add_all(
+        [
+            _complex(1, latitude=Decimal("37.5000000"), longitude=Decimal("126.8000000"), status=GEOCODE_STATUS_OK),
+            _complex(2, latitude=Decimal("37.6000000"), longitude=Decimal("126.9000000"), status=GEOCODE_STATUS_OK),
+            _complex(3),
+            _listing(1, 1, 500_000_000),
+            _listing(2, 1, 510_000_000),
+            _listing(3, 2, 600_000_000),
+            _listing(4, 3, 700_000_000),
+        ]
+    )
+    session.commit()
+
+    viewport = ListingMapService(session).build_viewport(
+        ListingSearchFilter(
+            map_west=Decimal("126.7900000"),
+            map_south=Decimal("37.4900000"),
+            map_east=Decimal("126.8500000"),
+            map_north=Decimal("37.5500000"),
+        ),
+        applicant=None,
+        zoom=10,
+    )
+
+    assert viewport.mode == "sigungu"
+    assert viewport.matching_complex_count == 1
+    assert viewport.mapped_complex_count == 1
+    assert viewport.unmapped_complex_count == 0
+    assert viewport.mapped_listing_count == 2
+    assert viewport.markers == ()
+    assert [(cluster.label, cluster.complex_count, cluster.listing_count) for cluster in viewport.clusters] == [
+        ("서울특별시 강서구", 1, 2)
+    ]
 
 
 def test_sql_map_viewport_matches_reference_stream_for_ordinary_filters():

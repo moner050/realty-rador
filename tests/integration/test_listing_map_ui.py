@@ -134,6 +134,9 @@ def test_search_result_exposes_public_map_urls_without_marker_payload(monkeypatc
     assert "data-map-matching-count" in response.text
     assert "data-map-mapped-count" in response.text
     assert "data-map-unmapped-count" in response.text
+    assert "data-map-summary-count" in response.text
+    assert "data-map-complex-url-template=" in response.text
+    assert "data-map-complex-modal" in response.text
     assert 'id="listing-map-payload"' not in response.text
     assert "ncpKeyId=public-key" in response.text
     assert "지도 테스트 아파트" in response.text
@@ -142,7 +145,7 @@ def test_search_result_exposes_public_map_urls_without_marker_payload(monkeypatc
     assert response.text.index('src="/static/listing-map.js"') < response.text.index("<body")
 
 
-def test_map_data_endpoint_returns_all_aggregate_counts_without_geocoding(monkeypatch):
+def test_map_data_endpoint_returns_labelled_sido_circle_without_geocoding(monkeypatch):
     factory = _factory_with_three_complexes(two_verified=True)
     monkeypatch.setattr(
         home,
@@ -158,9 +161,15 @@ def test_map_data_endpoint_returns_all_aggregate_counts_without_geocoding(monkey
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["mode"] == "sido"
     assert payload["matching_complex_count"] == 3
     assert payload["mapped_complex_count"] == 2
     assert payload["unmapped_complex_count"] == 1
+    assert payload["mapped_listing_count"] == 2
+    assert payload["markers"] == []
+    assert [(cluster["label"], cluster["complex_count"], cluster["listing_count"]) for cluster in payload["clusters"]] == [
+        ("서울특별시", 2, 2)
+    ]
 
 
 def test_initial_map_data_clears_viewport_bounds_before_aggregating():
@@ -194,6 +203,26 @@ def test_map_cards_endpoint_returns_collection_without_a_second_map_root(monkeyp
     assert response.text.count('id="listing-collection"') == 1
     assert re.match(r'\s*<section\s+id="listing-collection"(?:\s|>)', response.text)
     assert "data-listing-map-root" not in response.text
+    assert 'data-map-focus-latitude="37.55"' in response.text
+    assert 'data-map-focus-longitude="126.85"' in response.text
+    assert "data-listing-detail-button" in response.text
+
+
+def test_grouped_map_cards_include_a_coordinate_for_map_focus():
+    factory = _factory_with_three_complexes(two_verified=True)
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get(
+            "/listings/map-cards?group_by_complex=true",
+            headers={"HX-Request": "true"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'data-complex-group' in response.text
+    assert 'data-map-focus-latitude="37.55"' in response.text
+    assert 'data-map-focus-longitude="126.85"' in response.text
 
 
 def test_authenticated_map_cards_do_not_persist_transient_search_bounds(monkeypatch):
@@ -360,14 +389,18 @@ def test_map_bound_search_places_the_map_before_matching_cards_without_persistin
     assert response.text.index("data-listing-map-root") < response.text.index('id="listing-cards"')
     map_data_url = re.search(r'data-map-data-url="([^"]+)"', response.text).group(1)
     map_cards_url = re.search(r'data-map-cards-url="([^"]+)"', response.text).group(1)
+    map_complex_url = re.search(r'data-map-complex-url-template="([^"]+)"', response.text).group(1)
     assert "map_west" not in map_data_url
     assert "map_south" not in map_data_url
     assert "map_west" not in map_cards_url
     assert "map_south" not in map_cards_url
+    assert "map_west" not in map_complex_url
+    assert "map_south" not in map_complex_url
+    assert "__complex_id__" in map_complex_url
     assert "h-[56vh]" in response.text
 
 
-def test_map_loading_overlay_starts_with_a_tailwind_hidden_class(monkeypatch):
+def test_map_loading_indicators_start_hidden_without_a_full_map_overlay(monkeypatch):
     factory = _factory(verified_coordinate=True)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
 
@@ -381,7 +414,9 @@ def test_map_loading_overlay_starts_with_a_tailwind_hidden_class(monkeypatch):
     finally:
         app.dependency_overrides.clear()
 
-    assert 'data-map-loading hidden class="hidden ' in response.text
+    assert 'data-map-loading hidden' in response.text
+    assert 'data-map-loading hidden class="hidden absolute inset-0' not in response.text
+    assert 'data-card-loading hidden' in response.text
 
 
 def test_map_sidebar_url_preserves_the_current_result_page_cursor():

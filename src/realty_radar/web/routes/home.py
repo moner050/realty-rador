@@ -391,7 +391,11 @@ def _favorite_payload_context(
 
 
 def _listing_map_context(*_args) -> dict[str, object]:
-    return {"naver_map_client_id": settings.naver_map_client_id, "map_markers": []}
+    return {
+        "naver_map_client_id": settings.naver_map_client_id,
+        "map_markers": [],
+        "map_focus_coordinates": {},
+    }
 
 
 def _map_sidebar_context(
@@ -460,6 +464,21 @@ def _map_cards_url(request: Request, filters: ListingSearchFilter) -> str:
     )
     query = urlencode(_filter_query_items(transient_filter))
     base_url = str(request.url_for("map_cards"))
+    return f"{base_url}?{query}" if query else base_url
+
+
+def _map_complex_url_template(request: Request, filters: ListingSearchFilter) -> str:
+    transient_filter = replace(
+        filters,
+        cursor=None,
+        map_west=None,
+        map_south=None,
+        map_east=None,
+        map_north=None,
+    )
+    query = urlencode(_filter_query_items(transient_filter))
+    example_url = str(request.url_for("complex_listings", complex_id=0))
+    base_url = f"{example_url.rsplit('/', 1)[0]}/__complex_id__"
     return f"{base_url}?{query}" if query else base_url
 
 
@@ -667,6 +686,9 @@ def _render_result(
     _enrich_listings_with_affordability(result, applicant)
     favorite_payloads = _favorite_payload_context(result, filters)
     map_context = _listing_map_context()
+    map_context["map_focus_coordinates"] = {
+        marker.complex_id: marker for marker in ListingMapService(db).build_markers(result)
+    }
     page_url = request.url.remove_query_params("append")
     next_url = str(page_url.include_query_params(cursor=result.next_cursor)) if result.next_cursor else None
     previous_url = None
@@ -703,6 +725,7 @@ def _render_result(
             "map_search_url": _map_search_url(request, filters),
             "map_data_url": _map_data_url(request, filters),
             "map_cards_url": _map_cards_url(request, filters),
+            "map_complex_url_template": _map_complex_url_template(request, filters),
             "listing_collection_target": (
                 "#listing-collection" if template_name == "listings/_listing_collection.html" else "#search-results"
             ),
@@ -857,6 +880,7 @@ def listing_map(
                 "map_loading": False,
                 "map_unmapped_complex_count": 0,
                 "map_status_message": "검색 조건을 확인한 뒤 지도를 다시 불러와 주세요.",
+                "map_complex_url_template": _map_complex_url_template(request, filters),
             },
         )
 
@@ -867,6 +891,7 @@ def listing_map(
         {
             "map_data_url": _map_data_url(request, filters),
             "map_cards_url": _map_cards_url(request, filters),
+            "map_complex_url_template": _map_complex_url_template(request, filters),
         }
     )
     return templates.TemplateResponse(request, "listings/_map_sidebar.html", context=map_context)
