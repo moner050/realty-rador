@@ -1,0 +1,5 @@
+<div id="map-search-config"{% if is_htmx_search %} hx-swap-oob="outerHTML"{% endif %} hidden
+     data-map-query-key="{{ map_data_url }}"
+     data-map-data-url="{{ map_data_url }}"
+     data-map-cards-url="{{ map_cards_url }}"
+     data-map-complex-url-template="{{ map_complex_url_template }}"></div>

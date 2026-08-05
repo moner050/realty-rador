@@ -83,5 +83,5 @@ def test_htmx_purchase_filter_without_limits_returns_settings_error(client):
     response = client.get("/listings/search?only_purchase_affordable=true", headers={"HX-Request": "true"})
 
     assert response.status_code == 200
-    assert response.headers["HX-Retarget"] == "#search-results"
+    assert response.headers["HX-Retarget"] == "#listing-collection"
     assert "구매 투입 가능 현금과 월 총주거비를 먼저 설정" in response.text

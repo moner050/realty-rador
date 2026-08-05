@@ -672,6 +672,7 @@ def _render_result(
     template_name: str,
     *,
     persist_filters: bool = True,
+    is_htmx_search: bool = False,
 ):
     started_at = perf_counter()
     token = request.cookies.get(SESSION_COOKIE_NAME)
@@ -726,9 +727,8 @@ def _render_result(
             "map_data_url": _map_data_url(request, filters),
             "map_cards_url": _map_cards_url(request, filters),
             "map_complex_url_template": _map_complex_url_template(request, filters),
-            "listing_collection_target": (
-                "#listing-collection" if template_name == "listings/_listing_collection.html" else "#search-results"
-            ),
+            "listing_collection_target": "#listing-collection",
+            "is_htmx_search": is_htmx_search,
             **favorite_payloads,
             **map_context,
         },
@@ -743,7 +743,7 @@ def _render_search_error(
     *,
     is_htmx: bool,
     reason: str | None = None,
-    target: str = "#search-results",
+    target: str = "#listing-collection",
 ):
     sido_labels, sigungu_labels = _region_labels()
     applicant = get_request_user_profile(request)
@@ -783,11 +783,19 @@ def _render_or_client_error(
     template_name: str,
     *,
     is_htmx: bool,
-    error_target: str = "#search-results",
+    error_target: str = "#listing-collection",
     persist_filters: bool = True,
+    is_htmx_search: bool = False,
 ):
     try:
-        return _render_result(request, db, filters, template_name, persist_filters=persist_filters)
+        return _render_result(
+            request,
+            db,
+            filters,
+            template_name,
+            persist_filters=persist_filters,
+            is_htmx_search=is_htmx_search,
+        )
     except ListingSearchValidationError as error:
         reason = "purchase_profile_incomplete" if str(error) == "purchase affordability profile incomplete" else None
         return _render_search_error(request, filters, is_htmx=is_htmx, reason=reason, target=error_target)
@@ -817,7 +825,14 @@ def search_listings(
         if is_htmx
         else "listings/index.html"
     )
-    return _render_or_client_error(request, db, filters, template_name, is_htmx=is_htmx)
+    return _render_or_client_error(
+        request,
+        db,
+        filters,
+        template_name,
+        is_htmx=is_htmx,
+        is_htmx_search=is_htmx and not append,
+    )
 
 
 @router.get("/api/listings/map-data", name="map_data")

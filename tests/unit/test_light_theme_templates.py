@@ -27,10 +27,12 @@ def test_base_defines_scoped_comfortable_light_tokens():
 def test_listing_templates_use_light_surfaces_and_keep_dark_variants():
     cards = (TEMPLATE_ROOT / "listings" / "_listing_cards.html").read_text(encoding="utf-8")
     partial = (TEMPLATE_ROOT / "listings" / "list_partial.html").read_text(encoding="utf-8")
+    summary = (TEMPLATE_ROOT / "listings" / "_search_result_summary.html").read_text(encoding="utf-8")
 
     assert "theme-listing-card" in cards
     assert "dark:bg-slate-800" in cards
-    assert "theme-result-toolbar" in partial
+    assert 'include "listings/_search_result_summary.html"' in partial
+    assert "theme-result-toolbar" in summary
 
 
 def test_non_listing_pages_use_light_surface_helpers():

@@ -327,7 +327,7 @@ def test_search_layout_widens_the_results_pane_and_colours_property_facts():
     assert 'data-search-workspace class="mx-auto w-full max-w-7xl"' in response.text
 
 
-def test_search_results_render_a_fixed_filter_and_pagination_control_bar():
+def test_search_results_render_static_filter_and_pagination_control_panel():
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
@@ -343,7 +343,9 @@ def test_search_results_render_a_fixed_filter_and_pagination_control_bar():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
+    assert 'data-search-control-panel' in response.text
     assert 'data-result-controls' in response.text
     assert 'sticky top-20 z-30' in response.text
-    assert '>필터 변경</a>' in response.text
+    assert 'id="search-result-summary"' in response.text
+    assert 'data-map-filter-trigger' in response.text
     assert '페이지당 20개' in response.text

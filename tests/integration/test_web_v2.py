@@ -411,8 +411,8 @@ def test_invalid_search_queries_render_a_client_error_instead_of_a_server_error(
     assert htmx_response.status_code == 200
     assert "검색 조건을 확인" in response.text
     assert 'id="listing-search-form"' in response.text
-    assert 'id="search-results"' in htmx_response.text
-    assert htmx_response.headers["HX-Retarget"] == "#search-results"
+    assert 'id="listing-collection"' in htmx_response.text
+    assert htmx_response.headers["HX-Retarget"] == "#listing-collection"
     assert htmx_response.headers["HX-Reswap"] == "outerHTML"
 
 
@@ -655,7 +655,7 @@ def test_price_slider_is_capped_at_thirty_eok_while_other_bounds_expand():
     assert 'id="recent-days" type="range" min="1" max="500"' in response.text
 
 
-def test_htmx_page_navigation_replaces_the_search_results():
+def test_htmx_page_navigation_replaces_the_listing_collection():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -715,11 +715,11 @@ def test_htmx_page_navigation_replaces_the_search_results():
     assert first.status_code == 200
     assert "첫번째 단지" in first.text
     assert "append=1" not in next_url
-    assert 'hx-target="#search-results" hx-swap="outerHTML" hx-push-url="true">다음 페이지' in first.text
+    assert 'hx-target="#listing-collection" hx-swap="outerHTML" hx-push-url="true">다음 페이지' in first.text
     assert second_page.status_code == 200
     assert "두번째 단지" in second_page.text
     assert "첫번째 단지" not in second_page.text
-    assert 'id="search-results"' in second_page.text
+    assert 'id="listing-collection"' in second_page.text
 
 
 def test_home_renders_v2_cursor_search_without_a_database_count_query():

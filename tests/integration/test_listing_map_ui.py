@@ -167,6 +167,42 @@ def test_search_result_renders_one_map_first_workspace(monkeypatch):
     assert "data-map-complex-url-template=" in response.text
 
 
+def test_map_workspace_keeps_controls_and_result_summary_in_one_panel(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert 'data-search-control-panel' in response.text
+    assert 'id="listing-search-form"' in response.text
+    assert 'id="search-result-summary"' in response.text
+    assert response.text.index('id="listing-search-form"') < response.text.index('id="search-result-summary"')
+    assert response.text.index('id="search-result-summary"') < response.text.index('data-listing-map-root')
+
+
+def test_htmx_search_returns_collection_and_oob_search_updates(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get(
+            "/listings/search?trade_types=SALE",
+            headers={"HX-Request": "true"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="listing-collection"' in response.text
+    assert 'id="search-result-summary" hx-swap-oob="outerHTML"' in response.text
+    assert 'id="map-search-config" hx-swap-oob="outerHTML"' in response.text
+    assert "trade_types=SALE" in response.text
+    assert "data-listing-map-root" not in response.text
+
+
 def test_search_result_exposes_clearable_compact_filter_chips(monkeypatch):
     factory = _factory(verified_coordinate=True)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
@@ -442,7 +478,7 @@ def test_search_response_has_map_root_but_no_alternate_view_controls(monkeypatch
     assert 'data-view-mode=' not in response.text
 
 
-def test_map_bound_search_places_the_map_before_matching_cards_without_persisting_bounds(monkeypatch):
+def test_map_bound_search_returns_configuration_without_persisting_bounds(monkeypatch):
     factory = _factory(verified_coordinate=True)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
 
@@ -460,7 +496,8 @@ def test_map_bound_search_places_the_map_before_matching_cards_without_persistin
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.text.index("data-listing-map-root") < response.text.index('id="listing-cards"')
+    assert "data-listing-map-root" not in response.text
+    assert 'id="map-search-config" hx-swap-oob="outerHTML"' in response.text
     map_data_url = re.search(r'data-map-data-url="([^"]+)"', response.text).group(1)
     map_cards_url = re.search(r'data-map-cards-url="([^"]+)"', response.text).group(1)
     map_complex_url = re.search(r'data-map-complex-url-template="([^"]+)"', response.text).group(1)
@@ -471,7 +508,6 @@ def test_map_bound_search_places_the_map_before_matching_cards_without_persistin
     assert "map_west" not in map_complex_url
     assert "map_south" not in map_complex_url
     assert "__complex_id__" in map_complex_url
-    assert "h-[56vh]" in response.text
 
 
 def test_map_loading_indicators_start_hidden_without_a_full_map_overlay(monkeypatch):
