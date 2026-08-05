@@ -181,6 +181,44 @@ def test_search_result_exposes_clearable_compact_filter_chips(monkeypatch):
     assert 'data-applied-filter-clear data-filter-clear-names="trade_types"' in response.text
 
 
+def test_map_first_workspace_exposes_accessible_filter_drawer(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'id="detailed-filter-modal"' in response.text
+    assert "data-filter-panel" in response.text
+    assert "left-auto" in response.text
+    assert "data-filter-panel-body" in response.text
+    assert "data-filter-panel-footer" in response.text
+    assert "data-filter-panel-apply" in response.text
+    assert 'aria-controls="detailed-filter-modal"' in response.text
+    assert 'aria-expanded="false"' in response.text
+    assert "data-map-results-toolbar" in response.text
+    assert "data-map-loading hidden" in response.text
+    assert "data-card-loading hidden" in response.text
+
+
+def test_map_first_workspace_collapses_applicant_summary_by_default(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "<details data-applicant-summary" in response.text
+    assert "<summary" in response.text
+    assert response.text.index("data-applicant-summary") < response.text.index('id="listing-search-form"')
+
+
 def test_map_data_endpoint_returns_labelled_sido_circle_without_geocoding(monkeypatch):
     factory = _factory_with_three_complexes(two_verified=True)
     monkeypatch.setattr(

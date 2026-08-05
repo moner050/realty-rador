@@ -90,7 +90,7 @@ def test_commute_tab_owns_external_value_and_reset_has_one_submit_boundary():
     assert 'form.querySelectorAll(`[data-filter-owner="${activeTab}"]`)' in page
 
     reset_handler = re.search(
-        r'document\.querySelector\("\[data-clear-filter-tab\]"\).*?addEventListener\("click", \(\) => \{(.*?)(?=\n\s*document\.querySelector\("\[data-apply-detailed-filter\]"\))',
+        r'document\.querySelector\("\[data-clear-filter-tab\]"\).*?addEventListener\("click", \(\) => \{(.*?)(?=\n\s*setActiveFilterTab\("presets"\))',
         page,
         re.DOTALL,
     )

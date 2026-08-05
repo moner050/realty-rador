@@ -324,7 +324,7 @@ def test_search_layout_widens_the_results_pane_and_colours_property_facts():
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert 'class="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]"' in response.text
+    assert 'data-search-workspace class="mx-auto w-full max-w-7xl"' in response.text
 
 
 def test_search_results_render_a_fixed_filter_and_pagination_control_bar():

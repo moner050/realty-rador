@@ -5,7 +5,7 @@
 
 <div id="search-results" data-search-mode="{% if filters.only_purchase_affordable %}purchase-affordable{% elif result.is_grouped %}grouped{% elif filters.only_eligible_loans %}eligible-loans{% else %}normal{% endif %}" class="space-y-4">
     <!-- 1. 상단 1열 가로 전면 100% 검색 결과 도구 모음 (Toolbar) -->
-    <div id="search-status" data-result-controls class="theme-result-toolbar sticky top-20 z-30 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-lg backdrop-blur text-slate-900 dark:text-slate-100 transition-colors space-y-2.5">
+    <div id="search-status" data-result-controls data-map-results-toolbar class="theme-result-toolbar sticky top-20 z-30 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-3.5 shadow-lg backdrop-blur text-slate-900 dark:text-slate-100 transition-colors space-y-2.5">
         <!-- 상단 행: 검색 결과 수 + 정렬 드롭다운 + 필터 변경 버튼 -->
         <div class="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
             <div class="flex items-center gap-2 shrink-0">
