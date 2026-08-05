@@ -445,6 +445,98 @@ test('an unchanged settled search configuration does not request the current vie
   assert.equal(state.cardFetches.length, 0);
 });
 
+test('HTMX collection and config cleanup leave the mounted map available for the settled refresh', async () => {
+  const { controller, state } = loadController({ zoom: 12 });
+  const root = createRoot({
+    mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+    mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+  });
+  state.mapRoot = root;
+  const collection = { id: 'listing-collection', matches: () => false, querySelector: () => null };
+  const config = { id: 'map-search-config', matches: () => false, querySelector: () => null };
+  state.mapSearchConfig = {
+    dataset: {
+      mapQueryKey: 'sale',
+      mapDataUrl: '/api/listings/map-data?trade_types=SALE',
+      mapCardsUrl: '/listings/map-cards?trade_types=SALE',
+      mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=SALE',
+    },
+  };
+  controller.mount(root);
+  const mapBefore = state.maps[0];
+
+  state.emitDocument('htmx:beforeSwap', { target: collection });
+  state.emitDocument('htmx:beforeCleanupElement', { elt: config });
+  state.emitDocument('htmx:afterSettle');
+  await state.flushFetches();
+
+  assert.equal(state.maps.length, 1);
+  assert.equal(state.maps[0], mapBefore);
+  assert.match(state.mapFetches.at(-1).url, /trade_types=SALE/);
+  assert.match(state.cardFetches.at(-1).url, /trade_types=SALE/);
+});
+
+test('a changed filter configuration aborts stale requests and keeps prior map and cards after new failures', async () => {
+  const pendingMapSignals = [];
+  const pendingCardSignals = [];
+  let phase = 'baseline';
+  const { controller, state } = loadController({
+    zoom: 12,
+    fetchImpl: (url, options = {}) => {
+      const isMapRequest = String(url).includes('/api/listings/map-data');
+      if (phase === 'baseline') {
+        return isMapRequest
+          ? Promise.resolve({ ok: true, json: async () => singleClusterPayload })
+          : Promise.resolve({ ok: true, text: async () => '<section id="listing-collection">baseline</section>' });
+      }
+      if (phase === 'pending') {
+        (isMapRequest ? pendingMapSignals : pendingCardSignals).push(options.signal);
+        return new Promise(() => {});
+      }
+      return Promise.reject(new Error('refreshed search failed'));
+    },
+  });
+  const root = createRoot({
+    mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+    mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+  });
+  controller.mount(root);
+  controller.refreshSearchConfig(root, {
+    queryKey: 'jeonse',
+    mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+    mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+    mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=JEONSE',
+  });
+  await state.flushFetches();
+  const mapBefore = state.maps[0];
+  const overlayBefore = state.overlays.at(-1);
+  const collectionBefore = state.collection;
+
+  phase = 'pending';
+  controller.refreshSearchConfig(root, {
+    queryKey: 'sale-pending',
+    mapDataUrl: '/api/listings/map-data?trade_types=SALE',
+    mapCardsUrl: '/listings/map-cards?trade_types=SALE',
+    mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=SALE',
+  });
+  phase = 'rejecting';
+  controller.refreshSearchConfig(root, {
+    queryKey: 'sale',
+    mapDataUrl: '/api/listings/map-data?trade_types=SALE',
+    mapCardsUrl: '/listings/map-cards?trade_types=SALE',
+    mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=SALE',
+  });
+  await state.flushFetches();
+
+  assert.equal(pendingMapSignals[0].aborted, true);
+  assert.equal(pendingCardSignals[0].aborted, true);
+  assert.equal(state.maps.length, 1);
+  assert.equal(state.maps[0], mapBefore);
+  assert.equal(state.overlays.at(-1), overlayBefore);
+  assert.equal(state.collection, collectionBefore);
+  assert.equal(state.collection.textContent, 'baseline');
+});
+
 test('a list focus moves the mounted map directly to the supplied coordinate and zoom', async () => {
   const { controller, state } = loadController({ mapData: sidoCirclePayload });
   const root = createRoot({ mapDataUrl: '/api/listings/map-data', mapCardsUrl: '/listings/map-cards' });
