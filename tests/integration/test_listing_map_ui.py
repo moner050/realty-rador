@@ -183,6 +183,19 @@ def test_map_workspace_keeps_controls_and_result_summary_in_one_panel(monkeypatc
     assert response.text.index('id="search-result-summary"') < response.text.index('data-listing-map-root')
 
 
+def test_search_control_panel_has_one_detail_filter_entry_point(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.text.count('data-filter-panel-open') == 1
+    assert 'href="#listing-search-form"' not in response.text
+
+
 def test_htmx_search_returns_collection_and_oob_search_updates(monkeypatch):
     factory = _factory(verified_coordinate=True)
     monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
