@@ -1,7 +1,9 @@
 from datetime import date, datetime, timezone
 from html import unescape
+import json
 from pathlib import Path
 import re
+import urllib.parse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,9 +16,10 @@ from realty_radar.infrastructure.database.session import get_db
 from realty_radar.application.listing_search_service import ListingSearchService
 from realty_radar.web.main import app
 from realty_radar.web.routes.home import _filter_query_items, _region_options, parse_search_filter
+from realty_radar.web.routes.settings import GUEST_COOKIE_NAME
 
 
-def _render_home_with_memory_db(query: str):
+def _render_home_with_memory_db(query: str, *, guest_profile: dict | None = None):
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -31,7 +34,10 @@ def _render_home_with_memory_db(query: str):
 
     app.dependency_overrides[get_db] = override_db
     try:
-        return TestClient(app).get(query)
+        client = TestClient(app)
+        if guest_profile is not None:
+            client.cookies.set(GUEST_COOKIE_NAME, urllib.parse.quote(json.dumps(guest_profile)))
+        return client.get(query)
     finally:
         app.dependency_overrides.clear()
 
@@ -388,17 +394,21 @@ def test_active_filter_chips_describe_every_applied_search_condition():
 
 def test_extracted_filter_summary_preserves_specialized_chip_labels():
     response = _render_home_with_memory_db(
-        "/?region_code=1150010200&max_commute_gangnam=60&floor_bands=4&safe_lessor_hug_only=true"
+        "/?region_code=1150010200&max_commute_gangnam=60&floor_bands=4&safe_lessor_hug_only=true&"
+        "only_purchase_affordable=true",
+        guest_profile={"available_cash": 300_000_000, "max_monthly_housing_cost": 2_000_000},
     )
 
     assert response.status_code == 200
+    summary = re.search(r'<section id="search-result-summary".*?</section>', response.text, re.DOTALL).group(0)
     for label in (
         "동 1150010200",
         "⚡ 강남 1시간 이내",
         "층 탑층",
         "HUG 안심임대인 표기",
+        "실구매 가능 매물만",
     ):
-        assert label in response.text
+        assert label in summary
 
 
 @pytest.mark.parametrize("query", ("cursor=x", "sort_by=not-a-sort", "complex_keyword=가"))
