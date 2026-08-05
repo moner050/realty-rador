@@ -386,6 +386,21 @@ def test_active_filter_chips_describe_every_applied_search_condition():
         assert label in response.text
 
 
+def test_extracted_filter_summary_preserves_specialized_chip_labels():
+    response = _render_home_with_memory_db(
+        "/?region_code=1150010200&max_commute_gangnam=60&floor_bands=4&safe_lessor_hug_only=true"
+    )
+
+    assert response.status_code == 200
+    for label in (
+        "동 1150010200",
+        "⚡ 강남 1시간 이내",
+        "층 탑층",
+        "HUG 안심임대인 표기",
+    ):
+        assert label in response.text
+
+
 @pytest.mark.parametrize("query", ("cursor=x", "sort_by=not-a-sort", "complex_keyword=가"))
 def test_invalid_search_queries_render_a_client_error_instead_of_a_server_error(query):
     engine = create_engine(
@@ -705,6 +720,7 @@ def test_htmx_page_navigation_replaces_the_listing_collection():
     try:
         client = TestClient(app)
         first = client.get("/listings/search?page_size=1", headers={"HX-Request": "true"})
+        append_response = client.get("/listings/search?page_size=1&append=1", headers={"HX-Request": "true"})
         next_url = unescape(
             re.search(r'<a[^>]+hx-get="([^"]+)"[^>]*>다음 페이지</a>', first.text).group(1)
         )
@@ -716,6 +732,9 @@ def test_htmx_page_navigation_replaces_the_listing_collection():
     assert "첫번째 단지" in first.text
     assert "append=1" not in next_url
     assert 'hx-target="#listing-collection" hx-swap="outerHTML" hx-push-url="true">다음 페이지' in first.text
+    assert 'id="listing-pager" hx-swap-oob="true"' in append_response.text
+    assert 'hx-target="#listing-collection"' in append_response.text
+    assert 'hx-target="#search-results"' not in append_response.text
     assert second_page.status_code == 200
     assert "두번째 단지" in second_page.text
     assert "첫번째 단지" not in second_page.text
