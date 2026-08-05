@@ -167,6 +167,20 @@ def test_search_result_renders_one_map_first_workspace(monkeypatch):
     assert "data-map-complex-url-template=" in response.text
 
 
+def test_search_result_exposes_clearable_compact_filter_chips(monkeypatch):
+    factory = _factory(verified_coordinate=True)
+    monkeypatch.setattr(settings, "naver_map_client_id", "public-key")
+    app.dependency_overrides[get_db] = _override(factory)
+    try:
+        response = TestClient(app).get("/?complex_keyword=%ED%85%8C%EC%8A%A4%ED%8A%B8&trade_types=SALE")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert 'data-applied-filter-clear data-filter-clear-names="complex_keyword"' in response.text
+    assert 'data-applied-filter-clear data-filter-clear-names="trade_types"' in response.text
+
+
 def test_map_data_endpoint_returns_labelled_sido_circle_without_geocoding(monkeypatch):
     factory = _factory_with_three_complexes(two_verified=True)
     monkeypatch.setattr(

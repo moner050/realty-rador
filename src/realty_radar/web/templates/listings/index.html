@@ -285,7 +285,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 
                 <!-- 상세 필터 팝업 모달 토글 버튼 & 검색 실행 -->
                 <div class="lg:col-span-2 flex items-center gap-2">
-                    <button type="button" id="btn-toggle-detailed-filter" class="flex-1 min-h-10 rounded-lg border border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                    <button type="button" id="btn-toggle-detailed-filter" data-filter-panel-open aria-controls="detailed-filter-modal" aria-expanded="false" class="flex-1 min-h-10 rounded-lg border border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
                         <span>상세 필터 ⚙️</span>
                     </button>
@@ -313,7 +313,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
         </div>
 
         <!-- 3. 상세 필터 카테고리 탭 모달/드로어 (Detailed Filter Container) -->
-        <dialog id="detailed-filter-modal" class="w-[min(54rem,calc(100vw-1.5rem))] rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
+        <dialog id="detailed-filter-modal" data-filter-panel class="fixed inset-y-0 right-0 m-0 h-dvh w-full max-w-[28rem] rounded-none border-y-0 border-r-0 border-l border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
             <div class="p-4 sm:p-5 flex flex-col max-h-[85vh]">
                 <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
                     <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -437,7 +437,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                     <output data-detailed-filter-count aria-live="polite" class="text-xs text-slate-600 dark:text-slate-400"></output>
                     <div class="flex gap-2">
                         <button type="button" data-clear-filter-tab class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold">현재 탭 초기화</button>
-                        <button type="button" data-apply-detailed-filter class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
+                        <button type="button" data-filter-panel-apply class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
                     </div>
                 </div>
             </div>
@@ -1304,14 +1304,6 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
     });
 
     // --- 1. 상세 필터 팝업 모달 & 카테고리 탭 (Detailed Filter Modal & Tabs) ---
-    const detailedFilterModal = document.getElementById("detailed-filter-modal");
-    const toggleDetailedFilterBtn = document.getElementById("btn-toggle-detailed-filter");
-    if (toggleDetailedFilterBtn && detailedFilterModal) {
-        toggleDetailedFilterBtn.addEventListener("click", () => {
-            detailedFilterModal.showModal();
-        });
-    }
-
     const tabBtns = document.querySelectorAll(".filter-tab-btn");
     const tabContents = document.querySelectorAll(".filter-tab-content");
     const detailedFilterCount = document.querySelector("[data-detailed-filter-count]");
@@ -1386,11 +1378,6 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
         }
         updateDetailedFilterCount();
         form.requestSubmit();
-    });
-
-    document.querySelector("[data-apply-detailed-filter]")?.addEventListener("click", () => {
-        form.requestSubmit();
-        detailedFilterModal.close();
     });
 
     setActiveFilterTab("presets");
