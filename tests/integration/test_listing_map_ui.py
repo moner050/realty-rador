@@ -159,7 +159,7 @@ def test_search_result_renders_one_map_first_workspace(monkeypatch):
     assert "data-search-workspace" in response.text
     assert "data-search-toolbar" in response.text
     assert "data-applied-filter-summary" in response.text
-    assert "data-map-filter-trigger" in response.text
+    assert "data-filter-panel-open" in response.text
     assert response.text.index("data-search-toolbar") < response.text.index("data-listing-map-root")
     assert response.text.index("data-listing-map-root") < response.text.index('id="listing-collection"')
     assert "data-map-data-url=" in response.text
@@ -192,7 +192,11 @@ def test_search_control_panel_has_one_detail_filter_entry_point(monkeypatch):
     finally:
         app.dependency_overrides.clear()
 
-    assert response.text.count('data-filter-panel-open') == 1
+    detail_filter_triggers = re.findall(r"\b(?:data-map-filter-trigger|data-filter-panel-open)(?=[\s=>])", response.text)
+    assert detail_filter_triggers == ["data-filter-panel-open"]
+    assert response.text.count(
+        'data-filter-panel-open aria-controls="detailed-filter-modal" aria-expanded="false"'
+    ) == 1
     assert 'href="#listing-search-form"' not in response.text
 
 

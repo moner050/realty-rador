@@ -347,5 +347,5 @@ def test_search_results_render_static_filter_and_pagination_control_panel():
     assert 'data-result-controls' in response.text
     assert 'sticky top-20 z-30' in response.text
     assert 'id="search-result-summary"' in response.text
-    assert 'data-map-filter-trigger' in response.text
+    assert 'data-filter-panel-open' in response.text
     assert '페이지당 20개' in response.text

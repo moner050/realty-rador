@@ -16,7 +16,6 @@
                     {% for value, label in sort_options %}<option value="{{ value }}" {% if filters.sort_by == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
                 </select>
             </label>
-            <button type="button" data-map-filter-trigger aria-controls="detailed-filter-modal" class="inline-flex min-h-9 items-center rounded-xl border border-indigo-500/60 bg-indigo-50 px-3 text-xs font-bold text-indigo-700 shadow-sm transition-all hover:bg-indigo-600 hover:text-white dark:bg-indigo-950/60 dark:text-indigo-200">상세 필터</button>
         </div>
     </div>
 
