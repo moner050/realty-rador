@@ -125,7 +125,7 @@ function loadController({
   let currentViewport = { west: 126.8, south: 37.5, east: 126.9, north: 37.6 };
   const state = {
     maps: [], overlays: [], listeners: [], removedListeners: 0,
-    mapFetches: [], cardFetches: [], complexFetches: [], mapRoot: null,
+    mapFetches: [], cardFetches: [], complexFetches: [], mapRoot: null, mapSearchConfig: null,
   };
   function collectionFromHTML(html) {
     const markup = String(html).trim();
@@ -146,9 +146,10 @@ function loadController({
     fetch: (url, options) => {
       const requested = String(url);
       const isMapRequest = requested.includes('/api/listings/map-data');
-      if (isMapRequest) state.mapFetches.push(requested);
+      const request = { url: requested };
+      if (isMapRequest) state.mapFetches.push(request);
       else if (requested.includes('/listings/complex/')) state.complexFetches.push(requested);
-      else state.cardFetches.push(requested);
+      else state.cardFetches.push(request);
       if (fetchImpl) return fetchImpl(url, options);
       if (isMapRequest) return Promise.resolve({ ok: true, json: async () => mapData });
       return Promise.resolve({ ok: true, text: async () => '<section id="listing-collection"></section>' });
@@ -219,8 +220,9 @@ function loadController({
       },
     },
   };
+  const documentListeners = [];
   const document = {
-    addEventListener() {},
+    addEventListener(event, callback) { documentListeners.push({ event, callback }); },
     createElement(tagName) {
       assert.equal(tagName, 'template');
       let collections = [];
@@ -240,6 +242,7 @@ function loadController({
       if (selector === '#listing-collection') return state.collection;
       if (selector === '[data-listing-map-root]') return state.mapRoot;
       if (selector === '[data-card-loading]') return state.mapRoot && state.mapRoot.cardLoading;
+      if (selector === '#map-search-config') return state.mapSearchConfig;
       return null;
     },
   };
@@ -252,6 +255,9 @@ function loadController({
   state.emitContainer = (root, event) => root.containerListeners
     .filter((listener) => listener.event === event)
     .forEach((listener) => listener.callback());
+  state.emitDocument = (event, detail = {}) => documentListeners
+    .filter((listener) => listener.event === event)
+    .forEach((listener) => listener.callback({ detail }));
   state.setViewport = ({ zoom: nextZoom = currentZoom, west, south, east, north }) => {
     currentZoom = nextZoom;
     currentViewport = { west, south, east, north };
@@ -279,8 +285,8 @@ test('zoomed-out map data renders one labelled sido circle and does not request 
   assert.equal(state.maps[0].options.center.latitude, 37.55);
   assert.equal(state.maps[0].options.center.longitude, 126.9);
   assert.equal(state.maps[0].options.zoom, 8);
-  assert.doesNotMatch(state.mapFetches[0], /map_initial=true/);
-  const initialRequest = new URL(state.mapFetches[0]);
+  assert.doesNotMatch(state.mapFetches[0].url, /map_initial=true/);
+  const initialRequest = new URL(state.mapFetches[0].url);
   assert.equal(initialRequest.searchParams.get('map_west'), '126.8');
   assert.equal(initialRequest.searchParams.get('map_north'), '37.6');
   assert.equal(state.overlays.length, 1);
@@ -365,6 +371,78 @@ test('a newer viewport aborts in-flight marker and card requests before the next
   assert.equal(cardSignals.length, 1);
   assert.equal(mapSignals[0].aborted, true);
   assert.equal(cardSignals[0].aborted, true);
+});
+
+test('a changed filter configuration preserves the mounted map and refreshes its current viewport immediately', async () => {
+  const { controller, state } = loadController({ zoom: 12 });
+  const root = createRoot({
+    mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+    mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+  });
+  controller.mount(root);
+  const mapBefore = state.maps[0];
+
+  controller.refreshSearchConfig(root, {
+    queryKey: 'sale',
+    mapDataUrl: '/api/listings/map-data?trade_types=SALE',
+    mapCardsUrl: '/listings/map-cards?trade_types=SALE',
+    mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=SALE',
+  });
+  await state.flushFetches();
+
+  assert.equal(state.maps[0], mapBefore);
+  assert.match(state.mapFetches.at(-1).url, /trade_types=SALE/);
+  assert.match(state.cardFetches.at(-1).url, /trade_types=SALE/);
+});
+
+test('the settled search configuration refreshes the mounted map without creating another instance', async () => {
+  const { controller, state } = loadController({ zoom: 12 });
+  const root = createRoot({
+    mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+    mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+  });
+  state.mapRoot = root;
+  state.mapSearchConfig = {
+    dataset: {
+      mapQueryKey: 'sale',
+      mapDataUrl: '/api/listings/map-data?trade_types=SALE',
+      mapCardsUrl: '/listings/map-cards?trade_types=SALE',
+      mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=SALE',
+    },
+  };
+  controller.mount(root);
+  const mapBefore = state.maps[0];
+
+  state.emitDocument('htmx:afterSettle');
+  await state.flushFetches();
+
+  assert.equal(state.maps[0], mapBefore);
+  assert.match(state.mapFetches.at(-1).url, /trade_types=SALE/);
+  assert.match(state.cardFetches.at(-1).url, /trade_types=SALE/);
+});
+
+test('an unchanged settled search configuration does not request the current viewport again', async () => {
+  const { controller, state } = loadController({ zoom: 12 });
+  const root = createRoot({
+    mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+    mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+  });
+  state.mapRoot = root;
+  state.mapSearchConfig = {
+    dataset: {
+      mapQueryKey: '/api/listings/map-data?trade_types=JEONSE',
+      mapDataUrl: '/api/listings/map-data?trade_types=JEONSE',
+      mapCardsUrl: '/listings/map-cards?trade_types=JEONSE',
+      mapComplexUrlTemplate: '/listings/complex/__complex_id__?trade_types=JEONSE',
+    },
+  };
+  controller.mount(root);
+
+  state.emitDocument('htmx:afterSettle');
+  await state.flushFetches();
+
+  assert.equal(state.mapFetches.length, 0);
+  assert.equal(state.cardFetches.length, 0);
 });
 
 test('a list focus moves the mounted map directly to the supplied coordinate and zoom', async () => {
@@ -590,8 +668,8 @@ test('a user drag during the initial period refreshes exactly the changed settle
 
   assert.equal(state.mapFetches.length, 1);
   assert.equal(state.cardFetches.length, 1);
-  const mapRequest = new URL(state.mapFetches[0]);
-  const cardRequest = new URL(state.cardFetches[0]);
+  const mapRequest = new URL(state.mapFetches[0].url);
+  const cardRequest = new URL(state.cardFetches[0].url);
   for (const request of [mapRequest, cardRequest]) {
     assert.equal(request.searchParams.get('map_west'), '126.91');
     assert.equal(request.searchParams.get('map_south'), '37.61');
@@ -619,8 +697,8 @@ test('wheel, keyboard, pointer, and touch zooms refresh exactly once even when N
 
       assert.equal(state.mapFetches.length, 1);
       assert.equal(state.cardFetches.length, 1);
-      const mapRequest = new URL(state.mapFetches[0]);
-      const cardRequest = new URL(state.cardFetches[0]);
+      const mapRequest = new URL(state.mapFetches[0].url);
+      const cardRequest = new URL(state.cardFetches[0].url);
       for (const request of [mapRequest, cardRequest]) {
         assert.equal(request.searchParams.get('map_west'), '126.92');
         assert.equal(request.searchParams.get('map_south'), '37.62');
@@ -654,8 +732,8 @@ test('a cluster click during the initial period fits its bounds and refreshes th
   assert.deepEqual(state.maps[0].fitBoundsCalls[0], { west: 126.8, south: 37.5, east: 126.9, north: 37.6 });
   assert.equal(state.mapFetches.length, 2);
   assert.equal(state.cardFetches.length, 2);
-  const mapRequest = new URL(state.mapFetches[1]);
-  const cardRequest = new URL(state.cardFetches[1]);
+  const mapRequest = new URL(state.mapFetches[1].url);
+  const cardRequest = new URL(state.cardFetches[1].url);
   for (const request of [mapRequest, cardRequest]) {
     assert.equal(request.searchParams.get('map_west'), '126.82');
     assert.equal(request.searchParams.get('map_south'), '37.52');

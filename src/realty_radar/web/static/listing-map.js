@@ -384,6 +384,38 @@
         }
     }
 
+    function refreshSearchConfig(root, config) {
+        const instance = instances.get(root);
+        if (!instance || !config || config.queryKey === instance.mapQueryKey) return;
+        root.dataset.mapDataUrl = config.mapDataUrl;
+        root.dataset.mapCardsUrl = config.mapCardsUrl;
+        root.dataset.mapComplexUrlTemplate = config.mapComplexUrlTemplate;
+        root.dataset.mapQueryKey = config.queryKey;
+        instance.mapQueryKey = config.queryKey;
+        instance.lastMapViewportKey = null;
+        instance.lastCardsViewportKey = null;
+        if (instance.mapTimer) clearTimeout(instance.mapTimer);
+        if (instance.cardsTimer) clearTimeout(instance.cardsTimer);
+        cancelMapRequest(root, instance);
+        cancelCardsRequest(root, instance);
+        const viewport = viewportFromMap(instance.map);
+        const key = viewportKey(instance.map, viewport);
+        if (!viewport || !key) return;
+        requestMapData(root, instance.map, instance, { key });
+        requestCards(root, instance.map, instance, key);
+    }
+
+    function searchConfig() {
+        const config = document.querySelector("#map-search-config");
+        if (!config || !config.dataset) return null;
+        return {
+            queryKey: config.dataset.mapQueryKey,
+            mapDataUrl: config.dataset.mapDataUrl,
+            mapCardsUrl: config.dataset.mapCardsUrl,
+            mapComplexUrlTemplate: config.dataset.mapComplexUrlTemplate,
+        };
+    }
+
     function focus(data) {
         const latitude = Number(data && (data.mapFocusLatitude || data.latitude));
         const longitude = Number(data && (data.mapFocusLongitude || data.longitude));
@@ -431,6 +463,7 @@
             complexAbortController: null,
             lastMapViewportKey: null,
             lastCardsViewportKey: null,
+            mapQueryKey: root.dataset && (root.dataset.mapQueryKey || root.dataset.mapDataUrl),
         };
         const closeButton = root.querySelector("[data-map-complex-close]");
         if (closeButton && typeof closeButton.addEventListener === "function") {
@@ -474,7 +507,7 @@
         instances.delete(root);
     }
 
-    window.RealtyRadarListingMap = { mount, unmount, focus };
+    window.RealtyRadarListingMap = { mount, unmount, focus, refreshSearchConfig };
 
     document.addEventListener("click", (event) => {
         const target = event.target && typeof event.target.closest === "function"
@@ -493,7 +526,18 @@
         focus(target.dataset);
     });
     document.addEventListener("DOMContentLoaded", () => mount(document));
-    document.addEventListener("htmx:beforeSwap", (event) => unmount(event.detail && event.detail.target));
-    document.addEventListener("htmx:beforeCleanupElement", (event) => unmount(event.detail && event.detail.elt));
+    document.addEventListener("htmx:beforeSwap", (event) => {
+        const target = event.detail && event.detail.target;
+        if (findRoot(target)) unmount(target);
+    });
+    document.addEventListener("htmx:beforeCleanupElement", (event) => {
+        const element = event.detail && event.detail.elt;
+        if (findRoot(element)) unmount(element);
+    });
     document.addEventListener("htmx:afterSwap", (event) => mount(event.detail && event.detail.target));
+    document.addEventListener("htmx:afterSettle", () => {
+        mount(document);
+        const root = findRoot(document);
+        if (root) refreshSearchConfig(root, searchConfig());
+    });
 })(window, document);
