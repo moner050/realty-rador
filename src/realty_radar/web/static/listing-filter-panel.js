@@ -36,14 +36,20 @@
         source.addEventListener("click", (event) => {
             const opener = event.target.closest && event.target.closest(triggerSelector);
             if (opener) {
-                if (typeof panel.showModal === "function" && !panel.open) panel.showModal();
+                if (typeof panel.showModal === "function" && !panel.open) {
+                    panel.showModal();
+                    document.body.classList.add("overflow-hidden");
+                }
                 opener.setAttribute("aria-expanded", "true");
                 return;
             }
 
             if (event.target.closest && event.target.closest("[data-filter-panel-apply]")) {
                 form.requestSubmit();
-                if (typeof panel.close === "function" && panel.open) panel.close();
+                if (typeof panel.close === "function" && panel.open) {
+                    panel.close();
+                    document.body.classList.remove("overflow-hidden");
+                }
                 return;
             }
 
@@ -55,10 +61,12 @@
             form.requestSubmit();
         });
 
-        panel.addEventListener("close", () => setTriggersExpanded(source, false));
+        panel.addEventListener("close", () => {
+            setTriggersExpanded(source, false);
+            document.body.classList.remove("overflow-hidden");
+        });
     }
 
     window.RealtyRadarListingFilterPanel = { mount };
     document.addEventListener("DOMContentLoaded", () => mount(document));
 })(window, document);
-

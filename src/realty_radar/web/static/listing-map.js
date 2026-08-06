@@ -179,7 +179,10 @@
         if (address) address.textContent = item.address;
         if (price) price.textContent = `${item.listing_count}건 · ${formatPrice(item.min_price)} ~ ${formatPrice(item.max_price)}`;
         if (listings) listings.innerHTML = '<p class="text-sm font-semibold text-slate-500">매물을 불러오는 중입니다.</p>';
-        if (typeof modal.showModal === "function" && !modal.open) modal.showModal();
+        if (typeof modal.showModal === "function" && !modal.open) {
+            modal.showModal();
+            document.body.classList.add("overflow-hidden");
+        }
 
         if (instance.complexAbortController) instance.complexAbortController.abort();
         const controller = makeAbortController();
@@ -499,11 +502,18 @@
             lastCardsViewportKey: null,
             mapQueryKey: root.dataset && (root.dataset.mapQueryKey || root.dataset.mapDataUrl),
         };
+        const modalElement = root.querySelector("[data-map-complex-modal]");
+        if (modalElement && typeof modalElement.addEventListener === "function") {
+            modalElement.addEventListener("close", () => document.body.classList.remove("overflow-hidden"));
+        }
         const closeButton = root.querySelector("[data-map-complex-close]");
         if (closeButton && typeof closeButton.addEventListener === "function") {
             instance.closeModal = () => {
                 const modal = root.querySelector("[data-map-complex-modal]");
-                if (modal && typeof modal.close === "function") modal.close();
+                if (modal && typeof modal.close === "function") {
+                    modal.close();
+                    document.body.classList.remove("overflow-hidden");
+                }
             };
             closeButton.addEventListener("click", instance.closeModal);
         }

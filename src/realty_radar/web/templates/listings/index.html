@@ -301,7 +301,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
         </section>
 
         <!-- 2번 영역 (오른쪽 패널): 아파트 매물검색 필터 고정 패널 (지역 선택 & 단지 주소 검색 전용) -->
-        <aside class="lg:col-span-3 2xl:col-span-2 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+        <aside class="lg:col-span-3 2xl:col-span-2 space-y-4 lg:sticky lg:top-4">
             <div data-search-control-panel class="theme-filter-choice theme-surface space-y-3 rounded-2xl border border-slate-200 bg-white p-3 sm:p-3.5 shadow-lg text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                 <div class="flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-800">
                     <h2 class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 whitespace-nowrap min-w-0">
@@ -348,14 +348,13 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                             </label>
                             <div class="space-y-1.5">
                                 <select id="sido-select" class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer">
-                                    <option value="">시도 전체</option>
-                                    {% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}
+                                    <option value="">시/도 선택</option>
                                 </select>
-                                <select id="municipality-select" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer">
-                                    <option value="">시/군</option>
+                                <select id="municipality-select" class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer" data-selected="{{ selected_municipality }}">
+                                    <option value="">시/군 없음</option>
                                 </select>
-                                <select id="district-select" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer">
-                                    <option value="">구 선택</option>
+                                <select id="district-select" name="sigungu_code" class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}">
+                                    <option value="">시/군을 먼저 선택하세요</option>
                                 </select>
                             </div>
                         </div>
@@ -378,17 +377,26 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                             </button>
                         </div>
 
-                        <!-- 선택 영역 칩 및 hidden inputs -->
-                        <div id="active-filter-chips-bar" data-applied-filter-summary class="space-y-1.5 pt-2 text-xs">
-                            <div class="flex items-center justify-between whitespace-nowrap">
-                                <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용 지역:</span>
-                                <button type="button" id="btn-clear-regions" class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold text-[10px]">초기화</button>
+                        <!-- 선택 영역 칩 및 적용 필터 접기/펴기 토글 -->
+                        <div x-data="{ showAppliedFilters: false }" class="pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                            <button type="button" @click="showAppliedFilters = !showAppliedFilters" class="w-full flex items-center justify-between min-h-8 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-[11px] font-extrabold text-slate-800 dark:text-slate-200 transition-all shadow-sm">
+                                <span class="flex items-center gap-1.5 truncate">
+                                    <span>📌 적용된 필터 조건</span>
+                                </span>
+                                <span class="text-xs shrink-0 text-slate-500" x-text="showAppliedFilters ? '▲ 접기' : '▼ 펼치기'">▼ 펼치기</span>
+                            </button>
+                            
+                            <div x-show="showAppliedFilters" x-collapse x-cloak id="active-filter-chips-bar" data-applied-filter-summary class="space-y-1.5 pt-2.5">
+                                <div class="flex items-center justify-between whitespace-nowrap">
+                                    <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용 지역:</span>
+                                    <button type="button" id="btn-clear-regions" class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold text-[10px]">초기화</button>
+                                </div>
+                                <div id="selected-region-chips" class="flex flex-wrap gap-1">
+                                    <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
+                                </div>
+                                <div id="hidden-sigungu-inputs"></div>
+                                <div id="hidden-sido-inputs"></div>
                             </div>
-                            <div id="selected-region-chips" class="flex flex-wrap gap-1">
-                                <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
-                            </div>
-                            <div id="hidden-sigungu-inputs"></div>
-                            <div id="hidden-sido-inputs"></div>
                         </div>
                     </div>
 
@@ -1845,7 +1853,15 @@ function toggleFavoriteSidebar(show) {
     }
 }
 
-function toggleListingFavorite(item) {
+function toggleListingFavorite(btnOrItem) {
+    let item = btnOrItem;
+    if (btnOrItem && btnOrItem.dataset && btnOrItem.dataset.favoritePayload) {
+        try {
+            item = JSON.parse(btnOrItem.dataset.favoritePayload);
+        } catch (e) {
+            console.error("Failed to parse favorite payload", e);
+        }
+    }
     favManager.toggleListing(item);
 }
 
