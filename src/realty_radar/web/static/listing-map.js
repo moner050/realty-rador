@@ -247,12 +247,21 @@
     }
 
     function makeMarkerOverlay(root, map, instance, item) {
+        const priceLabel = item.min_price && item.max_price && item.min_price !== item.max_price
+            ? `${formatPrice(item.min_price)} ~ ${formatPrice(item.max_price)}`
+            : formatPrice(item.min_price);
         const marker = new window.naver.maps.Marker({
             map,
             position: new window.naver.maps.LatLng(item.latitude, item.longitude),
             title: item.complex_name,
             icon: {
-                content: `<div class="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-slate-900 shadow-lg ring-1 ring-indigo-200 whitespace-nowrap overflow-hidden text-ellipsis max-w-[220px] pointer-events-auto shrink-0 select-none" style="writing-mode: horizontal-tb !important; white-space: nowrap !important;">${escapeHtml(formatPrice(item.min_price))} <span class="text-slate-500">${escapeHtml(item.listing_count)}건</span></div>`,
+                content: `<div class="rounded-xl border border-indigo-300 dark:border-indigo-700 bg-white/95 dark:bg-slate-900/95 px-2.5 py-1.5 shadow-xl text-center pointer-events-auto shrink-0 select-none backdrop-blur leading-tight" style="writing-mode: horizontal-tb !important; white-space: nowrap !important;">
+                    <div class="text-[11px] font-extrabold text-slate-900 dark:text-white truncate max-w-[180px]">${escapeHtml(item.complex_name)}</div>
+                    <div class="text-[11px] font-black text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-1 mt-0.5">
+                        <span>${escapeHtml(priceLabel)}</span>
+                        <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400">(${escapeHtml(item.listing_count)}건)</span>
+                    </div>
+                </div>`,
                 anchor: new window.naver.maps.Point(0, 0),
             },
         });
