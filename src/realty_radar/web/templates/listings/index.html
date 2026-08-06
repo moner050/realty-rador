@@ -3,9 +3,14 @@
 {% block title %}아파트 매물 검색{% endblock %}
 
 {% block head_extra %}
+<meta name="referrer" content="strict-origin-when-cross-origin">
 {% if naver_map_client_id %}
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={{ naver_map_client_id }}" defer></script>
 <script src="/static/listing-map.js" defer></script>
+{% else %}
+<script>
+    console.warn("[Realty Radar] NAVER_MAP_CLIENT_ID가 백엔드에서 설정되지 않았습니다. .env 환경 변수를 확인해 주세요.");
+</script>
 {% endif %}
 {% endblock %}
 
@@ -493,11 +498,10 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                                 </fieldset>
                                 <fieldset data-option-group="financing" class="space-y-3">
                                     <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">자금 조건</legend>
-                                    <p class="text-xs text-slate-600 dark:text-slate-400">대출·구매 가능 매물은 개인 자격 정보에 따라 달라집니다.</p>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">대출 가능 매물은 개인 자격 정보에 따라 달라집니다.</p>
                                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="safe_lessor_hug_only" value="true" class="rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}><span>HUG 안심임대인만</span></label>
                                         <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_eligible_loans" value="true" class="rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}><span>가능대출 매물만</span></label>
-                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_purchase_affordable" value="true" class="rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}><span>실구매 가능 매물만</span></label>
                                     </div>
                                     <div class="hidden"><input type="date" name="move_in_by" value="{{ filters.move_in_by or '' }}"></div>
                                 </fieldset>

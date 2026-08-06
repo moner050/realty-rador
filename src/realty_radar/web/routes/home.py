@@ -345,8 +345,7 @@ def parse_search_filter(
         exclude_short_term=parsed_exclude_short_term,
         exclude_first_floor=_request_bool(exclude_first_floor, False),
         group_by_complex=_request_bool(group_by_complex, False),
-        only_eligible_loans=_request_bool(only_eligible_loans, False),
-        only_purchase_affordable=_request_bool(only_purchase_affordable, False),
+        only_eligible_loans=_request_bool(only_eligible_loans, False) or _request_bool(only_purchase_affordable, False),
     )
 
 
@@ -620,7 +619,6 @@ def _filter_query_items(filters: ListingSearchFilter) -> list[tuple[str, str]]:
         ("exclude_short_term", filters.exclude_short_term),
         ("group_by_complex", filters.group_by_complex),
         ("only_eligible_loans", filters.only_eligible_loans),
-        ("only_purchase_affordable", filters.only_purchase_affordable),
     ):
         items.append((key, str(value).lower()))
     for key, values in (

@@ -47,7 +47,6 @@
         <span class="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">단기임대 {{ '제외' if filters.exclude_short_term else '포함' }}</span>
         {% if filters.group_by_complex %}<span class="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">단지별 묶기</span>{% endif %}
         {% if filters.only_eligible_loans %}<span class="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 font-bold text-indigo-700 shadow-sm dark:border-indigo-700/60 dark:bg-indigo-950/60 dark:text-indigo-300">가능 대출 있는 매물만</span>{% endif %}
-        {% if filters.only_purchase_affordable %}<span class="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 font-bold text-indigo-700 shadow-sm dark:border-indigo-700/60 dark:bg-indigo-950/60 dark:text-indigo-300">실구매 가능 매물만</span>{% endif %}
         {% if filters.direct_trade_only %}<span class="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">직거래만</span>{% endif %}
         {% if filters.safe_lessor_hug_only %}<span class="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/90 dark:text-slate-200">HUG 안심임대인 표기</span>{% endif %}
     </div>

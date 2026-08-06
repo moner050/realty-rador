@@ -84,7 +84,7 @@ MYSQL_USER=realty_app
 MYSQL_PASSWORD=your_secure_password
 MYSQL_DATABASE=realty_radar_v2
 
-# 네이버 지도 API ID (클라이언트용)
+# 네이버 지도 API ID (필수: 미설정 시 지도 영역 비어 있음)
 NAVER_MAP_CLIENT_ID=your_ncp_client_id
 NAVER_MAP_CLIENT_SECRET=your_ncp_client_secret
 ```
@@ -135,6 +135,7 @@ After=network.target mysql.service
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/real-estate-search
+EnvironmentFile=/home/ubuntu/real-estate-search/.env
 ExecStart=/home/ubuntu/real-estate-search/.venv/bin/python scripts/run_web_only.py
 Restart=always
 RestartSec=5
@@ -199,7 +200,21 @@ sudo certbot --nginx -d your-domain.com
 
 ---
 
-## 🔍 3. 정상 동작 검증 및 점검 체크리스트
+## 🛠️ 3. 네이버 지도(Naver Maps) 미표시 트러블슈팅
+
+배포 후 웹 페이지의 지도 영역이 비어있을 경우 다음 3가지를 점검하세요:
+
+1. **Ubuntu 서버 `.env` 파일 내 `NAVER_MAP_CLIENT_ID` 설정 유무**:
+   - `NAVER_MAP_CLIENT_ID` 환경변수가 설정되어 있지 않으면 지도 JS 라이브러리가 로드되지 않습니다.
+   - `/home/ubuntu/real-estate-search/.env`에 `NAVER_MAP_CLIENT_ID`를 등록한 후 `sudo systemctl restart realty-radar`로 재시작하세요.
+2. **NCP 콘솔의 Application 서비스 선택 확인**:
+   - NCP 콘솔 [AI·NAVER API] -> [Application] -> [서비스 선택]에서 **`Web Dynamic Map`**과 **`Geocoding`** 서비스가 활성화되어 있는지 확인하세요.
+3. **NCP Web 서비스 URL 목록 불일치**:
+   - 실제 접속하는 모든 domain / IP / Port (`http://<공인_IP>`, `http://<공인_IP>:8000`, `https://realty-rador.kro.kr` 등)를 NCP 서비스 환경 등록 목록에 등록해야 합니다.
+
+---
+
+## 🔍 4. 정상 동작 검증 및 점검 체크리스트
 
 1. **서비스 상태 확인**:
    ```bash
@@ -211,19 +226,3 @@ sudo certbot --nginx -d your-domain.com
    ```
 3. **외부 웹 접속 검증**:
    브라우저에서 `http://<서버_공인_IP>` 또는 `https://your-domain.com` 접속 확인.
-4. **수동 실행 검증**:
-   ```bash
-   chmod +x scripts/start.sh
-   ./scripts/start.sh
-   ```
-
----
-
-## 🛡️ 4. 무차별 보안 스캔 대응 방안
-
-1. **Nginx에서 IP 직접 접근 및 알 수 없는 Host 요청 차단**:
-   도메인 없이 IP로 들어오는 봇 스캔을 Nginx `default_server`에서 `444` (응답 없이 연결 종료) 처리.
-2. **Fail2ban 도입**:
-   짧은 시간 내 연속으로 404/403 에러를 유발하는 IP를 IPTables 레벨에서 자동 차단.
-3. **민감 경로 차단**:
-   `.env`, `.git`, `.sql` 요청을 Nginx 단에서 즉시 차단.

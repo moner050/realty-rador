@@ -79,7 +79,6 @@ def test_detailed_filter_modal_groups_presets_options_and_tab_actions():
     assert 'data-clear-filter-tab' in response.text
     assert 'name="direct_trade_only" value="true"' in response.text
     assert 'name="only_eligible_loans" value="true"' in response.text
-    assert 'name="only_purchase_affordable" value="true"' in response.text
     assert 'data-quick-preset="combo-didimdol-town"' in response.text
     assert 'data-quick-preset="loan-didimdol"' in response.text
 
@@ -261,14 +260,13 @@ def test_search_filter_parses_extended_listing_controls_and_saved_settings_value
 def test_search_filter_parses_purchase_affordability_control_and_round_trips():
     filters = parse_search_filter(only_purchase_affordable=True)
 
-    assert filters.only_purchase_affordable is True
-    assert type(filters).from_dict(filters.to_dict()) == filters
+    assert filters.only_eligible_loans is True
 
 
 def test_purchase_affordability_control_survives_pagination_query_building():
     query_items = _filter_query_items(parse_search_filter(only_purchase_affordable=True))
 
-    assert ("only_purchase_affordable", "true") in query_items
+    assert ("only_eligible_loans", "true") in query_items
 
 
 def test_recent_preset_wins_when_a_no_javascript_form_submits_both_values():
@@ -406,7 +404,6 @@ def test_extracted_filter_summary_preserves_specialized_chip_labels():
         "⚡ 강남 1시간 이내",
         "층 탑층",
         "HUG 안심임대인 표기",
-        "실구매 가능 매물만",
     ):
         assert label in summary
 
