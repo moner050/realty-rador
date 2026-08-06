@@ -1,26 +1,58 @@
 <aside x-data="{ settingsOpen: false, isBackdropMouseDown: false }" class="theme-surface lg:sticky lg:top-20 lg:self-start">
-    <section class="theme-info-panel rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-lg">
-        <p class="text-xs font-semibold text-indigo-700 dark:text-indigo-300">대출 계산에 사용 중</p>
-        <h2 class="theme-primary-text mt-1 text-base font-bold text-slate-900 dark:text-white">개인 자격 및 정책대출 조건 설정</h2>
-        <dl class="theme-secondary-text mt-3 space-y-1.5 text-xs text-slate-700 dark:text-slate-300"><div class="flex justify-between gap-2"><dt>연소득</dt><dd>{{ applicant.annual_income | comma_number }}원</dd></div><div class="flex justify-between gap-2"><dt>무주택</dt><dd>{{ '예' if applicant.is_homeless else '아니오' }}</dd></div><div class="flex justify-between gap-2"><dt>신혼/신생아</dt><dd>{{ '예' if applicant.is_newlywed else '아니오' }} / {{ '예' if applicant.has_newborn else '아니오' }}</dd></div><div class="flex justify-between gap-2"><dt>차용증 활용</dt><dd>{{ '예 (' ~ applicant.promissory_note_total | comma_number ~ '원)' if applicant.use_promissory_note else '아니오' }}</dd></div></dl>
-        <button type="button" class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 shadow-sm transition-colors" @click="settingsOpen = true">조건 설정하기</button>
+    <section class="theme-info-panel rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-md">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-1.5 whitespace-nowrap">
+            <span class="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">대출 적용 중</span>
+            <span class="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200">완료</span>
+        </div>
+        <h2 class="theme-primary-text mt-1.5 text-xs font-extrabold text-slate-900 dark:text-white whitespace-nowrap truncate">내 대출 자격 조건</h2>
+        
+        <!-- 줄바꿈 없는 1줄 요약 표기 -->
+        <dl class="theme-secondary-text mt-2.5 space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
+            <div class="flex items-center justify-between gap-1 whitespace-nowrap text-[11px]">
+                <dt class="font-bold text-slate-500 dark:text-slate-400 shrink-0">연소득</dt>
+                <dd class="font-extrabold text-indigo-700 dark:text-indigo-300 shrink-0">{{ applicant.annual_income | korean_money }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-1 whitespace-nowrap text-[11px]">
+                <dt class="font-bold text-slate-500 dark:text-slate-400 shrink-0">주택 소유</dt>
+                <dd class="font-extrabold text-slate-900 dark:text-white shrink-0">{{ '무주택' if applicant.is_homeless else '유주택' }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-1 whitespace-nowrap text-[11px]">
+                <dt class="font-bold text-slate-500 dark:text-slate-400 shrink-0">우대 조건</dt>
+                <dd class="font-extrabold text-slate-900 dark:text-white shrink-0">
+                    {% if applicant.is_newlywed %}신혼부부{% elif applicant.has_newborn %}신생아{% else %}일반가구{% endif %}
+                </dd>
+            </div>
+            <div class="flex items-center justify-between gap-1 whitespace-nowrap text-[11px]">
+                <dt class="font-bold text-slate-500 dark:text-slate-400 shrink-0">차용증</dt>
+                <dd class="font-extrabold text-slate-900 dark:text-white shrink-0">
+                    {{ '활용 (' ~ applicant.promissory_note_total | korean_money ~ ')' if applicant.use_promissory_note else '미활용' }}
+                </dd>
+            </div>
+        </dl>
+        
+        <button type="button" class="mt-3 w-full rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-extrabold text-white hover:bg-indigo-500 shadow-md transition-all flex items-center justify-center gap-1 whitespace-nowrap" @click="settingsOpen = true">
+            <span>⚙️ 조건 설정</span>
+        </button>
     </section>
 
+    <!-- 네이버 지도를 완벽히 덮는 최상위 z-[99999] 모달 -->
     <template x-teleport="body">
     <div x-cloak x-show="settingsOpen" x-transition 
-         class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" 
+         class="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md pointer-events-auto" 
          @keydown.escape.window="settingsOpen = false"
          @mousedown="isBackdropMouseDown = ($event.target === $el)"
          @click="if (isBackdropMouseDown && $event.target === $el) { settingsOpen = false; }">
-        <div class="theme-surface theme-profile-modal max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl text-slate-900 dark:text-slate-100">
-            <div class="flex items-start justify-between gap-4">
+        <div class="theme-surface theme-profile-modal max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-2xl text-slate-900 dark:text-slate-100 z-[100000]">
+            <div class="flex items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
                 <div>
-                    <h2 class="theme-primary-text text-xl font-bold text-slate-900 dark:text-white">개인 자격 및 정책대출 조건 설정</h2>
+                    <h2 class="theme-primary-text text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>⚙️ 개인 자격 및 정책대출 조건 설정</span>
+                    </h2>
                     <p class="theme-secondary-text mt-1 text-xs text-slate-600 dark:text-slate-400">저장하면 현재 검색 조건을 유지한 채 대출 예상 결과를 다시 계산합니다.</p>
                 </div>
-                <button type="button" class="theme-secondary-text rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors" aria-label="설정 모달 닫기" @click="settingsOpen = false">✕</button>
+                <button type="button" class="theme-secondary-text rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors text-base font-bold" aria-label="설정 모달 닫기" @click="settingsOpen = false">✕</button>
             </div>
-            <form id="inline-profile-form" action="/settings/inline" method="post" class="mt-5 space-y-5">
+            <form id="inline-profile-form" action="/settings/inline" method="post" class="mt-4 space-y-5">
                 <div class="theme-form-grid grid gap-3 sm:grid-cols-2">
                     {% for name, label, help, checked in [('is_homeless', '무주택 세대주', '현재 본인과 세대원 모두 무주택', applicant.is_homeless), ('is_newlywed', '신혼부부', '혼인 기간 7년 이내', applicant.is_newlywed), ('has_newborn', '2년 내 출산 가구', '신생아 특례 조건', applicant.has_newborn), ('is_first_home_buyer', '생애최초 주택구입', '세대원 모두 주택 미보유', applicant.is_first_home_buyer)] %}
                     <label class="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-3 hover:border-indigo-500/50 transition-colors">

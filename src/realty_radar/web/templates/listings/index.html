@@ -224,262 +224,303 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 {% set min_price_eok = filters.min_price / 100000000 if filters.min_price is not none else none %}
 {% set max_price_eok = filters.max_price / 100000000 if filters.max_price is not none else none %}
 
-<main data-search-workspace class="mx-auto w-full max-w-7xl">
-    <details data-applicant-summary class="group mb-4 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-bold text-slate-700 marker:hidden dark:text-slate-300">
-            <span>대출·자격 조건 요약</span>
-            <span class="text-slate-500 group-open:hidden dark:text-slate-400">필요할 때 열기</span>
-            <span class="hidden text-indigo-600 group-open:inline dark:text-indigo-300">접기</span>
-        </summary>
-        <div class="mt-3">
-            {% include "settings/_inline_profile_modal.html" %}
-        </div>
-    </details>
+<main data-search-workspace class="mx-auto w-full max-w-[1880px] px-2 sm:px-4 py-4">
+    <!-- 3-컬럼 반응형 레이아웃 (1번 영역 20% : 중앙 병합 60% : 2번 영역 20%) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-    <div class="min-w-0 space-y-4">
-    <!-- 1. 헤더 & 뷰 모드 컨트롤러 (View Mode Switcher) -->
-    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <span>아파트 매물 검색</span>
-            </h1>
-            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">조건을 바꾸면 자동으로 새 검색을 시작합니다. 전체 건수 대신 빠른 cursor 조회를 사용합니다.</p>
-        </div>
-
-        <div class="flex items-center gap-2">
-            <a href="/" class="min-h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center shadow-sm">전체 초기화</a>
-        </div>
-    </header>
-
-    <!-- 2. 메인 검색 폼 (정돈된 콤팩트 검색 바) -->
-    <div data-search-control-panel class="theme-filter-choice theme-surface space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 sm:p-4">
-    <form id="listing-search-form" class="theme-filter-choice space-y-3" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#listing-collection" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
-        <input type="hidden" name="page_size" value="{{ filters.page_size }}">
-        <input type="hidden" name="max_commute_gangnam" id="input-max-commute-gangnam" value="{{ filters.max_commute_gangnam or '' }}" data-filter-owner="commute">
-
-        <!-- 상단 1열 콤팩트 필터 바 (Primary Filter Bar) -->
-        <div data-search-toolbar class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-lg space-y-3">
-            <div class="hidden"><h2 class="font-semibold text-sm text-slate-100">기본 검색</h2></div>
-            <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-12 items-center">
-                <!-- 지역 선택 3종 세트 (시도 / 시군 / 구) -->
-                <div class="lg:col-span-4 grid grid-cols-3 gap-1.5">
-                    <select id="sido-select" class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500">
-                        <option value="">시도 전체</option>
-                        {% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}
-                    </select>
-                    <select id="municipality-select" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500">
-                        <option value="">시/군</option>
-                    </select>
-                    <select id="district-select" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-11 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500">
-                        <option value="">구 선택</option>
-                    </select>
+        <!-- 1번 영역 (왼쪽 패널): 대출·자격 조건 요약 고정 패널 -->
+        <aside class="lg:col-span-3 2xl:col-span-2 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+            <div data-applicant-summary-card class="theme-surface rounded-2xl border border-slate-200 bg-white p-3 sm:p-3.5 shadow-lg text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-800">
+                    <h2 class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 whitespace-nowrap min-w-0">
+                        <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-indigo-600 text-white text-[11px] font-black shadow-sm">1</span>
+                        <span class="truncate">대출·자격 요약</span>
+                    </h2>
                 </div>
-
-                <!-- 키워드 검색 -->
-                <div class="lg:col-span-3">
-                    <input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="단지명·주소 검색 (예: 래미안, 대치동)" class="min-h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-indigo-500">
-                </div>
-
-                <!-- 거래 유형 퀵 체크박스 칩 -->
-                <div class="lg:col-span-3 flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
-                    {% for code, label in [(1, '매매'), (2, '전세'), (3, '월세'), (4, '단기')] %}
-                    <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 px-3 text-xs font-bold text-slate-700 dark:text-slate-300 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-600 has-[:checked]:text-white transition-all shadow-sm">
-                        <input class="sr-only" type="checkbox" name="trade_types" value="{{ ['SALE', 'JEONSE', 'MONTHLY_RENT', 'SHORT_TERM'][loop.index0] }}" {% if code == 4 %}id="short-term-trade"{% endif %} {% if code in selected_trades %}checked{% endif %}>
-                        <span>{{ label }}</span>
-                    </label>
-                    {% endfor %}
-                </div>
-
-                <!-- 상세 필터 팝업 모달 토글 버튼 & 검색 실행 -->
-                <div class="lg:col-span-2 flex items-center gap-2">
-                    <button type="button" id="btn-toggle-detailed-filter" data-filter-panel-open aria-controls="detailed-filter-modal" aria-expanded="false" class="flex-1 min-h-10 rounded-lg border border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                        <span>상세 필터 ⚙️</span>
-                    </button>
-                    <button type="submit" class="min-h-10 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-1 shrink-0">
-                        <span>검색</span>
-                    </button>
+                <div class="mt-2.5">
+                    {% include "settings/_inline_profile_modal.html" %}
                 </div>
             </div>
+        </aside>
 
-            <!-- 활성 필터 요약 칩 Bar (Active Filter Chips) -->
-            <div id="active-filter-chips-bar" data-applied-filter-summary class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800/80 text-xs">
-                <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용된 조건:</span>
-                <div id="selected-region-chips" class="flex flex-wrap gap-1.5">
-                    <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
+        <!-- 중앙 메인 영역 (넓게 확보): 타이틀 헤더 + 지도 & 매물 검색 결과 통합 병합 -->
+        <section class="lg:col-span-6 2xl:col-span-8 space-y-4 min-w-0">
+            <!-- 메인 타이틀 헤더 -->
+            <header class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <span>아파트 매물 검색</span>
+                    </h1>
+                    <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">조건을 바꾸면 자동으로 검색되며, 지도의 위치 매물이 병합되어 표시됩니다.</p>
                 </div>
-                <div class="ml-auto flex items-center gap-1 text-[11px]">
-                    <span class="text-slate-400">인기 묶음:</span>
-                    <button type="button" data-region-bundle="gangnam3" class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 hover:bg-indigo-200 text-indigo-700 dark:text-indigo-200 font-bold border border-indigo-300 dark:border-indigo-700/60">강남3구</button>
-                    <button type="button" data-region-bundle="mayongseong" class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 hover:bg-indigo-200 text-indigo-700 dark:text-indigo-200 font-bold border border-indigo-300 dark:border-indigo-700/60">마용성</button>
-                    <button type="button" id="btn-clear-regions" class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold">초기화</button>
+                <div class="flex items-center gap-2 shrink-0">
+                    <a href="/" class="min-h-9 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center shadow-sm">전체 초기화</a>
                 </div>
-                <div id="hidden-sigungu-inputs"></div>
-                <div id="hidden-sido-inputs"></div>
+            </header>
+
+            <!-- 검색 로딩 인디케이터 -->
+            <div id="search-loading-container">
+                <span id="search-loading" class="htmx-indicator text-xs text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-2 pb-2" role="status">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>매물 검색 중…</span>
+                </span>
             </div>
-        </div>
 
-        <!-- 3. 상세 필터 카테고리 탭 모달/드로어 (Detailed Filter Container) -->
-        <dialog id="detailed-filter-modal" data-filter-panel class="fixed inset-y-0 right-0 left-auto m-0 h-dvh w-full max-w-[28rem] rounded-none border-y-0 border-r-0 border-l border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
-            <div class="flex h-full flex-col">
-                <div class="shrink-0 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-4 pb-3 pt-4 sm:px-5 sm:pt-5">
-                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>⚙️ 상세 검색 조건 설정</span>
-                    </h3>
-                    <button type="button" onclick="document.getElementById('detailed-filter-modal').close()" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
-                </div>
-
-                <!-- 상세 필터 카테고리 탭 (Tab Bar) -->
-                <div data-filter-panel-body class="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5">
-                <div role="tablist" class="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto my-3 gap-2">
-                    <button id="filter-tab-presets" type="button" role="tab" aria-controls="filter-tab-content-presets" aria-selected="true" tabindex="0" data-filter-tab="presets" class="filter-tab-btn px-3 py-2 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400">🏛️ 대출/퀵프리셋</button>
-                    <button id="filter-tab-housing" type="button" role="tab" aria-controls="filter-tab-content-housing" aria-selected="false" tabindex="-1" data-filter-tab="housing" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">🏠 주거/건물스펙</button>
-                    <button id="filter-tab-commute" type="button" role="tab" aria-controls="filter-tab-content-commute" aria-selected="false" tabindex="-1" data-filter-tab="commute" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚡ 통근시간(강남)</button>
-                    <button id="filter-tab-options" type="button" role="tab" aria-controls="filter-tab-content-options" aria-selected="false" tabindex="-1" data-filter-tab="options" class="filter-tab-btn px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white">⚙️ 옵션/융자상태</button>
-                </div>
-
-                <!-- 탭 1: 대출 & 원클릭 퀵 프리셋 -->
-                <div id="filter-tab-content-presets" role="tabpanel" aria-labelledby="filter-tab-presets" class="filter-tab-content space-y-4 overflow-y-auto pr-1">
-                    <section data-preset-group="recommended" class="rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/80 dark:bg-slate-950 p-3.5 space-y-2">
-                        <h4 class="text-xs font-bold text-indigo-900 dark:text-indigo-200">🌟 추천 조합</h4>
-                        <p class="text-xs text-slate-600 dark:text-slate-400">대출 기준과 선호 주거 조건을 함께 적용합니다.</p>
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button" data-quick-preset="combo-didimdol-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 디딤돌+정돈된타운 (매매 5억/85㎡ + 800세대)</button>
-                            <button type="button" data-quick-preset="combo-bogeum-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 보금자리론+정돈된타운 (매매 6억 + 800세대)</button>
-                            <button type="button" data-quick-preset="combo-newborn-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아특례+정돈된타운 (매매 9억/85㎡ + 800세대)</button>
-                            <button type="button" data-quick-preset="combo-newborn-jeonse-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아전세+정돈된타운 (전세 5억/85㎡ + 800세대)</button>
+            <!-- 지도 및 현재 지도 영역 매물 병합 섹션 (Unified Section) -->
+            {% if search_error %}
+                {% include "listings/search_error.html" %}
+            {% else %}
+                {% include "listings/_map_search_config.html" %}
+                <div id="unified-map-listing-wrapper" class="space-y-4 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-lg text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                    <!-- 매물 위치 지도 -->
+                    <section id="map-first-section" class="overflow-hidden rounded-xl">
+                        <div id="map-sticky-wrapper" class="relative">
+                            {% include "listings/_map_sidebar.html" %}
                         </div>
                     </section>
-                    <section data-preset-group="loan-only" class="space-y-2">
-                        <h4 class="text-xs font-bold text-slate-700 dark:text-slate-300">🏛️ 대출 조건만</h4>
-                        <p class="text-xs text-slate-600 dark:text-slate-400">예산과 면적 기준만 빠르게 설정합니다.</p>
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button" data-quick-preset="loan-didimdol" data-price-range=";6" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏛️ 디딤돌 (5억/85㎡)</button>
-                            <button type="button" data-quick-preset="loan-bogeum" data-price-range="6;9" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">💒 보금자리론 (6억)</button>
-                            <button type="button" data-quick-preset="loan-newborn-buy" data-price-range="9;" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">👶 신생아 특례 (9억/85㎡)</button>
-                            <button type="button" data-quick-preset="loan-butimmok" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏠 청년/버팀목전세 (3억)</button>
-                            <button type="button" data-quick-preset="loan-newborn-rent" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🍼 신생아 전세 (5억)</button>
-                            <button type="button" data-quick-preset="tidy-town" class="theme-soft-emerald min-h-8 px-3 rounded-lg border text-xs font-semibold">🏘️ 정돈된 아파트 타운</button>
-                        </div>
-                    </section>
-                </div>
-
-                <!-- 탭 2: 주거 & 건물 스펙 (가격, 면적, 준공년도, 세대수) -->
-                <div id="filter-tab-content-housing" role="tabpanel" aria-labelledby="filter-tab-housing" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
-                    <section id="transaction-advanced-filters" data-filter-scope="housing-budget" data-trade-filter class="theme-subtle-surface rounded-xl border p-4 space-y-4">
-                        <div>
-                            <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">예산·면적</h2>
-                            <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">직접 입력으로 범위를 정하고, 필요할 때 슬라이더로 조정하세요.</p>
-                        </div>
-                        {{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억', variant='embedded') }}
-                        {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '59㎡는 약 18평, 84㎡는 약 25평입니다.', variant='embedded') }}
-                        <div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.', variant='embedded') }}</div>
-                    </section>
-
-                    <section data-filter-scope="housing-core" class="space-y-3">
-                        <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">기본 주거 조건</h2>
-                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년', variant='embedded') }}
-                            {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대', variant='embedded') }}
-                            {{ single_slider('min-room-count', 'min_room_count', filters.min_room_count, 0, 10, 1, '방 최소', '개', variant='embedded') }}
-                            {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개', variant='embedded') }}
-                        </div>
-                    </section>
-                    <details id="advanced-housing-conditions" data-filter-scope="housing-detail" class="theme-subtle-surface rounded-xl border p-4">
-                        <summary class="theme-primary-text cursor-pointer text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">상세 주거 조건</summary>
-                        <div class="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2">
-                            {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대', variant='embedded') }}
-                            {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000, variant='embedded') }}
-                            {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분', variant='embedded') }}
-                            {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일', variant='embedded') }}
-                        </div>
-                    </details>
-                </div>
-
-                <!-- 탭 3: 강남역 통근시간 퀵 필터 -->
-                <div id="filter-tab-content-commute" role="tabpanel" aria-labelledby="filter-tab-commute" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
-                    <div class="p-4 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
-                        <div class="text-xs font-bold text-amber-900 dark:text-amber-300">⚡ 강남역 대중교통 통근시간 퀵 필터</div>
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button" data-quick-preset="commute-gangnam-30" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 30 %} commute-active-btn{% endif %}">⚡ 강남까지 30분 이내</button>
-                            <button type="button" data-quick-preset="commute-gangnam-60" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 60 %} commute-active-btn{% endif %}">⚡ 강남까지 1시간 이내</button>
-                            <button type="button" data-quick-preset="commute-gangnam-90" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 90 %} commute-active-btn{% endif %}">⚡ 강남까지 1시간 30분 이내</button>
-                        </div>
-                        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">버튼 선택 시 해당 시간 이내에 이동 가능한 수도권 시군구가 자동으로 검색됩니다.</p>
+                    <!-- 현재 지도 영역 매물 (지도와 병합된 목록) -->
+                    <div class="pt-4 border-t border-slate-200 dark:border-slate-800">
+                        {% include "listings/_listing_collection.html" %}
                     </div>
                 </div>
-
-                <!-- 탭 4: 기타 옵션 & 융자상태 -->
-                <div id="filter-tab-content-options" role="tabpanel" aria-labelledby="filter-tab-options" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
-                    <fieldset data-option-group="listing" class="space-y-3">
-                        <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">거래·매물 형태</legend>
-                        <div class="hidden"><h2 class="font-bold text-xs">고급 조건</h2></div>
-                        <p class="text-xs text-slate-600 dark:text-slate-400">매물 표시 방식과 거래 유형을 정합니다.</p>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="direct_trade_only" value="true" class="rounded accent-indigo-500" {% if filters.direct_trade_only %}checked{% endif %}><span>직거래만</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="exclude_first_floor" value="true" class="rounded accent-indigo-500" {% if filters.exclude_first_floor %}checked{% endif %}><span>1층 제외</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="hidden" name="exclude_short_term" value="false"><input id="exclude-short-term" type="checkbox" name="exclude_short_term" value="true" class="rounded accent-indigo-500" {% if filters.exclude_short_term %}checked{% endif %}><span>단기임대 제외</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="group_by_complex" value="true" class="rounded accent-indigo-500" {% if filters.group_by_complex %}checked{% endif %}><span>단지별 묶기</span></label>
-                        </div>
-                    </fieldset>
-                    <fieldset data-option-group="convenience" class="space-y-3">
-                        <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">주거 편의</legend>
-                        <p class="text-xs text-slate-600 dark:text-slate-400">생활 편의 조건을 추가합니다.</p>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="parking_possible_only" value="true" class="rounded accent-indigo-500" {% if filters.parking_possible_only %}checked{% endif %}><span>주차 가능만</span></label>
-                        </div>
-                    </fieldset>
-                    <fieldset data-option-group="financing" class="space-y-3">
-                        <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">자금 조건</legend>
-                        <p class="text-xs text-slate-600 dark:text-slate-400">대출·구매 가능 매물은 개인 자격 정보에 따라 달라집니다.</p>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="safe_lessor_hug_only" value="true" class="rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}><span>HUG 안심임대인만</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_eligible_loans" value="true" class="rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}><span>가능대출 매물만</span></label>
-                            <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_purchase_affordable" value="true" class="rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}><span>실구매 가능 매물만</span></label>
-                        </div>
-                        <div class="hidden"><input type="date" name="move_in_by" value="{{ filters.move_in_by or '' }}"></div>
-                    </fieldset>
-                </div>
-
-                </div>
-                <div data-filter-panel-footer class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 sm:px-5 flex items-center justify-between gap-2">
-                    <output data-detailed-filter-count aria-live="polite" class="text-xs text-slate-600 dark:text-slate-400"></output>
-                    <div class="flex gap-2">
-                        <button type="button" data-clear-filter-tab class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold">현재 탭 초기화</button>
-                        <button type="button" data-filter-panel-apply class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
-                    </div>
-                </div>
-            </div>
-        </dialog>
-    </form>
-    {% if not search_error %}
-        {% include "listings/_search_result_summary.html" %}
-    {% endif %}
-    </div>
-
-    <!-- 4. 매물 검색 결과 레이아웃 영역 (상단 전면 툴바 + 하단 목록/지도 스플릿 뷰) -->
-    <div id="search-loading-container">
-        <span id="search-loading" class="htmx-indicator text-xs text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-2 pb-2" role="status">
-            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            <span>매물 검색 중…</span>
-        </span>
-    </div>
-
-    {% if search_error %}
-        {% include "listings/search_error.html" %}
-    {% else %}
-        {% include "listings/_map_search_config.html" %}
-        <section id="map-first-section" class="overflow-hidden rounded-2xl">
-            <div id="map-sticky-wrapper" class="relative">
-                {% include "listings/_map_sidebar.html" %}
-            </div>
+            {% endif %}
         </section>
-        {% include "listings/_listing_collection.html" %}
-    {% endif %}
-</div>
+
+        <!-- 2번 영역 (오른쪽 패널): 아파트 매물검색 필터 고정 패널 (지역 선택 & 단지 주소 검색 전용) -->
+        <aside class="lg:col-span-3 2xl:col-span-2 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+            <div data-search-control-panel class="theme-filter-choice theme-surface space-y-3 rounded-2xl border border-slate-200 bg-white p-3 sm:p-3.5 shadow-lg text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-800">
+                    <h2 class="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 whitespace-nowrap min-w-0">
+                        <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-indigo-600 text-white text-[11px] font-black shadow-sm">2</span>
+                        <span class="truncate">매물검색 필터</span>
+                    </h2>
+                </div>
+
+                <form id="listing-search-form" class="theme-filter-choice space-y-3" action="/listings/search" method="get" hx-get="/listings/search" hx-target="#listing-collection" hx-swap="outerHTML" hx-trigger="submit, change delay:400ms, keyup changed delay:400ms" hx-sync="this:replace" hx-indicator="#search-loading" hx-push-url="true">
+                    <input type="hidden" name="page_size" value="{{ filters.page_size }}">
+                    <input type="hidden" name="max_commute_gangnam" id="input-max-commute-gangnam" value="{{ filters.max_commute_gangnam or '' }}" data-filter-owner="commute">
+
+                    <!-- 수직 필터 툴바 (거래유형 토글 3종 + 지역 선택 + 단지·주소 검색) -->
+                    <div data-search-toolbar class="space-y-3">
+                        <div class="hidden"><h2 class="font-semibold text-sm text-slate-100">기본 검색</h2></div>
+                        
+                        <!-- 거래 유형 가로 3개 콤팩트 토글 버튼 칩 (매매 / 전세 / 월세) -->
+                        {% set safe_selected_trades = selected_trades or [] %}
+                        {% set safe_filter_trades = filters.trade_types or [] %}
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 flex items-center justify-between whitespace-nowrap">
+                                <span>🏠 거래 유형</span>
+                            </label>
+                            <div class="grid grid-cols-3 gap-1">
+                                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 px-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-white transition-all shadow-sm">
+                                    <input class="sr-only" type="checkbox" name="trade_types" value="SALE" {% if 1 in safe_selected_trades or 'SALE' in safe_filter_trades %}checked{% endif %}>
+                                    <span class="whitespace-nowrap">매매</span>
+                                </label>
+                                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 px-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-white transition-all shadow-sm">
+                                    <input class="sr-only" type="checkbox" name="trade_types" value="JEONSE" {% if 2 in safe_selected_trades or 'JEONSE' in safe_filter_trades %}checked{% endif %}>
+                                    <span class="whitespace-nowrap">전세</span>
+                                </label>
+                                <label class="inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 px-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-600 has-[:checked]:text-white transition-all shadow-sm">
+                                    <input class="sr-only" type="checkbox" name="trade_types" value="MONTHLY_RENT" {% if 3 in safe_selected_trades or 'MONTHLY_RENT' in safe_filter_trades %}checked{% endif %}>
+                                    <span class="whitespace-nowrap">월세</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 지역 선택 (시도 / 시군 / 구) -->
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1 whitespace-nowrap">
+                                <span>📍 지역 선택</span>
+                            </label>
+                            <div class="space-y-1.5">
+                                <select id="sido-select" class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer">
+                                    <option value="">시도 전체</option>
+                                    {% for region in region_options %}<option value="{{ region.code }}">{{ region.name }}</option>{% endfor %}
+                                </select>
+                                <select id="municipality-select" data-selected="{{ selected_municipality or '' }}" disabled class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer">
+                                    <option value="">시/군</option>
+                                </select>
+                                <select id="district-select" data-selected="{{ filters.sigungu_code or '' }}" data-selected-codes="{{ (filters.sigungu_codes or []) | tojson }}" disabled class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white focus:border-indigo-500 shadow-sm cursor-pointer">
+                                    <option value="">구 선택</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 단지·주소 검색 -->
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1 whitespace-nowrap">
+                                <span>🔍 단지·주소 검색</span>
+                            </label>
+                            <input name="complex_keyword" value="{{ filters.complex_keyword or '' }}" minlength="2" placeholder="예: 래미안, 대치동" class="min-h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2.5 text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-indigo-500 shadow-sm">
+                        </div>
+
+                        <!-- 실행 & 상세 필터 모달 버튼 -->
+                        <div class="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                            <button type="submit" class="w-full min-h-9 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1 whitespace-nowrap">
+                                <span>🔍 매물 검색</span>
+                            </button>
+                            <button type="button" id="btn-toggle-detailed-filter" data-filter-panel-open aria-controls="detailed-filter-modal" aria-expanded="false" class="w-full min-h-9 rounded-xl border border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold transition-all flex items-center justify-center gap-1 shadow-sm whitespace-nowrap">
+                                <span>⚙️ 상세 필터</span>
+                            </button>
+                        </div>
+
+                        <!-- 선택 영역 칩 및 hidden inputs -->
+                        <div id="active-filter-chips-bar" data-applied-filter-summary class="space-y-1.5 pt-2 text-xs">
+                            <div class="flex items-center justify-between whitespace-nowrap">
+                                <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용 지역:</span>
+                                <button type="button" id="btn-clear-regions" class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold text-[10px]">초기화</button>
+                            </div>
+                            <div id="selected-region-chips" class="flex flex-wrap gap-1">
+                                <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
+                            </div>
+                            <div id="hidden-sigungu-inputs"></div>
+                            <div id="hidden-sido-inputs"></div>
+                        </div>
+                    </div>
+
+                    <!-- 상세 필터 카테고리 탭 모달/드로어 (Detailed Filter Container) -->
+                    <dialog id="detailed-filter-modal" data-filter-panel class="fixed inset-y-0 right-0 left-auto m-0 h-dvh w-full max-w-[28rem] rounded-none border-y-0 border-r-0 border-l border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-0 text-slate-900 dark:text-slate-100 shadow-2xl backdrop:bg-slate-950/60">
+                        <div class="flex h-full flex-col">
+                            <div class="shrink-0 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-4 pb-3 pt-4 sm:px-5 sm:pt-5">
+                                <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>⚙️ 상세 검색 조건 설정</span>
+                                </h3>
+                                <button type="button" onclick="document.getElementById('detailed-filter-modal').close()" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+                            </div>
+
+                            <!-- 상세 필터 카테고리 탭 (Tab Bar) -->
+                            <div data-filter-panel-body class="min-h-0 flex-1 overflow-y-auto px-4 sm:px-5">
+                            <div role="tablist" class="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto my-3 gap-1 pb-1">
+                                <button id="filter-tab-presets" type="button" role="tab" aria-controls="filter-tab-content-presets" aria-selected="true" tabindex="0" data-filter-tab="presets" class="filter-tab-btn whitespace-nowrap shrink-0 flex-1 text-center py-2 px-2 text-xs font-extrabold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 cursor-pointer transition-all">🏛️ 대출/프리셋</button>
+                                <button id="filter-tab-housing" type="button" role="tab" aria-controls="filter-tab-content-housing" aria-selected="false" tabindex="-1" data-filter-tab="housing" class="filter-tab-btn whitespace-nowrap shrink-0 flex-1 text-center py-2 px-2 text-xs font-extrabold text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-all">🏠 주거 스펙</button>
+                                <button id="filter-tab-commute" type="button" role="tab" aria-controls="filter-tab-content-commute" aria-selected="false" tabindex="-1" data-filter-tab="commute" class="filter-tab-btn whitespace-nowrap shrink-0 flex-1 text-center py-2 px-2 text-xs font-extrabold text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-all">⚡ 통근 시간</button>
+                                <button id="filter-tab-options" type="button" role="tab" aria-controls="filter-tab-content-options" aria-selected="false" tabindex="-1" data-filter-tab="options" class="filter-tab-btn whitespace-nowrap shrink-0 flex-1 text-center py-2 px-2 text-xs font-extrabold text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-all">⚙️ 옵션/융자</button>
+                            </div>
+
+                            <!-- 탭 1: 대출 & 원클릭 퀵 프리셋 -->
+                            <div id="filter-tab-content-presets" role="tabpanel" aria-labelledby="filter-tab-presets" class="filter-tab-content space-y-4 overflow-y-auto pr-1">
+                                <section data-preset-group="recommended" class="rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/80 dark:bg-slate-950 p-3.5 space-y-2">
+                                    <h4 class="text-xs font-bold text-indigo-900 dark:text-indigo-200">🌟 추천 조합</h4>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">대출 기준과 선호 주거 조건을 함께 적용합니다.</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" data-quick-preset="combo-didimdol-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 디딤돌+정돈된타운 (매매 5억/85㎡ + 800세대)</button>
+                                        <button type="button" data-quick-preset="combo-bogeum-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 보금자리론+정돈된타운 (매매 6억 + 800세대)</button>
+                                        <button type="button" data-quick-preset="combo-newborn-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아특례+정돈된타운 (매매 9억/85㎡ + 800세대)</button>
+                                        <button type="button" data-quick-preset="combo-newborn-jeonse-town" class="theme-soft-accent min-h-9 px-3 rounded-lg border text-xs font-semibold transition-all">🌟 신생아전세+정돈된타운 (전세 5억/85㎡ + 800세대)</button>
+                                    </div>
+                                </section>
+                                <section data-preset-group="loan-only" class="space-y-2">
+                                    <h4 class="text-xs font-bold text-slate-700 dark:text-slate-300">🏛️ 대출 조건만</h4>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">예산과 면적 기준만 빠르게 설정합니다.</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" data-quick-preset="loan-didimdol" data-price-range=";6" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏛️ 디딤돌 (5억/85㎡)</button>
+                                        <button type="button" data-quick-preset="loan-bogeum" data-price-range="6;9" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">💒 보금자리론 (6억)</button>
+                                        <button type="button" data-quick-preset="loan-newborn-buy" data-price-range="9;" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">👶 신생아 특례 (9억/85㎡)</button>
+                                        <button type="button" data-quick-preset="loan-butimmok" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🏠 청년/버팀목전세 (3억)</button>
+                                        <button type="button" data-quick-preset="loan-newborn-rent" class="min-h-8 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">🍼 신생아 전세 (5억)</button>
+                                        <button type="button" data-quick-preset="tidy-town" class="theme-soft-emerald min-h-8 px-3 rounded-lg border text-xs font-semibold">🏘️ 정돈된 아파트 타운</button>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- 탭 2: 주거 & 건물 스펙 (가격, 면적, 준공년도, 세대수) -->
+                            <div id="filter-tab-content-housing" role="tabpanel" aria-labelledby="filter-tab-housing" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
+                                <section id="transaction-advanced-filters" data-filter-scope="housing-budget" data-trade-filter class="theme-subtle-surface rounded-xl border p-4 space-y-4">
+                                    <div>
+                                        <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">예산·면적</h2>
+                                        <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">직접 입력으로 범위를 정하고, 필요할 때 슬라이더로 조정하세요.</p>
+                                    </div>
+                                    {{ range_slider('price', 'min-price-eok', 'min_price_eok', min_price_eok, 'max-price-eok', 'max_price_eok', max_price_eok, 0, slider_limits.price_eok, 0.1, '가격·보증금', '억', variant='embedded') }}
+                                    {{ range_slider('exclusive-area', 'min-exclusive-area', 'min_exclusive_area', filters.min_exclusive_area, 'max-exclusive-area', 'max_exclusive_area', filters.max_exclusive_area, 0, slider_limits.area, 1, '전용면적', '㎡', '59㎡는 약 18평, 84㎡는 약 25평입니다.', variant='embedded') }}
+                                    <div data-monthly-rent-filter>{{ single_slider('max-monthly-rent', 'max_monthly_rent', filters.max_monthly_rent, 0, slider_limits.monthly_rent_manwon, 5, '월세 상한', '만원', 10000, '월세 매물에만 적용됩니다.', variant='embedded') }}</div>
+                                </section>
+
+                                <section data-filter-scope="housing-core" class="space-y-3">
+                                    <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">기본 주거 조건</h2>
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        {{ single_slider('min-construction-year', 'min_construction_year', filters.min_construction_year, 1960, slider_limits.construction_year, 1, '준공연도 최소', '년', variant='embedded') }}
+                                        {{ single_slider('min-households', 'min_households', filters.min_households, 0, slider_limits.households, 100, '세대수 최소', '세대', variant='embedded') }}
+                                        {{ single_slider('min-room-count', 'min_room_count', filters.min_room_count, 0, 10, 1, '방 최소', '개', variant='embedded') }}
+                                        {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개', variant='embedded') }}
+                                    </div>
+                                </section>
+                                <details id="advanced-housing-conditions" data-filter-scope="housing-detail" class="theme-subtle-surface rounded-xl border p-4">
+                                    <summary class="theme-primary-text cursor-pointer text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">상세 주거 조건</summary>
+                                    <div class="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2">
+                                        {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대', variant='embedded') }}
+                                        {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000, variant='embedded') }}
+                                        {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분', variant='embedded') }}
+                                        {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일', variant='embedded') }}
+                                    </div>
+                                </details>
+                            </div>
+
+                            <!-- 탭 3: 강남역 통근시간 퀵 필터 -->
+                            <div id="filter-tab-content-commute" role="tabpanel" aria-labelledby="filter-tab-presets" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
+                                <div class="p-4 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
+                                    <div class="text-xs font-bold text-amber-900 dark:text-amber-300">⚡ 강남역 대중교통 통근시간 퀵 필터</div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" data-quick-preset="commute-gangnam-30" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 30 %} commute-active-btn{% endif %}">⚡ 강남까지 30분 이내</button>
+                                        <button type="button" data-quick-preset="commute-gangnam-60" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 60 %} commute-active-btn{% endif %}">⚡ 강남까지 1시간 이내</button>
+                                        <button type="button" data-quick-preset="commute-gangnam-90" class="min-h-10 px-4 rounded-xl border border-amber-400 bg-white dark:bg-slate-900 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all{% if filters.max_commute_gangnam == 90 %} commute-active-btn{% endif %}">⚡ 강남까지 1시간 30분 이내</button>
+                                    </div>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">버튼 선택 시 해당 시간 이내에 이동 가능한 수도권 시군구가 자동으로 검색됩니다.</p>
+                                </div>
+                            </div>
+
+                            <!-- 탭 4: 기타 옵션 & 융자상태 -->
+                            <div id="filter-tab-content-options" role="tabpanel" aria-labelledby="filter-tab-options" class="filter-tab-content space-y-4 overflow-y-auto pr-1" hidden>
+                                <fieldset data-option-group="listing" class="space-y-3">
+                                    <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">거래·매물 형태</legend>
+                                    <div class="hidden"><h2 class="font-bold text-xs">고급 조건</h2></div>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">매물 표시 방식과 거래 유형을 정합니다.</p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="direct_trade_only" value="true" class="rounded accent-indigo-500" {% if filters.direct_trade_only %}checked{% endif %}><span>직거래만</span></label>
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="exclude_first_floor" value="true" class="rounded accent-indigo-500" {% if filters.exclude_first_floor %}checked{% endif %}><span>1층 제외</span></label>
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="hidden" name="exclude_short_term" value="false"><input id="exclude-short-term" type="checkbox" name="exclude_short_term" value="true" class="rounded accent-indigo-500" {% if filters.exclude_short_term %}checked{% endif %}><span>단기임대 제외</span></label>
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="group_by_complex" value="true" class="rounded accent-indigo-500" {% if filters.group_by_complex %}checked{% endif %}><span>단지별 묶기</span></label>
+                                    </div>
+                                </fieldset>
+                                <fieldset data-option-group="convenience" class="space-y-3">
+                                    <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">주거 편의</legend>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">생활 편의 조건을 추가합니다.</p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="parking_possible_only" value="true" class="rounded accent-indigo-500" {% if filters.parking_possible_only %}checked{% endif %}><span>주차 가능만</span></label>
+                                    </div>
+                                </fieldset>
+                                <fieldset data-option-group="financing" class="space-y-3">
+                                    <legend class="text-xs font-bold text-slate-800 dark:text-slate-200">자금 조건</legend>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">대출·구매 가능 매물은 개인 자격 정보에 따라 달라집니다.</p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="safe_lessor_hug_only" value="true" class="rounded accent-indigo-500" {% if filters.safe_lessor_hug_only %}checked{% endif %}><span>HUG 안심임대인만</span></label>
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_eligible_loans" value="true" class="rounded accent-indigo-500" {% if filters.only_eligible_loans %}checked{% endif %}><span>가능대출 매물만</span></label>
+                                        <label class="flex items-center gap-2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold"><input type="checkbox" name="only_purchase_affordable" value="true" class="rounded accent-indigo-500" {% if filters.only_purchase_affordable %}checked{% endif %}><span>실구매 가능 매물만</span></label>
+                                    </div>
+                                    <div class="hidden"><input type="date" name="move_in_by" value="{{ filters.move_in_by or '' }}"></div>
+                                </fieldset>
+                            </div>
+
+                            </div>
+                            <div data-filter-panel-footer class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 sm:px-5 flex items-center justify-between gap-2">
+                                <output data-detailed-filter-count aria-live="polite" class="text-xs text-slate-600 dark:text-slate-400"></output>
+                                <div class="flex gap-2">
+                                    <button type="button" data-clear-filter-tab class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold">현재 탭 초기화</button>
+                                    <button type="button" data-filter-panel-apply class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow">적용 및 닫기</button>
+                                </div>
+                            </div>
+                        </div>
+                    </dialog>
+                </form>
+                {% if not search_error %}
+                    {% include "listings/_search_result_summary.html" %}
+                {% endif %}
+            </div>
+        </aside>
+
+    </div>
 </main>
 
 <script type="application/json" id="region-options-data">{{ region_options | tojson | safe }}</script>
@@ -549,8 +590,9 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
     municipality.addEventListener("change", () => { populateDistricts(); }, true);
     const tradeInputs = [...document.querySelectorAll('input[name="trade_types"]')];
     const monthlyRentFilter = document.querySelector("[data-monthly-rent-filter]");
+
     const updateTradeFilters = () => {
-        const selectedTrades = tradeInputs.filter((input) => input.checked).map((input) => input.value);
+        const selectedTrades = tradeInputs.filter((input) => input && input.checked).map((input) => input.value);
         const onlySale = selectedTrades.length === 1 && selectedTrades[0] === "SALE";
         const onlyJeonse = selectedTrades.length === 1 && selectedTrades[0] === "JEONSE";
         const onlyRent = selectedTrades.length === 1 && ["MONTHLY_RENT", "SHORT_TERM"].includes(selectedTrades[0]);
@@ -561,10 +603,12 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
             monthlyRentFilter.hidden = !showMonthlyRent;
             monthlyRentFilter.querySelectorAll("input").forEach((input) => { input.disabled = !showMonthlyRent; });
         }
-        excludeShortTerm.checked = shortTermTrade.checked ? false : excludeShortTerm.checked;
-        excludeShortTerm.disabled = shortTermTrade.checked;
+        if (shortTermTrade && excludeShortTerm) {
+            excludeShortTerm.checked = shortTermTrade.checked ? false : excludeShortTerm.checked;
+            excludeShortTerm.disabled = shortTermTrade.checked;
+        }
     };
-    tradeInputs.forEach((input) => input.addEventListener("change", updateTradeFilters, true));
+    tradeInputs.forEach((input) => input && input.addEventListener("change", updateTradeFilters, true));
     updateTradeFilters();
 
     const displayValue = (value, unit) => `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${unit}`;
@@ -1330,7 +1374,7 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
     const tabContents = document.querySelectorAll(".filter-tab-content");
     const detailedFilterCount = document.querySelector("[data-detailed-filter-count]");
     const updateDetailedFilterCount = () => {
-        const activeContent = Array.from(tabContents).find((content) => !content.hidden);
+        const activeContent = Array.from(tabContents).find((content) => !content.hidden && content.style.display !== "none");
         if (!activeContent || !detailedFilterCount) return;
         const activeTab = activeContent.id.replace("filter-tab-content-", "");
 
@@ -1346,24 +1390,31 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
         });
         detailedFilterCount.textContent = `현재 ${appliedConditions.size}개 조건 적용`;
     };
+
     const setActiveFilterTab = (target) => {
+        if (!target) return;
         tabBtns.forEach((button) => {
             const isActive = button.dataset.filterTab === target;
             button.setAttribute("aria-selected", String(isActive));
             button.tabIndex = isActive ? 0 : -1;
-            button.classList.toggle("border-b-2", isActive);
-            button.classList.toggle("border-indigo-600", isActive);
-            button.classList.toggle("text-indigo-600", isActive);
-            button.classList.toggle("dark:text-indigo-400", isActive);
-            button.classList.toggle("text-slate-500", !isActive);
+            if (isActive) {
+                button.className = "filter-tab-btn whitespace-nowrap shrink-0 flex-1 text-center py-2 px-2 text-xs font-extrabold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 cursor-pointer transition-all";
+            } else {
+                button.className = "filter-tab-btn whitespace-nowrap shrink-0 flex-1 text-center py-2 px-2 text-xs font-extrabold text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-all border-b-2 border-transparent";
+            }
         });
         tabContents.forEach((content) => {
-            content.hidden = content.id !== `filter-tab-content-${target}`;
+            const isMatch = content.id === `filter-tab-content-${target}`;
+            content.hidden = !isMatch;
+            content.style.display = isMatch ? "block" : "none";
         });
         updateDetailedFilterCount();
     };
+
     tabBtns.forEach(btn => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
             setActiveFilterTab(btn.dataset.filterTab);
         });
         btn.addEventListener("keydown", (event) => {
@@ -1377,9 +1428,20 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
 
             event.preventDefault();
             const nextButton = tabBtns[nextIndex];
-            setActiveFilterTab(nextButton.dataset.filterTab);
-            nextButton.focus();
+            if (nextButton) {
+                setActiveFilterTab(nextButton.dataset.filterTab);
+                nextButton.focus();
+            }
         });
+    });
+
+    // 전역 위임 탭 클릭 바인딩
+    document.addEventListener("click", (e) => {
+        const tabBtn = e.target.closest(".filter-tab-btn, [data-filter-tab]");
+        if (tabBtn && tabBtn.dataset.filterTab) {
+            e.preventDefault();
+            setActiveFilterTab(tabBtn.dataset.filterTab);
+        }
     });
     form.addEventListener("input", updateDetailedFilterCount);
     form.addEventListener("change", updateDetailedFilterCount);

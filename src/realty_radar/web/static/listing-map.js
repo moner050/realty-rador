@@ -167,6 +167,7 @@
     }
 
     function openComplexModal(root, instance, item) {
+        if (instance) instance.isManualClick = true;
         const modal = root.querySelector("[data-map-complex-modal]");
         const template = root.dataset && root.dataset.mapComplexUrlTemplate;
         if (!modal || !template || typeof window.fetch !== "function") return;
@@ -196,6 +197,26 @@
                 if (instance.complexRequestId !== requestId || !listings) return;
                 listings.innerHTML = html;
                 processDynamicContent(listings);
+
+                // 단지 매물 모달 정렬 이벤트 연동
+                const sortSelect = modal.querySelector("[data-complex-modal-sort]");
+                if (sortSelect) {
+                    const sortListings = () => {
+                        const cards = Array.from(listings.querySelectorAll("[data-listing-card]"));
+                        if (!cards.length) return;
+                        const mode = sortSelect.value;
+                        cards.sort((a, b) => {
+                            const pA = parseFloat(a.dataset.priceText?.replace(/[^0-9.]/g, "") || "0");
+                            const pB = parseFloat(b.dataset.priceText?.replace(/[^0-9.]/g, "") || "0");
+                            if (mode === "price_asc") return pA - pB;
+                            if (mode === "price_desc") return pB - pA;
+                            return 0;
+                        });
+                        cards.forEach((card) => listings.appendChild(card));
+                    };
+                    sortSelect.onchange = sortListings;
+                    sortListings();
+                }
             })
             .catch((error) => {
                 if (instance.complexRequestId !== requestId || (error && error.name === "AbortError")) return;
@@ -374,7 +395,8 @@
                 VIEWPORT_SEARCH_DEBOUNCE_MS,
             );
         }
-        if (canRefreshCards(map, viewport) && instance.lastCardsViewportKey !== key) {
+        // 단지/매물 클릭 수동 포커스 상태가 아닐 때만 경계 기반 리스트 갱신 (리스트 증발 방지)
+        if (!instance.isManualClick && canRefreshCards(map, viewport) && instance.lastCardsViewportKey !== key) {
             instance.cardsTimer = setTimeout(
                 () => requestCards(root, map, instance, key),
                 VIEWPORT_SEARCH_DEBOUNCE_MS,
@@ -394,6 +416,7 @@
         instance.mapQueryKey = config.queryKey;
         instance.lastMapViewportKey = null;
         instance.lastCardsViewportKey = null;
+        instance.isManualClick = false;
         if (instance.mapTimer) clearTimeout(instance.mapTimer);
         if (instance.cardsTimer) clearTimeout(instance.cardsTimer);
         cancelMapRequest(root, instance);
@@ -421,6 +444,7 @@
         const longitude = Number(data && (data.mapFocusLongitude || data.longitude));
         if (!activeInstance || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
         const { root, map } = activeInstance;
+        activeInstance.isManualClick = true;
         markViewportDirty(root, activeInstance);
         map.updateBy(new window.naver.maps.LatLng(latitude, longitude), FOCUS_ZOOM);
         setTimeout(() => {
@@ -456,6 +480,7 @@
             pendingMap: false,
             pendingCards: false,
             viewportDirty: false,
+            isManualClick: false,
             mapTimer: null,
             cardsTimer: null,
             mapAbortController: null,
@@ -474,7 +499,10 @@
             closeButton.addEventListener("click", instance.closeModal);
         }
         instance.listeners.push(
-            window.naver.maps.Event.addListener(map, "dragstart", () => markViewportDirty(root, instance)),
+            window.naver.maps.Event.addListener(map, "dragstart", () => {
+                instance.isManualClick = false;
+                markViewportDirty(root, instance);
+            }),
             window.naver.maps.Event.addListener(map, "zoom_changed", () => markViewportDirty(root, instance)),
             window.naver.maps.Event.addListener(map, "idle", () => {
                 if (!instance.viewportDirty) return;

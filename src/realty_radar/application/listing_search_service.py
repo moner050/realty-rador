@@ -908,27 +908,23 @@ class ListingSearchService:
             if value is not None:
                 statement = statement.where(column == value)
 
-        # 다중 지역 칩 기반 필터링 (sido_codes + sigungu_codes + commute_codes를 OR 합집합으로 결합)
-        effective_sigungu_codes = list(filters.sigungu_codes) if filters.sigungu_codes else None
+        # 통근 시간 퀵 필터 최우선 AND 제약 (강남 통근시간 이내 시군구만 엄격 제한)
         if filters.max_commute_gangnam is not None:
             commute_codes = get_sigungu_codes_within_commute(filters.max_commute_gangnam, "gangnam")
-            if effective_sigungu_codes:
-                effective_sigungu_codes = list(dict.fromkeys(effective_sigungu_codes + commute_codes))
-            else:
-                effective_sigungu_codes = commute_codes
+            statement = statement.where(ListingCurrent.sigungu_code.in_(commute_codes))
 
-        if filters.sido_codes and effective_sigungu_codes:
-            # 시/도 전체 + 개별 시군구 복합: OR 결합
+        # 다중 지역 칩 기반 필터링 (sido_codes / sigungu_codes)
+        if filters.sido_codes and filters.sigungu_codes:
             statement = statement.where(
                 or_(
                     ListingCurrent.sido_code.in_(filters.sido_codes),
-                    ListingCurrent.sigungu_code.in_(effective_sigungu_codes),
+                    ListingCurrent.sigungu_code.in_(filters.sigungu_codes),
                 )
             )
         elif filters.sido_codes:
             statement = statement.where(ListingCurrent.sido_code.in_(filters.sido_codes))
-        elif effective_sigungu_codes:
-            statement = statement.where(ListingCurrent.sigungu_code.in_(effective_sigungu_codes))
+        elif filters.sigungu_codes:
+            statement = statement.where(ListingCurrent.sigungu_code.in_(filters.sigungu_codes))
         if filters.trade_types:
             statement = statement.where(ListingCurrent.trade_type.in_(filters.trade_types))
         if filters.min_price is not None:
