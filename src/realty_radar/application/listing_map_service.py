@@ -218,12 +218,43 @@ class ListingMapService:
         zoom: int,
     ) -> ListingMapViewport:
         from realty_radar.application.listing_search_service import ListingSearchService
+        from realty_radar.infrastructure.cache.map_cache import MapViewportCache
 
-        if filters.only_eligible_loans or filters.only_purchase_affordable:
-            return self._build_stream_viewport(filters, applicant, zoom)
+        cache_key = (
+            f"{filters.sido_code}:{filters.sigungu_code}:{filters.region_code}:"
+            f"{filters.map_west}:{filters.map_south}:{filters.map_east}:{filters.map_north}:{zoom}"
+        )
+        cached_data = MapViewportCache.get_viewport_cache(cache_key)
+        if cached_data:
+            def _make_marker(data: dict[str, Any]) -> ListingMapMarker:
+                copied = dict(data)
+                copied.pop("kind", None)
+                return ListingMapMarker(**copied)
 
-        statement, _ = ListingSearchService(self.session).map_candidate_rows(filters, applicant)
-        return self._build_sql_viewport(statement, filters, zoom)
+            def _make_cluster(data: dict[str, Any]) -> ListingMapCluster:
+                copied = dict(data)
+                copied.pop("kind", None)
+                return ListingMapCluster(**copied)
+
+            return ListingMapViewport(
+                mode=cached_data["mode"],
+                markers=tuple(_make_marker(m) for m in cached_data["markers"]),
+                clusters=tuple(_make_cluster(c) for c in cached_data["clusters"]),
+                matching_complex_count=cached_data["matching_complex_count"],
+                mapped_complex_count=cached_data["mapped_complex_count"],
+                unmapped_complex_count=cached_data["unmapped_complex_count"],
+                mapped_listing_count=cached_data["mapped_listing_count"],
+                bounds=tuple(cached_data["bounds"]) if cached_data.get("bounds") else None,
+            )
+
+        if filters.only_eligible_loans or getattr(filters, "only_purchase_affordable", False):
+            viewport = self._build_stream_viewport(filters, applicant, zoom)
+        else:
+            statement, _ = ListingSearchService(self.session).map_candidate_rows(filters, applicant)
+            viewport = self._build_sql_viewport(statement, filters, zoom)
+
+        MapViewportCache.set_viewport_cache(cache_key, viewport.to_dict())
+        return viewport
 
     def _build_sql_viewport(
         self,

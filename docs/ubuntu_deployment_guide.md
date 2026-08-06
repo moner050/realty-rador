@@ -9,7 +9,7 @@
 | 구분 | 주요 설정 및 내용 |
 | :--- | :--- |
 | **방화벽 설정** | 인바운드 보안 그룹 (80, 443, 22) 및 UFW 설정 |
-| **의존성 설치** | Python 3.10+, MySQL 8.4, Playwright 리눅스 의존성 라이브러리 |
+| **의존성 설치** | Python 3.10+, MySQL 8.4, Redis, Playwright 리눅스 의존성 라이브러리 |
 | **웹 서버 설정** | Nginx 역방향 프록시 (127.0.0.1:8000 ↔ 80/443 외부 포트) |
 | **보안 (SSL)** | Let's Encrypt (Certbot)을 통한 HTTPS 무료 보안 서명 적용 |
 | **프로세스 관리** | `systemd` 데몬을 통한 서버 재부팅 시 자동 실행 및 시스템 상시 유지 |
@@ -37,23 +37,27 @@ sudo ufw status
 
 ---
 
-### Step 2. 서버 패키지 및 파이썬 가상환경 구축
+### Step 2. 서버 패키지 및 Redis 캐시 / 파이썬 가상환경 구축
 
 ```bash
-# 1) 시스템 업데이트 및 필수 패키지 설치
+# 1) 시스템 업데이트 및 필수 패키지 설치 (Redis 포함)
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3 python3-pip python3-venv git nginx certbot python3-certbot-nginx mysql-server
+sudo apt install -y python3 python3-pip python3-venv git nginx certbot python3-certbot-nginx mysql-server redis-server
 
-# 2) 저장소 클론 (또는 소스 코드 업로드)
+# 2) Redis 서비스 자동 실행 등록 및 구동
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+
+# 3) 저장소 클론 (또는 소스 코드 업로드)
 cd /home/ubuntu
 git clone <YOUR_REPOSITORY_URL> real-estate-search
 cd real-estate-search
 
-# 3) 파이썬 가상환경 생성 및 활성화
+# 4) 파이썬 가상환경 생성 및 활성화
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 4) pip 업그레이드 및 개발/운영 패키지 설치
+# 5) pip 업그레이드 및 개발/운영 패키지 설치
 python3 -m pip install --upgrade pip
 pip install -e .[dev]
 playwright install --with-deps
@@ -63,7 +67,7 @@ playwright install --with-deps
 
 ### Step 3. 환경 변수 (`.env`) 설정 및 데이터베이스 초기화
 
-`.env` 파일을 생성하고 MySQL DB 정보 및 시크릿 키, 바인딩 설정을 작성합니다.
+`.env` 파일을 생성하고 MySQL DB 정보, Redis 접속 정보 및 시크릿 키, 바인딩 설정을 작성합니다.
 
 ```bash
 cp .env.example .env
@@ -76,6 +80,12 @@ APP_HOST=127.0.0.1
 APP_PORT=8000
 
 SECRET_KEY=realty-radar-prod-secret-key-change-this
+
+# Redis 설정 (프론트/웹 서버 캐시용)
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
 
 # MySQL 설정 (로컬 MySQL 8.4 사용 시 기본 DB: realty_radar_v2)
 MYSQL_HOST=127.0.0.1
@@ -129,7 +139,7 @@ sudo nano /etc/systemd/system/realty-radar.service
 ```ini
 [Unit]
 Description=Realty Radar Web Server Service
-After=network.target mysql.service
+After=network.target mysql.service redis-server.service
 
 [Service]
 Type=simple
@@ -219,6 +229,7 @@ sudo certbot --nginx -d your-domain.com
 1. **서비스 상태 확인**:
    ```bash
    sudo systemctl status realty-radar
+   sudo systemctl status redis-server
    ```
 2. **로그 확인**:
    ```bash

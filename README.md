@@ -16,6 +16,68 @@ Alembic `001_site_a_v2`가 유일한 canonical migration입니다. 주요 도메
 
 ---
 
+## ⚡ Redis 캐시 서버 설정 가이드 (지도 속도 최적화)
+
+지도 뷰포트 검색 결과를 초고속(1~5ms)으로 처리하기 위해 프론트(웹) 서버에 Redis 구축을 권장합니다.
+
+### 1. Windows 환경 Redis 설정
+
+#### 1) Redis 설치 (택 1)
+- **방법 A: Windows 포팅 설치 파일 (권장)**
+  - [tporadowski/redis GitHub Releases](https://github.com/tporadowski/redis/releases)에서 `Redis-x64-5.0.14.1.msi` 또는 `.zip`을 다운로드하여 설치합니다.
+- **방법 B: Memurai (Windows 전용 Redis)**
+  - Windows 서비스 환경 전용인 Memurai(Developer Edition)를 공식 웹사이트에서 다운로드하여 설치합니다.
+
+#### 2) 서비스 등록 및 가동
+```powershell
+# Windows 서비스로 등록 및 시작 (설치 폴더 이동 후)
+redis-server --service-install
+redis-server --service-start
+
+# 동작 확인 (PONG 응답 확인)
+redis-cli ping
+```
+
+---
+
+### 2. Ubuntu / Linux 환경 Redis 설정
+
+#### 1) 저장소 업데이트 및 패키지 설치
+```bash
+sudo apt update
+sudo apt install -y redis-server
+```
+
+#### 2) Redis 바인딩 및 systemd 서비스 설정
+```bash
+sudo nano /etc/redis/redis.conf
+```
+- `supervised no` 구문을 `supervised systemd`로 변경합니다.
+
+#### 3) 서비스 등록 및 자동 구동
+```bash
+sudo systemctl enable redis-server
+sudo systemctl restart redis-server
+
+# 상태 확인
+sudo systemctl status redis-server
+```
+
+---
+
+### 3. 프로젝트 `.env` 환경 변수 설정
+
+`.env` 파일에 Redis 접속 정보를 설정합니다 (미설정 시 자동으로 DB 모드로 작동함).
+
+```ini
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+```
+
+---
+
 ## 🛠️ 환경별 초기 설정 및 실행 가이드
 
 ### 1. Windows 환경 초기 설정 및 실행

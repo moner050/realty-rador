@@ -2,7 +2,7 @@
     "use strict";
 
     const instances = new WeakMap();
-    const VIEWPORT_SEARCH_DEBOUNCE_MS = 1500;
+    const VIEWPORT_SEARCH_DEBOUNCE_MS = 400;
     const INITIAL_LATITUDE = 37.55;
     const INITIAL_LONGITUDE = 126.9;
     const INITIAL_ZOOM = 8;
