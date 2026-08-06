@@ -30,7 +30,7 @@
             </div>
         </dl>
         
-        <button type="button" class="mt-3 w-full rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-extrabold text-white hover:bg-indigo-500 shadow-md transition-all flex items-center justify-center gap-1 whitespace-nowrap" @click="settingsOpen = true">
+        <button type="button" data-loan-settings-btn class="mt-3 w-full rounded-xl bg-indigo-600 px-2.5 py-2 text-xs font-extrabold text-white hover:bg-indigo-500 shadow-md transition-all flex items-center justify-center gap-1 whitespace-nowrap" @click="settingsOpen = true; const m = document.getElementById('mobile-loan-modal'); if (m && typeof m.close === 'function' && m.open) { m.close(); document.body.classList.remove('overflow-hidden'); }">
             <span>⚙️ 조건 설정</span>
         </button>
     </section>

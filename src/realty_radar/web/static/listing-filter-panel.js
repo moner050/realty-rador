@@ -53,6 +53,16 @@
                 return;
             }
 
+            const clearTabBtn = event.target.closest && event.target.closest("[data-clear-filter-tab]");
+            if (clearTabBtn) {
+                const activeTabPanel = panel.querySelector(".filter-tab-content:not([hidden])");
+                if (activeTabPanel) {
+                    activeTabPanel.querySelectorAll("input, select").forEach(resetControl);
+                }
+                form.requestSubmit();
+                return;
+            }
+
             const chip = event.target.closest && event.target.closest("[data-applied-filter-clear]");
             if (!chip) return;
             const names = String(chip.dataset.filterClearNames || "").split(",").filter(Boolean);

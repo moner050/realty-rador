@@ -107,16 +107,23 @@ def _code_list(values: list[str] | None) -> list[int] | None:
 
 
 def _trade_codes(values: list[str] | None) -> list[int] | None:
-    codes = [
-        TRADE_TYPE_CODES[token.strip().upper()]
-        for token in (values if isinstance(values, list) else [])
-        if token.strip().upper() in TRADE_TYPE_CODES
-    ]
+    codes = []
+    for value in (values if isinstance(values, list) else []):
+        for token in str(value).split(","):
+            token_str = token.strip().upper()
+            if token_str in TRADE_TYPE_CODES:
+                codes.append(TRADE_TYPE_CODES[token_str])
+            elif token_str.isdigit() and int(token_str) in TRADE_TYPE_NAMES:
+                codes.append(int(token_str))
     return list(dict.fromkeys(codes)) or None
 
 
 def _request_list(value: object) -> list[str] | None:
-    return value if isinstance(value, list) else None
+    if isinstance(value, list):
+        return [str(v) for v in value if v is not None and str(v).strip()]
+    if isinstance(value, str) and value.strip():
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return None
 
 
 def _request_string(value: object) -> str | None:

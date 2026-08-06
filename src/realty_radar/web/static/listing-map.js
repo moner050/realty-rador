@@ -132,6 +132,39 @@
 
     function requestUrl(baseUrl, map, viewport, initial) {
         const url = new URL(baseUrl, (window.location && window.location.origin) || "http://localhost");
+        
+        const multiValueKeys = new Set(["trade_types", "direction_codes", "mortgage_codes", "sido_codes", "sigungu_codes", "floor_bands"]);
+        const addParam = (key, value) => {
+            if (!key || value === "" || value === null || value === undefined) return;
+            if (multiValueKeys.has(key)) {
+                const existing = url.searchParams.getAll(key);
+                if (!existing.includes(value)) {
+                    url.searchParams.append(key, value);
+                }
+            } else {
+                url.searchParams.set(key, value);
+            }
+        };
+
+        // 1. 메인 검색 폼 수집
+        const form = document.querySelector("#listing-search-form");
+        if (form) {
+            const formData = new FormData(form);
+            for (const [key, value] of formData.entries()) {
+                addParam(key, value);
+            }
+        }
+
+        // 2. 통합 필터 모달 내부의 모든 슬라이더 및 인풋 통합 수집
+        const modal = document.querySelector("#detailed-filter-modal");
+        if (modal) {
+            modal.querySelectorAll("input, select").forEach((el) => {
+                if (!el.name || el.disabled) return;
+                if ((el.type === "checkbox" || el.type === "radio") && !el.checked) return;
+                addParam(el.name, el.value);
+            });
+        }
+
         url.searchParams.delete("cursor");
         url.searchParams.set("map_west", String(viewport.west));
         url.searchParams.set("map_south", String(viewport.south));
@@ -227,16 +260,77 @@
             });
     }
 
-    function makeClusterOverlay(map, instance, cluster) {
-        const label = cluster.label
-            ? `${escapeHtml(cluster.label)} · ${escapeHtml(formatListingCount(cluster.listing_count))}`
-            : `${escapeHtml(formatListingCount(cluster.listing_count))} · ${escapeHtml(cluster.complex_count)}개 단지`;
+    function getDensityStyle(listingCount, maxCount) {
+        const count = Number(listingCount) || 0;
+        const max = Math.max(Number(maxCount) || 1, 1);
+        const ratio = count / max;
+
+        if (count >= 50 || ratio >= 0.40) {
+            return {
+                fillColor: "rgba(79, 70, 229, 0.48)",
+                strokeColor: "#3730a3",
+                strokeWeight: 2.5,
+                badgeBgClass: "bg-indigo-700 dark:bg-indigo-600 border-indigo-300",
+                pulseColor: "bg-amber-400",
+            };
+        }
+        if (count >= 20 || ratio >= 0.20) {
+            return {
+                fillColor: "rgba(99, 102, 241, 0.32)",
+                strokeColor: "#4f46e5",
+                strokeWeight: 2,
+                badgeBgClass: "bg-indigo-600 dark:bg-indigo-500 border-indigo-200",
+                pulseColor: "bg-emerald-400",
+            };
+        }
+        if (count >= 5 || ratio >= 0.08) {
+            return {
+                fillColor: "rgba(129, 140, 248, 0.20)",
+                strokeColor: "#6366f1",
+                strokeWeight: 1.5,
+                badgeBgClass: "bg-indigo-500/90 dark:bg-indigo-600/90 border-indigo-200/80",
+                pulseColor: "bg-cyan-300",
+            };
+        }
+        return {
+            fillColor: "rgba(197, 204, 253, 0.09)",
+            strokeColor: "#a5b4fc",
+            strokeWeight: 1,
+            badgeBgClass: "bg-slate-700/85 dark:bg-slate-800/85 border-slate-400/60",
+            pulseColor: "bg-slate-300",
+        };
+    }
+
+    function makeClusterOverlay(map, instance, cluster, maxListingCount = 1) {
+        const style = getDensityStyle(cluster.listing_count, maxListingCount);
+
+        // 시/군/구 행정구역 영역 매물 밀도(개수)에 따른 동적 색상 진하기 셰이딩 오버레이
+        if (cluster.west && cluster.south && cluster.east && cluster.north && window.naver && window.naver.maps) {
+            const rect = new window.naver.maps.Rectangle({
+                map: map,
+                bounds: boundsFromValues(cluster.west, cluster.south, cluster.east, cluster.north),
+                fillColor: style.fillColor,
+                fillOpacity: 1.0,
+                strokeColor: style.strokeColor,
+                strokeWeight: style.strokeWeight,
+                strokeOpacity: 0.85,
+                strokeStyle: "solid",
+                clickable: false,
+            });
+            instance.overlays.push(rect);
+        }
+
+        // 지명 글자를 배제하고 오직 건수 숫자 중심으로 콤팩트하게 표기
+        const countText = `${escapeHtml(formatListingCount(cluster.listing_count))}`;
         const marker = new window.naver.maps.Marker({
             map,
             position: new window.naver.maps.LatLng(cluster.latitude, cluster.longitude),
-            title: cluster.label || `${cluster.complex_count}개 단지`,
+            title: cluster.label ? `${cluster.label}: ${cluster.listing_count}건` : `${cluster.listing_count}건`,
             icon: {
-                content: `<div class="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-extrabold text-white shadow-lg whitespace-nowrap overflow-hidden text-ellipsis max-w-[260px] pointer-events-auto shrink-0 select-none" style="writing-mode: horizontal-tb !important; white-space: nowrap !important;">${label}</div>`,
+                content: `<div class="rounded-full border-2 ${style.badgeBgClass} px-3 py-1 text-xs font-black text-white shadow-2xl hover:scale-110 transition-all cursor-pointer whitespace-nowrap pointer-events-auto shrink-0 select-none flex items-center justify-center gap-1" style="writing-mode: horizontal-tb !important; white-space: nowrap !important;">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full ${style.pulseColor} animate-pulse"></span>
+                    <span>${countText}</span>
+                </div>`,
                 anchor: new window.naver.maps.Point(0, 0),
             },
         });
@@ -295,7 +389,9 @@
         }
         setIndicator(summary, false);
         clearOverlays(instance);
-        (payload.clusters || []).forEach((cluster) => instance.overlays.push(makeClusterOverlay(map, instance, cluster)));
+        const clusters = payload.clusters || [];
+        const maxListingCount = Math.max(...clusters.map((c) => Number(c.listing_count) || 0), 1);
+        clusters.forEach((cluster) => instance.overlays.push(makeClusterOverlay(map, instance, cluster, maxListingCount)));
         (payload.markers || []).forEach((marker) => instance.overlays.push(makeMarkerOverlay(root, map, instance, marker)));
         const modeMessages = {
             sido: "시·도별 조건 충족 매물 수입니다. 원을 누르면 해당 지역으로 확대합니다.",
@@ -418,6 +514,63 @@
         }
     }
 
+    const REGION_CENTERS = {
+        11: { lat: 37.5665, lng: 126.9780, zoom: 11 },
+        28: { lat: 37.4563, lng: 126.7052, zoom: 10 },
+        41: { lat: 37.4138, lng: 127.5183, zoom: 9 },
+        11305: { lat: 37.6396, lng: 127.0257, zoom: 13 },
+        11620: { lat: 37.4784, lng: 126.9516, zoom: 13 },
+        11320: { lat: 37.6688, lng: 127.0471, zoom: 13 },
+        11680: { lat: 37.5172, lng: 127.0473, zoom: 13 },
+        11650: { lat: 37.4837, lng: 127.0324, zoom: 13 },
+        11710: { lat: 37.5145, lng: 127.1061, zoom: 13 },
+        11440: { lat: 37.5663, lng: 126.9016, zoom: 13 },
+        11200: { lat: 37.5635, lng: 127.0365, zoom: 13 },
+        11215: { lat: 37.5385, lng: 127.0823, zoom: 13 },
+        11350: { lat: 37.6542, lng: 127.0568, zoom: 13 },
+        11500: { lat: 37.5509, lng: 126.8495, zoom: 13 },
+        11470: { lat: 37.5170, lng: 126.8665, zoom: 13 },
+        11560: { lat: 37.5264, lng: 126.8963, zoom: 13 },
+        11590: { lat: 37.5124, lng: 126.9398, zoom: 13 },
+        11170: { lat: 37.5326, lng: 126.9900, zoom: 13 },
+        11110: { lat: 37.5730, lng: 126.9794, zoom: 13 },
+        11140: { lat: 37.5641, lng: 126.9979, zoom: 13 },
+        11230: { lat: 37.5744, lng: 127.0400, zoom: 13 },
+        11260: { lat: 37.6065, lng: 127.0927, zoom: 13 },
+        11290: { lat: 37.5894, lng: 127.0167, zoom: 13 },
+        11380: { lat: 37.6027, lng: 126.9291, zoom: 13 },
+        11410: { lat: 37.5791, lng: 126.9368, zoom: 13 },
+        11530: { lat: 37.4954, lng: 126.8874, zoom: 13 },
+        11545: { lat: 37.4568, lng: 126.8955, zoom: 13 },
+        11740: { lat: 37.5301, lng: 127.1238, zoom: 13 },
+        41281: { lat: 37.6584, lng: 126.8320, zoom: 12 },
+        41135: { lat: 37.3827, lng: 127.1189, zoom: 12 },
+    };
+
+    function autoCenterMapOnRegion(map, url) {
+        if (!map || !url) return;
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const sigunguCodes = parsed.searchParams.getAll("sigungu_codes").concat(parsed.searchParams.get("sigungu_code") || []);
+            const sidoCode = parsed.searchParams.get("sido_code");
+            let target = null;
+            for (const code of sigunguCodes) {
+                const num = parseInt(code, 10);
+                if (REGION_CENTERS[num]) { target = REGION_CENTERS[num]; break; }
+            }
+            if (!target && sidoCode) {
+                const num = parseInt(sidoCode, 10);
+                if (REGION_CENTERS[num]) target = REGION_CENTERS[num];
+            }
+            if (target && window.naver && window.naver.maps) {
+                map.setCenter(new window.naver.maps.LatLng(target.lat, target.lng));
+                if (target.zoom) map.setZoom(target.zoom);
+            }
+        } catch (e) {
+            console.warn("[Realty Radar] autoCenterMapOnRegion error:", e);
+        }
+    }
+
     function refreshSearchConfig(root, config) {
         const instance = instances.get(root);
         if (!instance || !config || config.queryKey === instance.mapQueryKey) return;
@@ -433,6 +586,7 @@
         if (instance.cardsTimer) clearTimeout(instance.cardsTimer);
         cancelMapRequest(root, instance);
         cancelCardsRequest(root, instance);
+        autoCenterMapOnRegion(instance.map, config.mapCardsUrl);
         const viewport = viewportFromMap(instance.map);
         const key = viewportKey(instance.map, viewport);
         if (!viewport || !key) return;
@@ -572,6 +726,22 @@
         if (!target) return;
         event.preventDefault();
         focus(target.dataset);
+    });
+    document.addEventListener("submit", (event) => {
+        if (event.target && event.target.id === "listing-search-form") {
+            instances.forEach((instance, root) => {
+                instance.lastMapViewportKey = null;
+                instance.lastCardsViewportKey = null;
+                if (instance.map) {
+                    const viewport = viewportFromMap(instance.map);
+                    const key = viewportKey(instance.map, viewport);
+                    if (viewport && key) {
+                        requestMapData(root, instance.map, instance, { key });
+                        requestCards(root, instance.map, instance, key);
+                    }
+                }
+            });
+        }
     });
     document.addEventListener("DOMContentLoaded", () => mount(document));
     document.addEventListener("htmx:beforeSwap", (event) => {

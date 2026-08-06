@@ -884,7 +884,7 @@ class ListingSearchService:
 
     def _filtered_rows(self, filters: ListingSearchFilter):
         statement = select(ListingCurrent).where(ListingCurrent.lifecycle == LIFECYCLE_ACTIVE)
-        if filters.has_map_bounds:
+        if filters.has_map_bounds and not (filters.sigungu_code or filters.sigungu_codes):
             statement = statement.join(
                 ComplexCurrent,
                 ComplexCurrent.complex_id == ListingCurrent.complex_id,
@@ -908,23 +908,38 @@ class ListingSearchService:
             if value is not None:
                 statement = statement.where(column == value)
 
-        # 통근 시간 퀵 필터 최우선 AND 제약 (강남 통근시간 이내 시군구만 엄격 제한)
+        # 지역 및 통근 조건 합집합 (OR Union 연산)
+        region_conditions = []
+
+        # 1. 통근 퀵필터 시군구 조건
         if filters.max_commute_gangnam is not None:
             commute_codes = get_sigungu_codes_within_commute(filters.max_commute_gangnam, "gangnam")
-            statement = statement.where(ListingCurrent.sigungu_code.in_(commute_codes))
+            if commute_codes:
+                region_conditions.append(ListingCurrent.sigungu_code.in_(commute_codes))
 
-        # 다중 지역 칩 기반 필터링 (sido_codes / sigungu_codes)
-        if filters.sido_codes and filters.sigungu_codes:
-            statement = statement.where(
-                or_(
-                    ListingCurrent.sido_code.in_(filters.sido_codes),
-                    ListingCurrent.sigungu_code.in_(filters.sigungu_codes),
-                )
-            )
-        elif filters.sido_codes:
-            statement = statement.where(ListingCurrent.sido_code.in_(filters.sido_codes))
-        elif filters.sigungu_codes:
-            statement = statement.where(ListingCurrent.sigungu_code.in_(filters.sigungu_codes))
+        # 2. 사용자가 선택한 시군구 조건 (단일 & 복수)
+        user_sigungu_codes: set[int] = set()
+        if filters.sigungu_code is not None:
+            user_sigungu_codes.add(filters.sigungu_code)
+        if filters.sigungu_codes:
+            user_sigungu_codes.update(filters.sigungu_codes)
+        if user_sigungu_codes:
+            region_conditions.append(ListingCurrent.sigungu_code.in_(sorted(user_sigungu_codes)))
+
+        # 3. 사용자가 선택한 시도 조건 (단일 & 복수)
+        user_sido_codes: set[int] = set()
+        if filters.sido_code is not None:
+            user_sido_codes.add(filters.sido_code)
+        if filters.sido_codes:
+            user_sido_codes.update(filters.sido_codes)
+        if user_sido_codes:
+            region_conditions.append(ListingCurrent.sido_code.in_(sorted(user_sido_codes)))
+
+        # 4. 수집된 모든 지역 조건을 OR(합집합)로 결합
+        if len(region_conditions) > 1:
+            statement = statement.where(or_(*region_conditions))
+        elif len(region_conditions) == 1:
+            statement = statement.where(region_conditions[0])
         if filters.trade_types:
             statement = statement.where(ListingCurrent.trade_type.in_(filters.trade_types))
         if filters.min_price is not None:

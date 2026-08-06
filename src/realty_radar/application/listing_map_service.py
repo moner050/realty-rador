@@ -220,9 +220,20 @@ class ListingMapService:
         from realty_radar.application.listing_search_service import ListingSearchService
         from realty_radar.infrastructure.cache.map_cache import MapViewportCache
 
+        filter_sig = (
+            f"{tuple(filters.trade_types or [])}:{filters.min_price}:{filters.max_price}:"
+            f"{filters.max_monthly_rent}:{filters.min_exclusive_area}:{filters.max_exclusive_area}:"
+            f"{filters.min_construction_year}:{filters.min_households}:{filters.min_room_count}:"
+            f"{filters.min_bathroom_count}:{filters.parking_possible_only}:{filters.min_parking_per_household}:"
+            f"{filters.max_monthly_management_cost}:{filters.move_in_by}:{filters.max_subway_walk_minutes}:"
+            f"{filters.max_commute_gangnam}:{tuple(filters.mortgage_codes or [])}:{filters.exclude_unknown_mortgage}:"
+            f"{tuple(filters.direction_codes or [])}:{tuple(filters.floor_bands or [])}:{filters.exclude_short_term}:"
+            f"{filters.exclude_first_floor}:{filters.group_by_complex}:{filters.only_eligible_loans}:"
+            f"{filters.safe_lessor_hug_only}:{filters.complex_keyword}"
+        )
         cache_key = (
             f"{filters.sido_code}:{filters.sigungu_code}:{filters.region_code}:"
-            f"{filters.map_west}:{filters.map_south}:{filters.map_east}:{filters.map_north}:{zoom}"
+            f"{filters.map_west}:{filters.map_south}:{filters.map_east}:{filters.map_north}:{zoom}:{filter_sig}"
         )
         cached_data = MapViewportCache.get_viewport_cache(cache_key)
         if cached_data:
