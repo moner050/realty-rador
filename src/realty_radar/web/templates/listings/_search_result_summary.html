@@ -2,15 +2,7 @@
 {% set mortgage_labels = {0: '융자 정보 미상', 1: '융자 없음', 2: '융자 있음'} %}
 {% set direction_labels = {1: '남', 2: '남동', 3: '동', 4: '북동', 5: '북', 6: '북서', 7: '서', 8: '남서'} %}
 {% set floor_labels = {1: '저층', 2: '중층', 3: '고층', 4: '탑층', 5: '지하'} %}
-<section id="search-result-summary"{% if is_htmx_search %} hx-swap-oob="outerHTML"{% endif %} data-search-result-summary data-applied-filter-summary class="space-y-2.5 text-slate-900 dark:text-slate-100">
-    <div id="search-status" data-result-controls data-map-results-toolbar class="theme-result-toolbar sticky top-20 z-30 flex flex-wrap items-center justify-between gap-2.5 p-2 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 backdrop-blur shadow-sm">
-        <div class="flex items-center gap-2 min-w-0">
-            <span class="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-indigo-500"></span>
-            <p class="text-xs font-extrabold text-slate-900 dark:text-white truncate">검색 결과{% if result.is_grouped %} <span class="text-indigo-600 dark:text-indigo-400">· 단지별 묶음</span>{% endif %}</p>
-            <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">({{ filters.page_size }}개씩 보기)</span>
-        </div>
-    </div>
-
+<section id="search-result-summary"{% if is_htmx_search %} hx-swap-oob="outerHTML"{% endif %} data-search-result-summary data-applied-filter-summary class="theme-result-toolbar space-y-2 text-slate-900 dark:text-slate-100">
     <!-- 적용된 필터 칩 목록 (가로 스크롤 짤림 없는 flex-wrap 멀티라인 배치) -->
     <div class="flex flex-wrap items-center gap-1.5 text-xs leading-tight">
         {% if filters.sido_code %}<span class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 shadow-sm break-keep">📍 시도 {{ sido_labels.get(filters.sido_code, filters.sido_code) }}</span>{% endif %}

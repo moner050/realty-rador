@@ -386,16 +386,21 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                                 <span class="text-xs shrink-0 text-slate-500" x-text="showAppliedFilters ? '▲ 접기' : '▼ 펼치기'">▼ 펼치기</span>
                             </button>
                             
-                            <div x-show="showAppliedFilters" x-collapse x-cloak id="active-filter-chips-bar" data-applied-filter-summary class="space-y-1.5 pt-2.5">
-                                <div class="flex items-center justify-between whitespace-nowrap">
-                                    <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용 지역:</span>
-                                    <button type="button" id="btn-clear-regions" class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold text-[10px]">초기화</button>
+                            <div x-show="showAppliedFilters" x-collapse x-cloak id="applied-filter-toggle-container" class="space-y-2 pt-2.5">
+                                <div id="active-filter-chips-bar" data-applied-filter-summary class="space-y-1.5">
+                                    <div class="flex items-center justify-between whitespace-nowrap">
+                                        <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px]">적용 지역:</span>
+                                        <button type="button" id="btn-clear-regions" class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold text-[10px]">초기화</button>
+                                    </div>
+                                    <div id="selected-region-chips" class="flex flex-wrap gap-1">
+                                        <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
+                                    </div>
+                                    <div id="hidden-sigungu-inputs"></div>
+                                    <div id="hidden-sido-inputs"></div>
                                 </div>
-                                <div id="selected-region-chips" class="flex flex-wrap gap-1">
-                                    <span class="text-[11px] text-slate-400 italic" id="no-region-msg">전체 조건 검색 중</span>
-                                </div>
-                                <div id="hidden-sigungu-inputs"></div>
-                                <div id="hidden-sido-inputs"></div>
+                                {% if not search_error %}
+                                    {% include "listings/_search_result_summary.html" %}
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -532,9 +537,6 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                         </div>
                     </dialog>
                 </form>
-                {% if not search_error %}
-                    {% include "listings/_search_result_summary.html" %}
-                {% endif %}
             </div>
         </aside>
 
