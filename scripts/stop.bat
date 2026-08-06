@@ -1,10 +1,10 @@
 @echo off
-chcp 65001 > NUL
-echo [Realty Radar] 실행 중인 uvicorn 프로세스를 종료합니다...
+chcp 65001 >nul
+echo [Realty Radar] Stopping uvicorn process...
 
-taskkill /IM uvicorn.exe /F 2>NUL
+taskkill /IM uvicorn.exe /F 2>nul
 if %ERRORLEVEL% equ 0 (
-    echo [Realty Radar] 정상적으로 종료되었습니다.
+    echo [Realty Radar] Stopped successfully.
 ) else (
-    echo [Realty Radar] 실행 중인 프로세스를 찾지 못했습니다.
+    echo [Realty Radar] No process found.
 )

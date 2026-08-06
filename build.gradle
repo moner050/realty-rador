@@ -2,16 +2,22 @@ plugins {
     id 'base'
 }
 
+ext {
+    isWindows = org.gradle.internal.os.OperatingSystem.current().isWindows()
+    pythonExec = isWindows ? file('.venv/Scripts/python.exe').absolutePath : file('.venv/bin/python').absolutePath
+}
+
 task test(type: Exec) {
     group = 'verification'
     description = 'Runs Python tests using pytest'
-    commandLine 'uv', 'run', 'pytest'
+    commandLine pythonExec, '-m', 'pytest'
 }
 
 task checkLint(type: Exec) {
     group = 'verification'
     description = 'Runs Python linter using ruff'
-    commandLine 'uv', 'run', 'ruff', 'check', '.'
+    commandLine pythonExec, '-m', 'ruff', 'check', '.'
 }
 
 check.dependsOn test, checkLint
+

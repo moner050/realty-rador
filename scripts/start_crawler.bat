@@ -1,33 +1,32 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-rem ============================================
-rem  로컬 크롤러 전용 실행 스크립트
-rem  - Worker + Scheduler만 실행 (웹서버 제외)
-rem  - 클라우드 DB에 직접 연결하여 데이터 수집
-rem ============================================
-
 echo ===================================================
-echo  Realty Radar - 로컬 크롤러 전용 모드
-echo  (웹서버 없이 Worker + Scheduler만 실행)
+echo  Realty Radar - Crawler Mode
+echo  (Worker + Scheduler)
 echo ===================================================
 
 set PYTHONPATH=src
 
-rem 1. Worker 프로세스 실행
-echo [1/2] Worker 프로세스 시작...
-start "Realty Radar Worker" cmd /k "set PYTHONPATH=src && python -m realty_radar.worker"
+rem Detect virtualenv Python
+set "PYTHON_CMD=python"
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_CMD=.venv\Scripts\python.exe"
+) else if exist ".venv\bin\python.exe" (
+    set "PYTHON_CMD=.venv\bin\python.exe"
+)
 
-rem 2. Scheduler 프로세스 실행
-echo [2/2] Scheduler 프로세스 시작...
-start "Realty Radar Scheduler" cmd /k "set PYTHONPATH=src && python -m realty_radar.scheduler"
+rem 1. Worker process
+echo [1/2] Starting Worker Process...
+start "Realty Radar Worker" cmd /k "set PYTHONPATH=src && %PYTHON_CMD% -m realty_radar.worker"
+
+rem 2. Scheduler process
+echo [2/2] Starting Scheduler Process...
+start "Realty Radar Scheduler" cmd /k "set PYTHONPATH=src && %PYTHON_CMD% -m realty_radar.scheduler"
 
 echo.
-echo [완료] 크롤러가 백그라운드에서 실행 중입니다.
-echo  - Worker: 수집 작업 처리
-echo  - Scheduler: 매일 06시 자동 수집 예약
-echo.
-echo  종료하려면 열린 CMD 창을 닫으세요.
+echo [Done] Crawler running in background.
 pause
 
 exit /b 0

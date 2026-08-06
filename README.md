@@ -1,58 +1,119 @@
 # Realty Radar v2
 
-SITE_A만 수집하는 MySQL 8.4 매물 검색 서비스입니다. 브라우저는 SITE_A 인증 bootstrap에만 쓰고, 실제 지역·단지·매물 API 요청은 하나의 인증된 `httpx.AsyncClient` connection pool로 처리합니다.
+SITE_A 매물을 수집하고 검색하는 MySQL 8.4 기반 부동산 매물 필터링 및 오케스트레이션 시스템입니다. 브라우저는 SITE_A 인증 bootstrap에만 사용하며, 실제 지역·단지·매물 API 요청은 하나의 인증된 `httpx.AsyncClient` connection pool로 신속하게 처리합니다.
 
-## 데이터 구조
+---
 
-Alembic `001_site_a_v2`가 유일한 canonical migration입니다. 도메인 테이블은 다음 다섯 개뿐입니다.
+## 🏗️ 아키텍처 및 데이터 구조
 
-- `complex_current`: 단지 키워드 FULLTEXT와 공공데이터 보강용
-- `listing_current`: 검색 화면이 JOIN 없이 읽는 hot table
-- `listing_history`: 실제 변경만 보관하는 append-only cold table
+Alembic `001_site_a_v2`가 유일한 canonical migration입니다. 주요 도메인 테이블은 다음과 같습니다.
+
+- `complex_current`: 단지 키워드 FULLTEXT 검색 및 공공데이터 보강용 데이터
+- `listing_current`: 검색 화면이 JOIN 없이 읽는 Hot 테이블
+- `listing_history`: 변경 이력만 보관하는 Append-only Cold 테이블
 - `crawl_job`: `SKIP LOCKED` lease 기반 SITE_A 작업 큐
 - `crawl_scope`: 동 단위 수집 완결성 기록
 
-검색은 정확한 전체 건수와 OFFSET을 제공하지 않습니다. 응답은 `items`, `next_cursor`, `has_more`이며 cursor는 필터 fingerprint에 서명됩니다.
+---
 
-## 새 DB 생성
+## 🛠️ 환경별 초기 설정 및 실행 가이드
 
-운영 DB를 자동으로 지우지 않습니다. 빈 v2 DB에만 다음을 실행합니다.
+### 1. Windows 환경 초기 설정 및 실행
 
+#### 1) 가상환경 생성 및 pip 업그레이드
 ```powershell
-python scripts/create_v2_database.py --database realty_radar_v2 --confirm-create realty_radar_v2
+# 가상환경 생성 (.venv)
+python -m venv .venv
+
+# 가상환경 pip 업그레이드 및 패키지 설치
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\pip.exe install -e .[dev]
+
+# Playwright 브라우저 라이브러리 설치
+.\.venv\Scripts\playwright.exe install
 ```
 
-## Naver Maps
+#### 2) 스크립트를 통한 서버 구동 및 종료
+- **통합 시스템 실행 (웹서버 + 크롤러 Worker + Scheduler)**:
+  ```powershell
+  .\scripts\start.bat
+  ```
+- **크롤러 전용 모드 실행 (웹서버 제외, Worker + Scheduler만 실행)**:
+  ```powershell
+  .\scripts\start_crawler.bat
+  ```
+- **실행 중인 서버 프로세스 정지**:
+  ```powershell
+  .\scripts\stop.bat
+  ```
 
-Set `NAVER_MAP_CLIENT_ID` to the NCP Map ID (`ncpKeyId`) issued for Dynamic Map. It is sent only to the browser so map tiles can load. Keep `NAVER_MAP_CLIENT_SECRET` server-side: it is used only by the Geocoding API and is never rendered in listing HTML.
+---
 
-After enabling Dynamic Map and Geocoding in NCP, register each development/production web-service URL. Apply the schema change and then backfill verified complex coordinates:
+### 2. Ubuntu / Linux 환경 초기 설정 및 배포
+
+Ubuntu 클라우드 서버 배포에 대한 상세 단계별 가이드는 [docs/ubuntu_deployment_guide.md](file:///c:/workspace/personal/real-estate-search/docs/ubuntu_deployment_guide.md) 문서를 참고하세요.
+
+#### 1) 파이썬 가상환경 생성 및 패키지 설치
+```bash
+# 가상환경 생성 (.venv)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# pip 업그레이드 및 의존성 설치
+python3 -m pip install --upgrade pip
+pip install -e .[dev]
+playwright install --with-deps
+```
+
+#### 2) Ubuntu 전용 자동 실행 스크립트
+```bash
+chmod +x scripts/start.sh
+./scripts/start.sh
+```
+
+---
+
+## 🗄️ 데이터베이스 생성 및 마이그레이션
+
+기본 DB명은 `realty_radar_v2`입니다. 신규 데이터베이스 구축 시 다음 명령어를 실행합니다.
 
 ```powershell
+# 1. 새 v2 데이터베이스 생성
+python scripts/create_v2_database.py --database realty_radar_v2 --confirm-create realty_radar_v2
+
+# 2. Alembic 마이그레이션 적용
 python -m alembic upgrade head
+
+# 3. 단지 좌표 지오코딩 보강 (선택)
 python scripts/backfill_complex_geocodes.py --batch-size 100
 ```
 
-Listings without a verified coordinate remain visible in search results but are excluded from the map. No client-side or synthetic coordinates are generated.
+---
 
-## Purchase affordability
+## 🗺️ 네이버 지도 (Naver Maps) API 설정
 
-Purchase affordability uses available cash, existing monthly debt payment, the maximum monthly housing cost, and a closing-cost reserve rate (default 2%). It is a planning estimate based on the current policy-loan rules and a 30-year equal-payment schedule; it does not replace bank approval or statutory acquisition-tax and brokerage-fee calculations.
+1. `NAVER_MAP_CLIENT_ID`: NCP Dynamic Map 발급 Client ID (`ncpKeyId`). 브라우저 지도 타일 로드용으로 전달됩니다.
+2. `NAVER_MAP_CLIENT_SECRET`: 서버 측 지오코딩(Geocoding API) 전용 비밀키입니다 (HTML에 노출되지 않음).
 
-`MYSQL_DATABASE`의 기본값도 `realty_radar_v2`입니다. 기존 DB 폐기는 전체 coverage와 24시간 rollback 기간이 끝난 뒤에만 `scripts/retire_v1_tables.py`를 명시적으로 실행합니다. 이 스크립트는 먼저 날짜가 포함된 `mysqldump` 백업을 만듭니다.
+---
 
-## 검증
+## 🧪 검증 및 테스트
 
+### Gradle 기반 검증
 ```powershell
-python -m pytest -q
-python -m alembic upgrade head --sql
+# pytest 및 ruff 검증 실행
+./gradlew check
 ```
 
-실제 SITE_A HTTP 검증은 자격 증명·본문을 저장하지 않는 `live` marker와 환경 변수로만 실행합니다.
-
+### Pytest 수동 실행
 ```powershell
+# 단위 및 통합 테스트 실행
+python -m pytest -q
+
+# 마이그레이션 SQL 검증
+python -m alembic upgrade head --sql
+
+# 실제 SITE_A HTTP 연동 검증 (자격 증명 설정 필요)
 $env:RUN_LIVE_SITE_A_HTTPX='1'
 python -m pytest -m live -q
 ```
-
-Canary 전에는 httpx 전환과 새 스키마의 실환경 성능 개선 수치를 `N/A`로 취급합니다.
