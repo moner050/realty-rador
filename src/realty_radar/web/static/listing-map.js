@@ -5,7 +5,7 @@
     const VIEWPORT_SEARCH_DEBOUNCE_MS = 400;
     const INITIAL_LATITUDE = 37.55;
     const INITIAL_LONGITUDE = 126.9;
-    const INITIAL_ZOOM = 8;
+    const INITIAL_ZOOM = 11;
     const FOCUS_ZOOM = 15;
     const MIN_SEARCH_ZOOM = 11;
     const MAX_LATITUDE_SPAN = 1.5;
@@ -233,7 +233,7 @@
             position: new window.naver.maps.LatLng(cluster.latitude, cluster.longitude),
             title: cluster.label || `${cluster.complex_count}개 단지`,
             icon: {
-                content: `<div class="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-extrabold text-white shadow-lg">${label}</div>`,
+                content: `<div class="rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-extrabold text-white shadow-lg whitespace-nowrap overflow-hidden text-ellipsis max-w-[260px] pointer-events-auto shrink-0 select-none" style="writing-mode: horizontal-tb !important; white-space: nowrap !important;">${label}</div>`,
                 anchor: new window.naver.maps.Point(0, 0),
             },
         });
@@ -252,7 +252,7 @@
             position: new window.naver.maps.LatLng(item.latitude, item.longitude),
             title: item.complex_name,
             icon: {
-                content: `<div class="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-slate-900 shadow-lg ring-1 ring-indigo-200">${escapeHtml(formatPrice(item.min_price))} <span class="text-slate-500">${escapeHtml(item.listing_count)}건</span></div>`,
+                content: `<div class="rounded-lg bg-white px-2 py-1 text-xs font-extrabold text-slate-900 shadow-lg ring-1 ring-indigo-200 whitespace-nowrap overflow-hidden text-ellipsis max-w-[220px] pointer-events-auto shrink-0 select-none" style="writing-mode: horizontal-tb !important; white-space: nowrap !important;">${escapeHtml(formatPrice(item.min_price))} <span class="text-slate-500">${escapeHtml(item.listing_count)}건</span></div>`,
                 anchor: new window.naver.maps.Point(0, 0),
             },
         });
@@ -479,7 +479,7 @@
             overlays: [],
             pendingMap: false,
             pendingCards: false,
-            viewportDirty: false,
+            viewportDirty: true,
             isManualClick: false,
             mapTimer: null,
             cardsTimer: null,
@@ -512,7 +512,8 @@
         );
         instances.set(root, instance);
         activeInstance = instance;
-        setStatus(root, "지도를 확대하거나 이동하면 현재 영역의 매물을 찾습니다.");
+        // 마운트 직후 최초 1회 뷰포트 데이터 즉시 로드 트리거
+        scheduleViewportRefresh(root, map, instance);
     }
 
     function unmount(source) {

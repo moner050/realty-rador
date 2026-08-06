@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, ROUND_CEILING
 from time import perf_counter
 from typing import Annotated
@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.params import Param
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from realty_radar.application.listing_map_service import ListingMapService
@@ -22,6 +23,7 @@ from realty_radar.config import settings
 from realty_radar.crawler.adapters.site_a.region_codes import SIDO_CODES, SIGUNGU_CODES
 from realty_radar.domain.listing.commute_map import get_sigungu_codes_within_commute
 from realty_radar.domain.listing.filters import ListingSearchFilter, ListingSearchValidationError
+from realty_radar.infrastructure.database.models.v2 import ListingCurrent
 from realty_radar.domain.loan.entities import LoanEligibilityStatus
 from realty_radar.domain.loan.evaluator import LoanRuleEvaluator
 from realty_radar.infrastructure.database.session import get_db
@@ -211,6 +213,16 @@ def _slider_limits(filters: ListingSearchFilter) -> dict[str, int | Decimal]:
         "households": scaled_limit(filters.min_households, base=10_000),
         "recent_days": scaled_limit(filters.recent_days, base=365),
     }
+
+
+def _latest_data_update_time(db: Session) -> str:
+    try:
+        latest_dt = db.scalar(select(func.max(ListingCurrent.first_seen_at)))
+        if latest_dt:
+            return latest_dt.strftime("%Y.%m.%d %H:%M")
+    except Exception:
+        pass
+    return datetime.now().strftime("%Y.%m.%d %H:%M")
 
 
 def parse_search_filter(
@@ -727,6 +739,7 @@ def _render_result(
             "map_complex_url_template": _map_complex_url_template(request, filters),
             "listing_collection_target": "#listing-collection",
             "is_htmx_search": is_htmx_search,
+            "latest_data_time": _latest_data_update_time(db),
             **favorite_payloads,
             **map_context,
         },

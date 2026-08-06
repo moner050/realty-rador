@@ -253,11 +253,17 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
             <!-- 메인 타이틀 헤더 -->
             <header class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
                 <div>
-                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                         <span>아파트 매물 검색</span>
+                        {% if latest_data_time %}
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/80 text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300 shadow-sm transition-all" title="데이터베이스 수집 기준 시각">
+                            <span class="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>🕒 {{ latest_data_time }} 기준</span>
+                        </span>
+                        {% endif %}
                     </h1>
                     <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">조건을 바꾸면 자동으로 검색되며, 지도의 위치 매물이 병합되어 표시됩니다.</p>
                 </div>
@@ -452,15 +458,15 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
                                         {{ single_slider('min-bathroom-count', 'min_bathroom_count', filters.min_bathroom_count, 0, 10, 1, '욕실 최소', '개', variant='embedded') }}
                                     </div>
                                 </section>
-                                <details id="advanced-housing-conditions" data-filter-scope="housing-detail" class="theme-subtle-surface rounded-xl border p-4">
-                                    <summary class="theme-primary-text cursor-pointer text-xs font-semibold hover:text-indigo-600 dark:hover:text-indigo-300">상세 주거 조건</summary>
-                                    <div class="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-2">
+                                <section id="advanced-housing-conditions" data-filter-scope="housing-detail" class="theme-subtle-surface rounded-xl border p-4 space-y-3">
+                                    <h2 class="font-bold text-xs text-slate-800 dark:text-slate-200">상세 주거 조건</h2>
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                         {{ single_slider('min-parking-per-household', 'min_parking_per_household', filters.min_parking_per_household, 0, slider_limits.parking, 0.1, '세대당 주차 최소', '대', variant='embedded') }}
                                         {{ single_slider('max-monthly-management-cost', 'max_monthly_management_cost', filters.max_monthly_management_cost, 0, slider_limits.management_cost_manwon, 1, '관리비 상한', '만원', 10000, variant='embedded') }}
                                         {{ single_slider('max-subway-walk-minutes', 'max_subway_walk_minutes', filters.max_subway_walk_minutes, 0, slider_limits.subway_minutes, 1, '역 도보 상한', '분', variant='embedded') }}
                                         {{ single_slider('recent-days', 'recent_days', filters.recent_days, 1, slider_limits.recent_days, 1, '최근 등록', '일', variant='embedded') }}
                                     </div>
-                                </details>
+                                </section>
                             </div>
 
                             <!-- 탭 3: 강남역 통근시간 퀵 필터 -->
@@ -1197,9 +1203,9 @@ input[type="range"].range-handle-input.is-overlapping-max::-webkit-slider-thumb:
             return;
         }
 
-        // 1. 강남역 통근시간 퀵필터 단일 요약 칩 (1개만 표시하여 랙 0.000초 보장)
+        // 1. 강남역 통근시간 퀵필터 단일 요약 칩
         if (hasCommute) {
-            const commuteLabel = commuteVal === "60" ? "⚡ 강남역 1시간 이내 통근권" : commuteVal === "90" ? "⚡ 강남역 1시간 30분 이내 통근권" : `⚡ 강남역 ${commuteVal}분 이내 통근권`;
+            const commuteLabel = commuteVal === "60" ? "강남 1시간 이내" : commuteVal === "90" ? "강남 1시간 30분 이내" : `강남 ${commuteVal}분 이내`;
             regionChipsContainer.appendChild(
                 createChip(commuteLabel, () => {
                     if (gangnamInput) gangnamInput.value = "";
